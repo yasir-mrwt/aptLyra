@@ -1,0 +1,356 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
+
+  --color-primary-50: #f5f3ff;
+  --color-primary-100: #ede9fe;
+  --color-primary-200: #ddd6fe;
+  --color-primary-300: #c4b5fd;
+  --color-primary-400: #a78bfa;
+  --color-primary-500: #8b5cf6;
+  --color-primary-600: #7c3aed;
+  --color-primary-700: #6d28d9;
+  --color-primary-800: #5b21b6;
+  --color-primary-900: #4c1d95;
+  --color-primary-950: #2e1065;
+
+  /* Pitch-black monochrome scale — matches the landing page's grid canvas */
+  --color-surface-50: #fafafa;
+  --color-surface-100: #f4f4f5;
+  --color-surface-200: #e4e4e7;
+  --color-surface-300: #d4d4d8;
+  --color-surface-400: #a1a1aa;
+  --color-surface-500: #71717a;
+  --color-surface-600: #52525b;
+  --color-surface-700: #2a2a2e;
+  --color-surface-800: #141416;
+  --color-surface-900: #0a0a0b;
+  --color-surface-950: #050505;
+}
+
+@layer base {
+  html {
+    @apply bg-surface-950;
+    scrollbar-gutter: stable;
+    overflow-y: scroll;
+    overscroll-behavior-y: none;
+  }
+
+  body {
+    @apply font-sans bg-surface-950 text-surface-300 selection:bg-white/20 selection:text-white min-h-screen antialiased;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Keyboard focus that matches the monochrome system */
+  :focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.25);
+    outline-offset: 2px;
+  }
+
+
+  @media print {
+
+    html,
+    body {
+      background-color: var(--color-surface-900) !important;
+    }
+
+    canvas {
+      max-width: 100% !important;
+      height: auto !important;
+    }
+
+    * {
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+
+    .bg-glow {
+      display: none !important;
+    }
+
+    .glass-card {
+      background-color: var(--color-surface-900) !important;
+      box-shadow: none !important;
+      transform: none !important;
+      border-color: var(--color-surface-800) !important;
+    }
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-display font-bold text-surface-100;
+  }
+}
+
+@layer components {
+  /* Premium glass — gradient sheen + inner top highlight + deep shadow */
+  .glass-card {
+    @apply backdrop-blur-xl border border-white/[0.07];
+    background:
+      linear-gradient(160deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0.012) 40%, rgba(255, 255, 255, 0) 100%),
+      rgba(10, 10, 11, 0.5);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 12px 40px rgba(0, 0, 0, 0.45);
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    isolation: isolate;
+  }
+
+  .glass-input {
+    @apply w-full bg-white/[0.04] border border-white/10 rounded-2xl px-5 py-3 focus:outline-none focus:ring-2 focus:ring-white/15 focus:border-white/25 focus:bg-white/[0.06] transition-all duration-300 text-surface-100 placeholder:text-surface-600;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  }
+
+  /* Landing-style CTA — solid white on black, monochrome */
+  .btn-primary {
+    @apply relative overflow-hidden bg-white hover:bg-zinc-200 text-black font-bold py-3 px-6 rounded-2xl transition-all duration-300 active:scale-[0.98] cursor-pointer;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 24px rgba(255, 255, 255, 0.08);
+  }
+
+  .btn-secondary {
+    @apply relative overflow-hidden bg-white/5 hover:bg-white/10 text-surface-200 border border-white/10 hover:border-white/20 font-bold py-3 px-6 rounded-2xl transition-all duration-300 active:scale-[0.98] cursor-pointer;
+  }
+
+  /* Stat / metric tile — used across Dashboard, Review, Analytics */
+  .stat-tile {
+    @apply relative overflow-hidden rounded-3xl border border-white/[0.07] px-6 py-5 backdrop-blur-md transition-all duration-300 hover:border-white/15 hover:-translate-y-0.5;
+    background:
+      linear-gradient(160deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 60%),
+      rgba(15, 15, 17, 0.6);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 8px 32px rgba(0, 0, 0, 0.45);
+  }
+
+  /* Hoverable list/card rows — subtle lift + border wake */
+  .hover-lift {
+    @apply transition-all duration-300 hover:-translate-y-1 hover:border-white/20 hover:shadow-[0_20px_50px_rgba(0,0,0,0.5)];
+  }
+}
+
+@layer utilities {
+  /* Monochrome headline gradient — matches the landing page typography */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-linear-to-b from-white to-zinc-500;
+  }
+
+  .bg-glow {
+    @apply absolute -z-10 blur-[120px] opacity-20 rounded-full;
+  }
+
+  /* Pitch-black canvas with faint blueprint grid lines (landing page) */
+  .landing-grid {
+    background-color: #050505;
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+}
+
+/* ── Premium landing effects ── */
+@keyframes aurora-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(60px, -40px) scale(1.15); }
+  66% { transform: translate(-40px, 30px) scale(0.95); }
+}
+
+@keyframes shine-sweep {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.aurora-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(90px);
+  pointer-events: none;
+  animation: aurora-drift 14s ease-in-out infinite;
+}
+
+.headline-shine {
+  background: linear-gradient(110deg, #71717a 20%, #ffffff 40%, #ffffff 60%, #71717a 80%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shine-sweep 6s linear infinite;
+}
+
+/* 3D hero card — gentle levitation */
+@keyframes hero-float-kf {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+
+.hero-float {
+  animation: hero-float-kf 7s ease-in-out infinite;
+}
+
+/* Floating metric chips around the hero card */
+@keyframes hero-chip-kf {
+  0%, 100% { transform: translateY(0) translateZ(var(--chip-z, 50px)); }
+  50% { transform: translateY(-8px) translateZ(var(--chip-z, 50px)); }
+}
+
+.hero-chip {
+  animation: hero-chip-kf 5s ease-in-out infinite;
+}
+
+/* ── Hero interview card — live dot, halo spin, idle voice bars ── */
+@keyframes live-pulse-kf {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.live-dot {
+  animation: live-pulse-kf 1.6s ease-in-out infinite;
+}
+
+@keyframes ring-spin-kf {
+  to { transform: rotate(360deg); }
+}
+
+.ring-spin {
+  animation: ring-spin-kf 9s linear infinite;
+}
+
+@keyframes wave-idle-kf {
+  0%, 100% { height: 22%; }
+  50% { height: 65%; }
+}
+
+.wave-idle {
+  animation: wave-idle-kf 1.5s ease-in-out infinite;
+}
+
+/* ── AI interviewer avatar micro-animations ── */
+@keyframes avatar-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95%, 97% { transform: scaleY(0.08); }
+}
+
+@keyframes avatar-sway {
+  0% { transform: rotate(-1.2deg); }
+  100% { transform: rotate(1.2deg); }
+}
+
+@keyframes avatar-breathe {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(1.5px); }
+}
+
+.avatar-blink {
+  animation: avatar-blink 4.2s ease-in-out infinite;
+}
+
+.avatar-sway {
+  animation: avatar-sway 5.5s ease-in-out infinite alternate;
+}
+
+.avatar-breathe {
+  animation: avatar-breathe 3.8s ease-in-out infinite;
+}
+
+/* Chrome/Safari autofill paints inputs pale blue — force the dark theme.
+   Unlayered on purpose: layered component styles (e.g. .glass-input's
+   box-shadow) must never override this. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #101012 inset !important;
+  box-shadow: 0 0 0 1000px #101012 inset !important;
+  -webkit-text-fill-color: #f4f4f5 !important;
+  caret-color: #f4f4f5;
+  border-radius: inherit;
+  transition: background-color 9999999s ease-in-out 0s;
+}
+
+input:autofill {
+  box-shadow: 0 0 0 1000px #101012 inset !important;
+  -webkit-text-fill-color: #f4f4f5 !important;
+  caret-color: #f4f4f5;
+}
+
+/* ── Toast notifications — glass cards, violet-tinted, bottom-right ── */
+:root {
+  --toastify-color-dark: rgba(12, 12, 14, 0.92);
+  --toastify-color-success: #34d399;
+  --toastify-color-error: #fb7185;
+  --toastify-color-warning: #fbbf24;
+  --toastify-color-info: #a78bfa;
+  --toastify-font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --toastify-toast-width: 344px;
+  --toastify-toast-bd-radius: 1rem;
+}
+
+.Toastify__toast {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 1rem;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 60%),
+    rgba(12, 12, 14, 0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 16px 48px rgba(0, 0, 0, 0.6);
+  font-size: 13px;
+  font-weight: 600;
+  color: #e4e4e7;
+  min-height: 56px;
+}
+
+.Toastify__toast-body {
+  padding: 4px 6px;
+}
+
+.Toastify__progress-bar {
+  height: 2px;
+  opacity: 0.8;
+}
+
+.Toastify__close-button {
+  color: #71717a;
+  opacity: 1;
+  align-self: center;
+  transition: color 0.2s;
+}
+
+.Toastify__close-button:hover {
+  color: #ffffff;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-surface-950;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-surface-800 rounded-full hover:bg-surface-700 transition-colors;
+}
+
+select::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}

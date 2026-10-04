@@ -1,0 +1,18 @@
+fastapi==0.135.1
+uvicorn==0.41.0
+requests==2.32.5
+python-dotenv==1.2.2
+python-multipart==0.0.22
+pydantic==2.12.5
+setuptools==82.0.0
+httpcore==1.0.9
+httpx==0.28.1
+PyMuPDF==1.27.2.3
+python-docx==1.1.2
+# 0.3.13+ required for Python 3.12+ (pkgutil.find_loader removed in 3.14)
+pytesseract>=0.3.13
+pdf2image==1.17.0
+pytest==9.1.0
+pytest-asyncio==1.4.0
+ruff==0.15.17
+mypy==2.1.0

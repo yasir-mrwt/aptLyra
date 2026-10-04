@@ -1,0 +1,88 @@
+services:
+  # --- Backend Service ---
+  - type: web
+    name: preptalk-backend
+    env: docker
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile
+    plan: free # Change to starter/standard if needed
+    autoDeploy: false
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: UPSTASH_REDIS_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: BACKEND_URL
+        sync: false
+      - key: PORT
+        sync: false
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: AI_SERVICE_URL
+        sync: false
+      - key: JDOODLE_CLIENT_ID
+        sync: false
+      - key: JDOODLE_CLIENT_SECRET
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: INTERNAL_API_KEY
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+
+  # --- AI Microservice ---
+  - type: web
+    name: preptalk-ai-service
+    env: docker
+    dockerContext: ./ai-service
+    dockerfilePath: ./ai-service/Dockerfile
+    plan: free # Change to starter/standard if needed
+    autoDeploy: false
+    envVars:
+      - key: PORT
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        sync: false
+      - key: GROQ_VISION_MODEL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: REQUEST_TIMEOUT
+        sync: false
+      - key: INTERNAL_API_KEY
+        sync: false
+      - key: GROQ_API_KEY_2
+        sync: false
+      - key: GROQ_API_KEYS
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: GROQ_TTS_MODEL
+        value: canopylabs/orpheus-v1-english
+      - key: GROQ_TTS_VOICE
+        value: autumn

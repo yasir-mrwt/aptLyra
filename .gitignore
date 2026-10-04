@@ -1,0 +1,12 @@
+.env
+node_modules/
+.DS_Store
+Recording.wav
+/backend/uploads*
+**/.env
+__pycache__/
+.planning/
+backend/verify_resume_system.py
+backend/dist*
+.venv
+.vscode
