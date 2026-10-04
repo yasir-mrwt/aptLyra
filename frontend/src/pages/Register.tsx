@@ -53,16 +53,17 @@ const Register = () => {
 
     }, [user, isError, isSuccess, message, navigate, dispatch]);
 
+    const isCoolingDown = resendIn > 0;
     // Countdown for the resend button
     useEffect(() => {
-        if (resendIn <= 0) return;
+        if (!isCoolingDown) return;
         cooldownRef.current = setInterval(() => {
             setResendIn((s) => (s <= 1 ? 0 : s - 1));
         }, 1000);
         return () => {
             if (cooldownRef.current) clearInterval(cooldownRef.current);
         };
-    }, [resendIn > 0]);
+    }, [isCoolingDown]);
 
     const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
         setFormData((prevState) => ({

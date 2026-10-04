@@ -4,11 +4,13 @@ Defines API endpoints for question generation and answer evaluation.
 """
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+from typing import Literal
+from app.services.fetch_security import fetch_diagram
 from typing import Optional, List
 import os
 import random
-from app.services.groq_service import call_groq, parse_response, to_float
+from app.services.groq_service import call_groq, parse_response
 from app.services.whisper_service import whisper_service
 from app.prompts import (
     GENERATION_SYSTEM_PROMPT,
@@ -30,16 +32,23 @@ class QuestionRequest(BaseModel):
     role: str = Field(default="Full-Stack Developer", max_length=100)
     level: str = Field(default="Junior", max_length=50)
     count: int = Field(default=5, gt=0, le=20)
-    interview_type: str = Field(default="coding-mix", max_length=50)
+    interview_type: Literal["oral-only", "coding-mix", "company-specific"] = "coding-mix"
     company: Optional[str] = Field(default=None, max_length=100)
     company_track: Optional[str] = Field(default=None, max_length=100)
     resume_text: Optional[str] = Field(default=None, max_length=20000)
 
 
+    @model_validator(mode="after")
+    def require_company_track(self):
+        if self.interview_type == "company-specific" and (not self.company or not self.company.strip() or not self.company_track or not self.company_track.strip()):
+            raise ValueError("company and company_track are required for company-specific interviews")
+        return self
+
+
 class QuestionItem(BaseModel):
-    question: str
-    ideal_answer: str
-    question_type: str = Field(default="oral", description="Must be 'coding' or 'oral'")
+    question: str = Field(min_length=1)
+    ideal_answer: str = Field(min_length=1)
+    question_type: Literal["oral", "coding", "system-design"] = "oral"
 
 
 class QuestionResponse(BaseModel):
@@ -49,7 +58,7 @@ class QuestionResponse(BaseModel):
 
 class EvaluationRequest(BaseModel):
     question: str = Field(..., max_length=2000)
-    question_type: str = Field(..., max_length=50)
+    question_type: Literal["oral", "coding", "system-design"]
     role: str = Field(default="Full-Stack Developer", max_length=100)
     level: Optional[str] = Field(default=None, max_length=50)
     user_answer: Optional[str] = Field(default=None, max_length=50000)
@@ -59,10 +68,10 @@ class EvaluationRequest(BaseModel):
 
 
 class EvaluationResponse(BaseModel):
-    technical_score: float
-    confidence_score: float
-    ai_feedback: str
-    ideal_answer: str
+    technical_score: float = Field(ge=0, le=100, allow_inf_nan=False)
+    confidence_score: float = Field(ge=0, le=100, allow_inf_nan=False)
+    ai_feedback: str = Field(min_length=1)
+    ideal_answer: str = Field(min_length=1)
 
 
 class FollowUpRequest(BaseModel):
@@ -166,7 +175,7 @@ def generate_questions(req: QuestionRequest):
             if len(final_questions) >= req.count:
                 break
 
-        if not final_questions:
+        if len(final_questions) != req.count:
             raise ValueError("No questions found in AI response")
 
         return QuestionResponse(
@@ -177,7 +186,7 @@ def generate_questions(req: QuestionRequest):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=502, detail="Invalid or unavailable AI response. Please retry.") from None
 
 
 @router.post("/generate-followup", response_model=FollowUpResponse)
@@ -208,14 +217,14 @@ def generate_followup(req: FollowUpRequest):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=502, detail="Invalid or unavailable AI response. Please retry.") from None
 
 
 @router.post("/transcribe")
 def transcribe_audio(file: UploadFile = File(...)):
     """Convert an uploaded audio (webm) file to text transcription using Groq Whisper."""
     text = whisper_service.transcribe(file)
-    return {"transcription": text}
+    return {"transcription": text["text"]}
 
 
 @router.post("/evaluate", response_model=EvaluationResponse)
@@ -237,15 +246,8 @@ def evaluate_answer(req: EvaluationRequest):
     elif req.question_type == "system-design":
         system_prompt = EVALUATION_SYSTEM_PROMPT_SYSTEM_DESIGN
         if req.diagram_payload and req.diagram_payload.startswith("http"):
-            import requests
             import base64
-
-            try:
-                img_resp = requests.get(req.diagram_payload, timeout=10)
-                img_resp.raise_for_status()
-                image_base64 = base64.b64encode(img_resp.content).decode("utf-8")
-            except Exception as e:
-                print(f"Error fetching diagram: {e}")
+            image_base64 = base64.b64encode(fetch_diagram(req.diagram_payload)).decode("ascii")
 
         user_prompt = get_evaluation_user_prompt_system_design(
             req.question,
@@ -254,13 +256,8 @@ def evaluate_answer(req: EvaluationRequest):
         )
     else:
         if not req.user_answer or not req.user_answer.strip():
-            return EvaluationResponse(
-                technical_score=0.0,
-                confidence_score=0.0,
-                ai_feedback="No response was detected. Please ensure your microphone is working and that you provide a clear answer.",
-                ideal_answer="A complete and relevant answer to the question.",
-            )
-            
+            raise HTTPException(422, "user_answer is required for oral questions")
+
         system_prompt = EVALUATION_SYSTEM_PROMPT_CONCEPTUAL
         user_prompt = get_evaluation_user_prompt_conceptual(
             req.question, req.user_answer
@@ -272,18 +269,8 @@ def evaluate_answer(req: EvaluationRequest):
         )
         parsed = parse_response(text_output)
 
-        if not isinstance(parsed, dict):
-            parsed = {}
-
-        return EvaluationResponse(
-            technical_score=to_float(parsed.get("technical_score")),
-            confidence_score=to_float(parsed.get("confidence_score")),
-            ai_feedback=parsed.get("ai_feedback", "Missing feedback. Format error."),
-            ideal_answer=parsed.get(
-                "ideal_answer", "Missing ideal answer. Format error."
-            ),
-        )
+        return EvaluationResponse.model_validate(parsed)
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=502, detail="Invalid or unavailable AI response. Please retry.") from None

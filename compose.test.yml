@@ -1,0 +1,33 @@
+name: techvera-baseline
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: techvera_test
+      POSTGRES_USER: techvera_test
+      # Disposable localhost-only fixture, never use for production.
+      POSTGRES_PASSWORD: techvera_local_fixture
+    ports: ["127.0.0.1:15432:5432"]
+    tmpfs: [/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U techvera_test -d techvera_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  redis:
+    image: redis:7-alpine
+    ports: ["127.0.0.1:16379:6379"]
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  ai-checks:
+    profiles: [checks]
+    build: ./ai-service
+    volumes: ["./ai-service:/app:ro"]
+    environment:
+      NODE_ENV: development
+      PYTHONDONTWRITEBYTECODE: "1"
+    command: ["sh", "-c", "python -c 'import main, requests, fitz, docx, pytesseract, pdf2image' && ruff check --no-cache . --select E9,F63,F7,F82 && python -m pytest -p no:cacheprovider tests -q"]

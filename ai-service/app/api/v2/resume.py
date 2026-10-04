@@ -9,6 +9,8 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 import logging
+import os
+from app.services.fetch_security import validate_callback_url
 import requests
 from app.services.resume_orchestrator_service import ResumeOrchestratorService
 from app.services.generation.resume_generation_service import ResumeGenerationService
@@ -36,8 +38,12 @@ async def process_resume_v2(file: UploadFile = File(...)):
         )
 
     try:
-        contents = await file.read()
+        contents = await file.read(10 * 1024 * 1024 + 1)
+        if not contents or len(contents) > 10 * 1024 * 1024:
+            raise HTTPException(413, "Resume must be nonempty and at most 10 MiB")
         return ResumeOrchestratorService.process_resume(contents, file.filename)
+    except HTTPException:
+        raise
     except ValueError as ve:
         logger.warning(f"[v2/process] Validation Error: {str(ve)}")
         raise HTTPException(status_code=400, detail=str(ve))
@@ -49,26 +55,24 @@ async def process_resume_v2(file: UploadFile = File(...)):
 
 
 def _process_and_webhook(contents: bytes, filename: str, webhook_url: str):
+    validate_callback_url(webhook_url)
     try:
         result = ResumeOrchestratorService.process_resume(contents, filename)
-        # Call the webhook
-        try:
-            requests.post(
-                webhook_url, json={"success": True, "data": result}, timeout=10
-            )
-        except Exception as we:
-            logger.error(f"Failed to call webhook {webhook_url}: {str(we)}")
-    except Exception as e:
-        logger.error(f"Async process error: {str(e)}")
-        try:
-            requests.post(
-                webhook_url, json={"success": False, "error": str(e)}, timeout=10
-            )
-        except Exception as we:
-            pass
+        payload = {"success": True, "data": result}
+    except Exception:
+        logger.error("Async resume processing failed")
+        payload = {"success": False, "error": "Resume processing failed. Please retry."}
+    try:
+        response = requests.post(webhook_url, json=payload,
+            headers={"X-API-Key": os.environ["INTERNAL_API_KEY"]},
+            timeout=(5, 10), allow_redirects=False)
+        if response.status_code != 200:
+            raise ValueError("Callback rejected")
+    except (requests.RequestException, ValueError):
+        logger.error("Resume callback delivery failed")
 
 
-@router.post("/process-async")
+@router.post("/process-async", status_code=202)
 async def process_resume_async(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
@@ -89,11 +93,16 @@ async def process_resume_async(
         )
 
     try:
-        contents = await file.read()
+        contents = await file.read(10 * 1024 * 1024 + 1)
+        if not contents or len(contents) > 10 * 1024 * 1024:
+            raise HTTPException(413, "Resume must be nonempty and at most 10 MiB")
+        validate_callback_url(webhook_url)
         background_tasks.add_task(
             _process_and_webhook, contents, file.filename, webhook_url
         )
         return {"status": "Processing started", "webhook": webhook_url}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"[v2/process-async] Error reading file: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")

@@ -1,6 +1,6 @@
 # 🛠️ TechVera — Local Setup Guide
 
-Get all three services running on your machine in ~15 minutes.
+Run the existing three-service stack on Node 20 and Python 3.11. No local GPU or model download is required.
 
 ```
 ┌─────────────┐     ┌──────────────┐     ┌────────────────┐
@@ -22,9 +22,9 @@ Get all three services running on your machine in ~15 minutes.
 ### Tools
 | Tool | Version | Check |
 |---|---|---|
-| Node.js | 18+ | `node -v` |
-| npm | 9+ | `npm -v` |
-| Python | 3.10+ (3.14 works) | `python3 --version` |
+| Node.js | 20.19+ within 20.x; validated 20.20.2 | `node -v` |
+| npm | 10.x (bundled with Node 20) | `npm -v` |
+| Python | 3.11.x | `python3.11 --version` |
 
 Optional (recommended):
 - `ffmpeg` — accurate speech-duration analytics → `brew install ffmpeg`
@@ -51,14 +51,14 @@ git clone <your-repo-url> techvera
 cd techvera
 
 # Backend
-cd backend && npm install && cd ..
+cd backend && npm ci && cd ..
 
 # Frontend
-cd frontend && npm install && cd ..
+cd frontend && npm ci && cd ..
 
 # AI service
 cd ai-service
-python3 -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cd ..
@@ -85,6 +85,8 @@ UPSTASH_REDIS_URL=rediss://default:<token>@<host>.upstash.io:6379
 
 # ── AI service link ──
 AI_SERVICE_URL=http://localhost:8000
+BACKEND_URL=http://localhost:5001
+DATABASE_SSL=true
 INTERNAL_API_KEY=<any long random string — must MATCH ai-service/.env>
 
 # ── Google OAuth ──
@@ -112,6 +114,8 @@ EMAIL_FROM="TechVera <your gmail>"
 
 ```env
 PORT=8000
+NODE_ENV=development
+RESUME_CALLBACK_BASE_URL=http://localhost:5001
 ALLOWED_ORIGINS=http://localhost:5001,http://localhost:5173
 REQUEST_TIMEOUT=60
 INTERNAL_API_KEY=<same value as backend/.env>
@@ -197,3 +201,112 @@ Open **http://localhost:5173** — register with email (OTP arrives in your inbo
 More in the [README troubleshooting table](./README.md#-troubleshooting).
 
 Ready to go live? See **[DEPLOYMENT.md](./DEPLOYMENT.md)**.
+
+## Phase 1 verification
+
+Node 20.20.2 (minimum 20.19 within 20.x) and Python 3.11 are the supported baseline.
+The checked-in `.nvmrc` and `.python-version` record these choices. On macOS with
+an existing nvm installation, use `nvm install` then `nvm use` from the product root.
+Install Python 3.11 with your existing runtime manager, or use the container below.
+
+On Windows, install Node 20.x and Python 3.11 using your existing installer/manager,
+then use PowerShell:
+
+```powershell
+cd ai-service
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python main.py
+```
+
+On macOS/Linux:
+
+```bash
+cd ai-service
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python main.py
+```
+
+For local resumes, set backend `BACKEND_URL=http://localhost:5001` and AI
+`RESUME_CALLBACK_BASE_URL=http://localhost:5001`, `NODE_ENV=development`. Set backend
+`PORT=5001`; both services must use the same real `INTERNAL_API_KEY`. Production
+callback origins use HTTPS and AI `NODE_ENV=production`. Dummy Cloudinary values can
+satisfy backend startup checks but cannot upload diagrams/photos. ffmpeg provides
+measured speech metrics; without it transcript evaluation works with metrics
+explicitly unavailable. Tesseract/poppler are required for scanned PDF OCR. The AI
+Docker image includes all three tools; it uses Python 3.11 and needs no GPU.
+
+Install exactly the Node lockfiles and run checks from the product root:
+
+```bash
+npm --prefix frontend ci
+npm --prefix backend ci
+npm --prefix frontend run lint
+npm --prefix frontend run typecheck
+npm --prefix frontend test
+npm --prefix frontend run build
+npm --prefix backend run lint
+npm --prefix backend run typecheck
+npm --prefix backend test -- --runInBand
+npm --prefix backend run build
+```
+
+Run Python checks from `ai-service/` in the activated Python 3.11 environment:
+
+```bash
+python -c "import main, requests, fitz, docx, pytesseract, pdf2image"
+ruff check . --select E9,F63,F7,F82
+python -m pytest tests -q
+```
+
+Alternatively, Docker Desktop provides the verified Python 3.11 environment
+on both macOS Apple Silicon and Windows; run from the product root:
+
+```bash
+docker compose -f compose.test.yml --profile checks run --build --rm ai-checks
+```
+
+The check container mounts AI source read-only and disables source-directory caches.
+It needs no keys. API/provider responses in the tests are deterministic fixtures.
+
+For real persistence verification, start the disposable fixtures:
+
+```bash
+docker compose -f compose.test.yml up -d --wait postgres redis
+npm --prefix backend run test:persistence
+npm --prefix backend run test:smoke
+docker compose -f compose.test.yml down
+```
+
+These services bind only `127.0.0.1:15432` and `127.0.0.1:16379`, with no persistent
+volumes. PostgreSQL data uses tmpfs; Redis persistence is disabled. The plainly named
+fixture password in Compose is disposable test data, never a production credential.
+The integration runner rejects preexisting datastore environment variables and
+sets only these local endpoints (`techvera_test`, Redis DB 15). It bypasses `.env`
+loading in the AI client. In PowerShell, remove conflicting variables with
+`Remove-Item Env:DATABASE_URL`, etc.; in a POSIX shell use `unset DATABASE_URL
+NEON_DATABASE_URL REDIS_URL UPSTASH_REDIS_URL`. Do not point this suite at a cloud DB.
+It inserts UUID-tagged fixture users and cleans their rows/buffer keys in teardown.
+The script builds the backend automatically before checking schema bootstrap,
+company/track persistence, ownership, real transaction locking/rollback, duplicate
+answers, completion/reward idempotency, follow-up limits, STT failure state and Redis
+buffer flushes. AI calls are fixtures even in this real datastore suite.
+
+You may use the disposable local endpoints for development only if you understand
+that stopping Compose destroys their contents. Set backend `DATABASE_SSL=false`
+only for local PostgreSQL; production/staging always retain TLS. Clear the Upstash
+URL when using `REDIS_URL` because Upstash takes precedence. Backend schema bootstrap
+is additive DDL, not a migration framework; review production schema changes separately.
+
+Large frontend chunk warnings and the existing dependency audit backlog are recorded
+in [SECURITY.md](SECURITY.md). Do not treat mocked scoring tests as evidence of scoring
+accuracy. Live Groq/Gemini/Cloudinary/email/code-runner verification requires locally
+supplied credentials and is separate from these reproducible checks.
+
+The smoke runner also rejects external datastore variables, boots the real Node 20
+server on port 15001 with fixture integration settings, uses Redis DB 14, checks
+SQL/Redis health plus user/callback authentication, and removes its temporary
+upload directory. It makes no provider requests.

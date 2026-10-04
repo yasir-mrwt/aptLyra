@@ -7,7 +7,7 @@ import { toast } from "react-toastify"
 import SessionCard from "../components/SessionCard"
 import SkeletonSessionCard from "../components/SkeletonSessionCard"
 import ConfirmModal from "../components/ConfirmModal"
-import type { Session } from "../types/session"
+import type { Session, CreateSessionRequest } from "../types/session"
 import { ROLES, LEVELS, TYPES, COUNTS } from "../constants/interview"
 
 
@@ -31,7 +31,7 @@ const Dashboard = () => {
     const { user } = useSelector((state: RootState) => state.auth)
     const { sessions, isLoading, isGenerating, isError, message, pagination, stats } = useSelector((state: RootState) => state.session)
     const isProcessing = isGenerating || isLoading;
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<CreateSessionRequest>({
         role: user?.preferredRole || ROLES[0],
         level: LEVELS[0],
         interviewType: TYPES[1].value,

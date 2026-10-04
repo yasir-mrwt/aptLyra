@@ -1,9 +1,30 @@
 import fs from "fs";
+import path from "node:path";
 import { sessionRepository, withSessionLock, ISession } from "../models/Session.js";
 import { resumeRepository } from "../models/Resume.js";
 import { aiService } from "./aiService.js";
 import { pushSocketUpdate } from "./socketService.js";
 import { gamificationService } from "./gamificationService.js";
+
+export class SessionStateError extends Error {
+  constructor(message: string, public status = 409) { super(message); }
+}
+
+async function completeLocked(session: ISession) {
+  if (session.status === "completed") return session;
+  if (session.status !== "in-progress") throw new SessionStateError("Only active interviews can be completed");
+  if (session.questions.some(q => (q.isSubmitted && !q.isEvaluated) || q.followUpPending)) {
+    throw new SessionStateError("Evaluation in progress, please wait.");
+  }
+  const scores = sessionRepository.calculateScoreSummary(session);
+  session.overallScore = scores.overallScore;
+  session.metrics = { avgTechnical: scores.avgTechnical, avgConfidence: scores.avgConfidence };
+  session.status = "completed";
+  session.endTime = new Date().toISOString();
+  const saved = await sessionRepository.save(session);
+  await gamificationService.rewardCompletion(session.user);
+  return saved;
+}
 
 export const sessionService = {
   async createInterviewSession(
@@ -61,6 +82,8 @@ export const sessionService = {
           interviewType,
           count,
           resumeText,
+          company,
+          companyTrack,
         });
         const questions = (aiData.questions || []).map((qInfo: any) => ({
           questionText: qInfo.question,
@@ -71,7 +94,8 @@ export const sessionService = {
         }));
 
         await withSessionLock(session._id, async () => {
-          const fresh = (await sessionRepository.findById(session._id)) || session;
+          const fresh = await sessionRepository.findById(session._id);
+          if (!fresh || fresh.status !== "pending") return;
           fresh.questions = questions as any;
           fresh.status = "in-progress";
           fresh.startTime = new Date().toISOString();
@@ -92,7 +116,8 @@ export const sessionService = {
       } catch (error: any) {
         console.error("Error in createSession (Background):", error.message);
         await withSessionLock(session._id, async () => {
-          const fresh = (await sessionRepository.findById(session._id)) || session;
+          const fresh = await sessionRepository.findById(session._id);
+          if (!fresh || fresh.status !== "pending") return;
           fresh.status = "failed";
           await sessionRepository.save(fresh);
         });
@@ -102,10 +127,10 @@ export const sessionService = {
           session._id,
           "GENERATION_FAILED",
           "Failed to generate questions",
-          { error: error.message }
+          await sessionRepository.findById(session._id)
         );
       }
-    })();
+    })().catch(() => console.error("Question generation task could not persist its result"));
 
     return session;
   },
@@ -144,17 +169,16 @@ export const sessionService = {
   },
 
   async deleteInterviewSession(sessionId: string, userId: string | any) {
-    const session = await sessionRepository.findByIdForUser(sessionId, userId.toString());
-    if (!session) {
-      throw new Error("Session not found");
-    }
-
-    if (session.status === "pending") {
-      throw new Error("Cannot delete a session while questions are being generated.");
-    }
-
-    await sessionRepository.delete(session);
-    return session._id;
+    return withSessionLock(sessionId, async () => {
+      const session = await sessionRepository.findByIdForUser(sessionId, userId.toString());
+      if (!session) throw new Error("Session not found");
+      if (session.status === "pending") throw new SessionStateError("Cannot delete a session while questions are being generated.");
+      if (session.questions.some(q => (q.isSubmitted && !q.isEvaluated) || q.followUpPending)) {
+        throw new SessionStateError("Cannot delete a session while evaluation is in progress.");
+      }
+      await sessionRepository.delete(session);
+      return session._id;
+    });
   },
 
   async submitSessionAnswer(
@@ -167,7 +191,8 @@ export const sessionService = {
     diagramImageUrl: string | null,
     io: any
   ) {
-    const qIdx = parseInt(questionIndex, 10);
+    if (!/^\d+$/.test(String(questionIndex))) throw new SessionStateError("Invalid question index", 400);
+    const qIdx = Number(questionIndex);
 
     await withSessionLock(sessionId, async () => {
       const session = await sessionRepository.findByIdForUser(sessionId, userId.toString());
@@ -179,6 +204,13 @@ export const sessionService = {
         throw new Error("Question not found");
       }
 
+      if (session.status !== "in-progress") throw new SessionStateError("This interview is not active");
+      const q = session.questions[qIdx];
+      if (q.isSubmitted || q.isEvaluated) throw new SessionStateError("Answer already submitted");
+      if (q.questionType === "oral" && !audioFilePath) throw new SessionStateError("Record an answer before submitting", 400);
+      if (q.questionType === "coding" && !code?.trim()) throw new SessionStateError("Code is required", 400);
+      if (q.questionType === "system-design" && !audioFilePath && !diagramImageUrl) throw new SessionStateError("Provide audio or a diagram", 400);
+      delete q.processingError;
       // Mark as submitted immediately to prevent duplicate submissions
       session.questions[qIdx].isSubmitted = true;
       await sessionRepository.save(session);
@@ -215,6 +247,7 @@ export const sessionService = {
 
       let speechMetrics: any = null;
       let transcription = "";
+      let speechMetricsStatus: "available" | "unavailable" | undefined;
 
       // Stage 1: Transcription & Speech Analysis (if audio exists)
       if (audioFilePath) {
@@ -222,11 +255,11 @@ export const sessionService = {
           pushSocketUpdate(io, userId, sessionId, "AI_TRANSCRIBING", `Analyzing speech patterns...`);
           const audioBuffer = await fs.promises.readFile(audioFilePath);
 
-          const analysisResult = await aiService.analyzeSpeech(audioBuffer);
+          const analysisResult = await aiService.analyzeSpeech(audioBuffer, undefined, path.basename(audioFilePath));
           transcription = analysisResult.transcript || "";
           speechMetrics = analysisResult.metrics || null;
-        } catch (error: any) {
-          console.error("Speech Analysis/Transcription Error:", error.message);
+          speechMetricsStatus = analysisResult.metrics_status;
+          if (typeof transcription !== "string" || !transcription.trim()) throw new Error("No speech detected");
         } finally {
           // Ensure temp file is deleted even if transcription fails
           if (fs.existsSync(audioFilePath)) {
@@ -243,7 +276,7 @@ export const sessionService = {
       const evaluation = await aiService.evaluateAnswer({
         question: question.questionText,
         question_type: question.questionType as "coding" | "oral" | "system-design",
-        user_answer: transcription || "No verbal answer provided.",
+        user_answer: transcription,
         user_code: codeSubmission || "",
         selected_language: language || "plaintext",
         diagram_payload: diagramImageUrl || undefined,
@@ -259,6 +292,13 @@ export const sessionService = {
 
         const q = fresh.questions[questionIdx];
         if (!q) throw new Error("Question not found during evaluation update");
+        if (fresh.status !== "in-progress" || q.isEvaluated || !q.isSubmitted) throw new SessionStateError("Answer no longer awaiting evaluation");
+        q.speechMetricsStatus = speechMetricsStatus;
+        delete q.processingError;
+        // Reserve follow-up capacity under the same lock. Other evaluations cannot
+        // complete this session while an accepted follow-up is being generated.
+        const used = fresh.questions.filter(item => item.followUpOf !== undefined || item.followUpPending).length;
+        q.followUpPending = evaluation.technical_score < 60 && q.followUpOf === undefined && used < 2;
 
         q.userAnswerText = transcription;
         q.userSubmittedCode = codeSubmission || "";
@@ -300,16 +340,7 @@ export const sessionService = {
       }
 
       // Stage 4: Cross-questioning — weak answer? The interviewer probes deeper.
-      let sessionAfterFollowUp = updatedSession;
-      const FOLLOWUP_SCORE_THRESHOLD = 60;
-      const MAX_FOLLOWUPS_PER_SESSION = 2;
-      const isWeakAnswer = (evaluation.technical_score ?? 0) < FOLLOWUP_SCORE_THRESHOLD;
-      const isAlreadyFollowUp = question.followUpOf !== undefined && question.followUpOf !== null;
-      const followUpCount = updatedSession.questions.filter(
-        (q) => q.followUpOf !== undefined && q.followUpOf !== null
-      ).length;
-
-      if (isWeakAnswer && !isAlreadyFollowUp && followUpCount < MAX_FOLLOWUPS_PER_SESSION) {
+      if (updatedSession.questions[questionIdx].followUpPending) {
         try {
           pushSocketUpdate(io, userId, sessionId, "AI_FOLLOWUP", "Interviewer is preparing a follow-up...");
 
@@ -326,6 +357,10 @@ export const sessionService = {
             // Don't resurrect a session the user already finished manually
             if (!fresh || fresh.status !== "in-progress") return null;
 
+            const original = fresh.questions[questionIdx];
+            if (!original?.followUpPending) return null;
+            original.followUpPending = false;
+            if (fresh.questions.filter(q => q.followUpOf !== undefined).length >= 2) return sessionRepository.save(fresh);
             fresh.questions.push({
               questionText: followUp.question,
               questionType: "oral",
@@ -339,7 +374,6 @@ export const sessionService = {
           });
 
           if (appended) {
-            sessionAfterFollowUp = appended;
             pushSocketUpdate(
               io,
               userId,
@@ -351,63 +385,29 @@ export const sessionService = {
           }
         } catch (err: any) {
           // Follow-ups are best-effort — never block the evaluation flow
-          console.error("[FollowUp] Generation failed (non-fatal):", err.message);
+          console.error("[FollowUp] Generation failed (non-fatal)");
+        } finally {
+          await withSessionLock(sessionId, async () => {
+            const fresh = await sessionRepository.findById(sessionId);
+            if (fresh?.questions[questionIdx]?.followUpPending) {
+              fresh.questions[questionIdx].followUpPending = false;
+              await sessionRepository.save(fresh);
+            }
+          });
         }
       }
 
-      // Check if this was the last question (post follow-up append)
-      const allEvaluated = sessionAfterFollowUp.questions.every((q) => q.isEvaluated);
-      if (allEvaluated || updatedSession.status === "completed") {
-        const finalSession = await withSessionLock(sessionId, async () => {
-          const fresh = await sessionRepository.findById(sessionId);
-          if (!fresh) return null;
-
-          const scores = sessionRepository.calculateScoreSummary(fresh);
-          fresh.overallScore = scores.overallScore;
-          fresh.metrics.avgTechnical = scores.avgTechnical;
-          fresh.metrics.avgConfidence = scores.avgConfidence;
-
-          if (allEvaluated) {
-            fresh.status = "completed";
-            fresh.endTime = fresh.endTime || new Date().toISOString();
-          }
-
-          return sessionRepository.save(fresh);
-        });
-
-        // Add session completion XP and flush all buffered XP to Redis
-        let levelUpInfo = null;
-        try {
-          await gamificationService.addXP(userId, 'session_completed');
-          await gamificationService.updateStreak(userId);
-          levelUpInfo = await gamificationService.flushXP(userId);
-        } catch (err) {
-          console.error(`[Gamification] Failed to flush XP on session completion:`, err);
-        }
-
-        // Include gamification updates in the socket payload
-        if (finalSession) {
-          const payload = { ...finalSession, gamification: levelUpInfo };
-
-          pushSocketUpdate(
-            io,
-            userId,
-            sessionId,
-            "session completed",
-            "Evaluation complete",
-            payload
-          );
-        }
-      } else {
-        pushSocketUpdate(
-          io,
-          userId,
-          sessionId,
-          "evaluation completed",
-          `Feedback for Q${questionIdx + 1} ready`,
-          sessionAfterFollowUp
-        );
-      }
+      // Re-read under the lock: snapshots taken before parallel evaluations are stale.
+      const finalSession = await withSessionLock(sessionId, async () => {
+        const fresh = await sessionRepository.findById(sessionId);
+        if (!fresh) return null;
+        if (fresh.status === "in-progress" && fresh.questions.length > 0 &&
+          fresh.questions.every(q => q.isEvaluated && !q.followUpPending)) return completeLocked(fresh);
+        return fresh;
+      });
+      if (finalSession) pushSocketUpdate(io, userId, sessionId,
+        finalSession.status === "completed" ? "session completed" : "evaluation completed",
+        `Feedback for Q${questionIdx + 1} ready`, finalSession);
     } catch (error: any) {
       console.error("Evaluation Async Task Error:", error.message);
 
@@ -419,6 +419,7 @@ export const sessionService = {
         const q = fresh.questions[questionIdx];
         if (q && !q.isEvaluated) {
           q.isSubmitted = false;
+          q.processingError = "Answer processing failed. Please retry or record again. No score was saved.";
           return sessionRepository.save(fresh);
         }
         return fresh;
@@ -429,7 +430,7 @@ export const sessionService = {
         userId,
         sessionId,
         "error",
-        `Evaluation failed: ${error.message}`,
+        errSession?.questions[questionIdx]?.isEvaluated ? "Feedback saved, but finalization failed. Use Finish Session to retry." : "Answer processing failed. Please retry or record again.",
         errSession
       );
     }
@@ -442,30 +443,8 @@ export const sessionService = {
         throw new Error("Session not found");
       }
 
-      // Prevent ending if answers are still being transcribed/evaluated
-      if (fresh.questions.some((q) => !q.isEvaluated && q.isSubmitted)) {
-        throw new Error("Evaluation in progress, please wait.");
-      }
-
-      const scores = sessionRepository.calculateScoreSummary(fresh);
-      fresh.overallScore = scores.overallScore;
-      fresh.metrics = {
-        avgTechnical: scores.avgTechnical,
-        avgConfidence: scores.avgConfidence,
-      };
-      fresh.status = "completed";
-      fresh.endTime = new Date().toISOString();
-      return sessionRepository.save(fresh);
+      return completeLocked(fresh);
     });
-
-    let levelUpInfo = null;
-    try {
-      await gamificationService.addXP(userId.toString(), 'session_completed');
-      await gamificationService.updateStreak(userId.toString());
-      levelUpInfo = await gamificationService.flushXP(userId.toString());
-    } catch (err) {
-      console.error(`[Gamification] Failed to flush XP on manual session completion:`, err);
-    }
 
     pushSocketUpdate(
       io,
@@ -473,7 +452,7 @@ export const sessionService = {
       sessionId,
       "session completed",
       "Session ended",
-      { ...session, gamification: levelUpInfo }
+      session
     );
 
     return session;

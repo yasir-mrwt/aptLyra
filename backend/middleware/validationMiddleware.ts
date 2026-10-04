@@ -54,7 +54,12 @@ export const sessionCreationValidation = [
     .withMessage("Role must be less than 50 characters"),
   body("level").trim().notEmpty().withMessage("Level is required").isLength({ max: 50 }),
   body("interviewType").isIn(["oral-only", "coding-mix", "company-specific"]).withMessage("Invalid interview type"),
-  body("company").optional().isString().withMessage("Company must be a string"),
-  body("companyTrack").optional().isString().withMessage("Company track must be a string"),
+  ... ["company", "companyTrack"].map(field => body(field).optional().isString().bail().trim().isLength({ min: 1, max: 100 })),
+  body("interviewType").custom((value, { req }) => {
+    if (value === "company-specific" && ([req.body.company, req.body.companyTrack].some(field => typeof field !== "string" || !field.trim()))) {
+      throw new Error("Company and companyTrack are required for company-specific interviews");
+    }
+    return true;
+  }),
   body("count").isInt({ min: 1, max: 20 }).withMessage("Count must be an integer between 1 and 20"),
 ];

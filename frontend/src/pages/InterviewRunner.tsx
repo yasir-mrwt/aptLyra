@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useState } from "react";
 import { useAudioRecorder } from "../hooks/useAudioRecorder";
 import { useInterviewSession } from "../hooks/useInterviewSession";
@@ -21,6 +22,8 @@ const InterviewRunner = () => {
 
     const {
         isRecording,
+        isStarting,
+        recordingError,
         recordingTime,
         startRecording,
         stopRecording,
@@ -31,7 +34,9 @@ const InterviewRunner = () => {
     const {
         activeSession,
         isLoading,
+        isSubmitting,
         sessionMessage,
+        sessionError,
         currentQuestionIndex,
         currentQuestion,
         selectedLanguage,
@@ -52,6 +57,9 @@ const InterviewRunner = () => {
     // Ava — the AI interviewer's voice (Groq TTS + live lip-sync amplitude)
     const {
         isSpeaking,
+        isPreparing,
+        voiceError,
+        usingBrowserVoice,
         isMuted,
         amplitude,
         speak,
@@ -59,7 +67,8 @@ const InterviewRunner = () => {
     } = useInterviewerVoice(
         activeSession?._id,
         currentQuestionIndex,
-        currentQuestion?.questionText
+        currentQuestion?.questionText,
+        activeSession?.status === "in-progress" && !isRecording && !isStarting && !isProcessing
     );
 
     const handleConfirmFinish = async () => {
@@ -76,6 +85,13 @@ const InterviewRunner = () => {
         }
     };
 
+    if (activeSession?.status === "failed" || activeSession?.status === "cancelled") {
+        return <div role="alert" className="max-w-xl mx-auto p-6 text-white">
+            <p>This interview could not start. Please retry by creating a new session.</p>
+            <Link className="btn-primary inline-block mt-4" to="/dashboard">Return to interview setup</Link>
+        </div>;
+    }
+
     if (!activeSession || !activeSession.questions || activeSession.questions.length === 0 || isFinishing) {
         return <InterviewLoading sessionMessage={isFinishing ? "Finalizing Interview..." : sessionMessage} />;
     }
@@ -91,9 +107,10 @@ const InterviewRunner = () => {
                 questions={activeSession.questions}
                 currentQuestionIndex={currentQuestionIndex}
                 submittedLocal={submittedLocal}
-                handleNavigation={handleNavigation}
+                handleNavigation={(index) => { if (!isStarting) void handleNavigation(index); }}
                 handleFinishInterview={() => setIsFinishModalOpen(true)}
-                isLoading={isLoading}
+                isLoading={isLoading || isSubmitting}
+                finishDisabled={activeSession.status !== "in-progress" || isStarting || isRecording || isSubmitting || activeSession.questions.some(q => (q.isSubmitted && !q.isEvaluated) || q.followUpPending)}
                 questionsCount={activeSession.questions.length}
                 company={activeSession.company}
             />
@@ -102,6 +119,12 @@ const InterviewRunner = () => {
             <div className="flex flex-col md:flex-row gap-6 items-stretch mb-10">
                 <InterviewerPanel
                     speaking={isSpeaking}
+                    listening={isRecording}
+                    processing={isProcessing}
+                    preparing={isPreparing || isStarting}
+                    completed={activeSession.status === "completed"}
+                    error={currentQuestion?.processingError || (sessionError ? sessionMessage : null) || recordingError || voiceError}
+                    usingBrowserVoice={usingBrowserVoice}
                     amplitude={amplitude}
                     muted={isMuted}
                     onToggleMute={toggleMute}
@@ -116,6 +139,9 @@ const InterviewRunner = () => {
                 </div>
             </div>
 
+            {currentQuestion?.speechMetricsStatus === "unavailable" && (
+                <p role="status" className="mb-4 text-sm text-surface-300">Speech metrics unavailable. Feedback uses your transcript; no pace or pause measurements were saved.</p>
+            )}
             {isCodingQuestion ? (
                 <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
                     <CodeEditorSection
@@ -136,7 +162,7 @@ const InterviewRunner = () => {
                         isRecording={isRecording}
                         recordingTime={recordingTime}
                         hasAudio={!!currentDraft.audio}
-                        isQuestionLocked={isQuestionLocked}
+                        isQuestionLocked={isQuestionLocked || isStarting}
                         startRecording={() => startRecording(updateDraftAudio)}
                         stopRecording={stopRecording}
                         deleteDraftAudio={deleteDraftAudio}
@@ -179,7 +205,7 @@ const InterviewRunner = () => {
             <div className="fixed bottom-0 left-0 right-0 glass-card border-x-0 border-b-0 p-5 px-6 md:px-12 flex justify-between items-center z-50">
                 <button
                     onClick={() => handleNavigation(currentQuestionIndex - 1)}
-                    disabled={currentQuestionIndex === 0}
+                    disabled={isStarting || isSubmitting || currentQuestionIndex === 0}
                     className="text-surface-500 font-black text-[10px] uppercase tracking-widest hover:text-white disabled:opacity-20 cursor-pointer transition-colors"
                 >
                     ← Back
@@ -194,16 +220,16 @@ const InterviewRunner = () => {
 
                     <button
                         onClick={handleSubmitAnswer}
-                        disabled={isQuestionLocked}
+                        disabled={isQuestionLocked || isStarting}
                         className={`px-10 py-3 rounded-2xl font-black text-[11px] uppercase tracking-widest text-white shadow-xl transition-all active:scale-[0.98] ${isProcessing ? 'bg-surface-800 cursor-wait' : currentQuestion?.isEvaluated ? 'bg-emerald-600 shadow-emerald-900/20' : isQuestionLocked ? 'bg-surface-800' : 'bg-primary-600 hover:bg-primary-500 shadow-primary-900/20 cursor-pointer'}`}
                     >
-                        {isProcessing ? 'Analyzing...' : currentQuestion?.isEvaluated ? 'Submitted' : isQuestionLocked ? 'Locked' : 'Commit Answer'}
+                        {isProcessing ? 'Analyzing...' : currentQuestion?.isEvaluated ? 'Submitted' : isQuestionLocked ? 'Locked' : currentQuestion?.processingError ? 'Retry Answer' : 'Commit Answer'}
                     </button>
                 </div>
 
                 <button
                     onClick={() => handleNavigation(currentQuestionIndex + 1)}
-                    disabled={currentQuestionIndex === (activeSession?.questions?.length || 0) - 1}
+                    disabled={isStarting || isSubmitting || currentQuestionIndex === (activeSession?.questions?.length || 0) - 1}
                     className="text-surface-500 font-black text-[10px] uppercase tracking-widest hover:text-white disabled:opacity-20 cursor-pointer transition-colors"
                 >
                     Next →

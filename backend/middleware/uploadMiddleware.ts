@@ -3,17 +3,18 @@
  * @description Multer configuration for audio file uploads (transcription input)
  */
 import multer, { FileFilterCallback } from "multer";
-import path from "path";
+import { randomUUID } from "node:crypto";
+import fs from "node:fs";
 import { Request } from "express";
 
 const storage = multer.diskStorage({
   destination: function (req: any, file: any, cb: any) {
-    cb(null, "uploads/");
+    fs.mkdir("uploads", { recursive: true }, error => cb(error, "uploads/"));
   },
   filename: function (req: any, file: any, cb: any) {
-    const ext = path.extname(file.originalname) || ".webm";
-    const sessionId = req.params.sessionId || "unknown";
-    const filename = `${sessionId}-${Date.now()}${ext}`;
+    const baseMime = file.mimetype.split(";")[0].trim();
+    const extension: Record<string, string> = { "audio/webm": ".webm", "audio/wav": ".wav", "audio/mp3": ".mp3", "audio/mpeg": ".mp3", "audio/ogg": ".ogg", "audio/mp4": ".m4a" };
+    const filename = `${randomUUID()}${extension[baseMime] || ".webm"}`;
     cb(null, filename);
   },
 });

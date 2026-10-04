@@ -9,12 +9,15 @@ export interface GenerateQuestionsParams {
   interviewType: string;
   count: number;
   resumeText?: string;
+  company?: string;
+  companyTrack?: string;
 }
 
 export interface GenerateQuestionsResponse {
   questions: {
     question: string;
     ideal_answer: string;
+    question_type: "oral" | "coding" | "system-design";
   }[];
 }
 

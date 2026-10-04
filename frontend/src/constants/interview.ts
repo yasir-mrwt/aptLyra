@@ -1,3 +1,4 @@
+import type { InterviewType } from "../types/session";
 export const SUPPORTED_LANGUAGES = [
     { label: 'JavaScript', value: 'javascript' },
     { label: 'TypeScript', value: 'typescript' },
@@ -101,6 +102,6 @@ export const ROLES = [
 
 export const LEVELS = ["Junior", "Mid-level", "Senior", "Architect", "Manager"];
 
-export const TYPES = [{ label: "Oral only", value: "oral-only" }, { label: "Coding mix", value: "coding-mix" }];
+export const TYPES: { label: string; value: InterviewType }[] = [{ label: "Oral only", value: "oral-only" }, { label: "Coding mix", value: "coding-mix" }];
 
 export const COUNTS = [5, 10, 15, 20];

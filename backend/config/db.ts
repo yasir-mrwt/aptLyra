@@ -11,6 +11,7 @@
  */
 
 import pg from "pg";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 const { Pool } = pg;
 
@@ -25,7 +26,8 @@ if (!databaseUrl) {
 // auto-suspends after inactivity and takes a few seconds to wake).
 export const pool = new Pool({
   connectionString: databaseUrl,
-  ssl: { rejectUnauthorized: false },
+  ssl: process.env.DATABASE_SSL === "false" && !["production", "staging"].includes(process.env.NODE_ENV || "")
+    ? false : { rejectUnauthorized: false },
   max: 10,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 30_000,
@@ -36,8 +38,31 @@ pool.on("error", (err) => {
 });
 
 /** Convenience query helper used by all repositories. */
+const transactionClient = new AsyncLocalStorage<pg.PoolClient>();
 export const query = async (text: string, params: any[] = []): Promise<pg.QueryResult> =>
-  pool.query(text, params);
+  (transactionClient.getStore() || pool).query(text, params);
+
+/** Serialize repository mutations across API processes, on one transaction/client.
+ * Never hold this lock while waiting for an AI/provider request. */
+export async function withDatabaseLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const existing = transactionClient.getStore();
+  if (existing) {
+    await existing.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [key]);
+    return fn();
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [key]);
+    const result = await transactionClient.run(client, fn);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally { client.release(); }
+}
+export const bootstrapSchema = () => pool.query(SCHEMA_SQL);
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS users (
@@ -134,7 +159,7 @@ const connectDB = async (): Promise<void> => {
       const { rows } = await pool.query("SELECT version()");
       console.log(`Neon PostgreSQL Connected: ${rows[0].version.split(",")[0]}`);
 
-      await pool.query(SCHEMA_SQL);
+      await bootstrapSchema();
       console.log("Postgres schema verified (primary datastore ready)");
       return;
     } catch (error) {

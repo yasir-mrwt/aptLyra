@@ -1,3 +1,4 @@
+import type { CreateSessionRequest } from "./session";
 import type { ChangeEvent, SyntheticEvent } from "react";
 
 /**
@@ -12,15 +13,7 @@ export type FormChangeEvent =
  * Props for the New Interview creation form.
  */
 export interface NewInterviewFormProps {
-    formData: {
-        role: string;
-        level: string;
-        interviewType: string;
-        count: number;
-        company?: string;
-        companyTrack?: string;
-        resumeId?: string;
-    };
+    formData: CreateSessionRequest;
     onChange: (e: FormChangeEvent) => void;
     onSubmit: (e: SyntheticEvent) => void;
     isProcessing: boolean;

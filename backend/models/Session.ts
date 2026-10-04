@@ -8,7 +8,7 @@
  */
 
 import crypto from "crypto";
-import { query } from "../config/db.js";
+import { query, withDatabaseLock } from "../config/db.js";
 
 export interface ISpeechMetrics {
   fillerWordCount: number;
@@ -35,6 +35,9 @@ export interface IQuestion {
   confidenceScore?: number;
   aiFeedback?: string;
   speechMetrics?: ISpeechMetrics;
+  speechMetricsStatus?: "available" | "unavailable";
+  processingError?: string;
+  followUpPending?: boolean;
   /** Index of the original question this follow-up probes (cross-questioning). */
   followUpOf?: number;
   createdAt?: string;
@@ -88,30 +91,9 @@ const rowToSession = (row: any): ISession => ({
   updatedAt: toISO(row.updated_at) as string,
 });
 
-// ----------------------------------------------------------------------------
-// In-process per-session mutex.
-// Question evaluations run concurrently in the background; serializing the
-// read-modify-write cycle per session prevents lost updates on the JSONB
-// questions blob (which is written as a whole).
-// ----------------------------------------------------------------------------
-const sessionLocks = new Map<string, Promise<unknown>>();
-
-export const withSessionLock = async <T>(
-  sessionId: string,
-  fn: () => Promise<T>
-): Promise<T> => {
-  const previous = sessionLocks.get(sessionId) || Promise.resolve();
-  const current = previous.then(fn, fn);
-  const guarded = current.catch(() => undefined);
-  sessionLocks.set(sessionId, guarded);
-  try {
-    return await current;
-  } finally {
-    if (sessionLocks.get(sessionId) === guarded) {
-      sessionLocks.delete(sessionId);
-    }
-  }
-};
+/** Database transaction lock protects the full JSONB read/modify/write cycle. */
+export const withSessionLock = <T>(sessionId: string, fn: () => Promise<T>): Promise<T> =>
+  withDatabaseLock(`session:${sessionId}`, fn);
 
 export const sessionRepository = {
   async create(data: {
@@ -219,6 +201,7 @@ export const sessionRepository = {
     );
     return rows.map((r) => {
       const { questions: _questions, ...rest } = rowToSession(r);
+      void _questions; // intentionally omit the large question payload from lists
       return rest;
     });
   },

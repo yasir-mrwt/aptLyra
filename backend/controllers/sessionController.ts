@@ -5,6 +5,8 @@
 import { Response } from "express";
 import asyncHandler from "express-async-handler";
 import path from "path";
+import fs from "node:fs/promises";
+import { SessionStateError } from "../services/sessionService.js";
 import { sessionService } from "../services/sessionService.js";
 import { aiService } from "../services/aiService.js";
 
@@ -15,7 +17,7 @@ import { AuthenticatedRequest } from "../types/express.js";
  * @route POST /api/sessions
  */
 export const createSession = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const { role, level, interviewType, count, resumeId } = req.body;
+  const { role, level, interviewType, count, company, companyTrack, resumeId } = req.body;
   const userId = req.user?.id || req.user?._id;
   const io = req.app.get("io");
 
@@ -29,9 +31,9 @@ export const createSession = asyncHandler(async (req: AuthenticatedRequest, res:
     role,
     level,
     interviewType,
-    count,
-    undefined,
-    undefined,
+    Number(count),
+    company,
+    companyTrack,
     resumeId || undefined,
     io
   );
@@ -101,7 +103,9 @@ export const deleteSession = asyncHandler(async (req: AuthenticatedRequest, res:
     const id = await sessionService.deleteInterviewSession(sessionId, userId);
     res.status(200).json({ id, message: "Session deleted successfully" });
   } catch (error: any) {
-    if (error.message === "Cannot delete a session while questions are being generated.") {
+    if (error instanceof SessionStateError) {
+      res.status(error.status).json({ message: error.message });
+    } else if (error.message === "Cannot delete a session while questions are being generated.") {
       res.status(400).json({ message: error.message });
     } else {
       res.status(404).json({ message: error.message });
@@ -138,7 +142,9 @@ export const submitAnswer = asyncHandler(async (req: AuthenticatedRequest, res: 
 
     res.status(200).json({ message: "Answer received" });
   } catch (error: any) {
-    res.status(404).json({ message: error.message });
+    if (req.file) await fs.unlink(req.file.path).catch(() => undefined);
+    const status = error instanceof SessionStateError ? error.status : ["Session not found", "Question not found"].includes(error.message) ? 404 : 500;
+    res.status(status).json({ message: status === 500 ? "Unable to submit answer. Please retry." : error.message });
   }
 });
 
@@ -197,10 +203,12 @@ export const endSession = asyncHandler(async (req: AuthenticatedRequest, res: Re
     );
     res.status(200).json({ message: "Session ended", session });
   } catch (error: any) {
-    if (error.message === "Evaluation in progress, please wait.") {
+    if (error instanceof SessionStateError) {
+      res.status(error.status).json({ message: error.message });
+    } else if (error.message === "Evaluation in progress, please wait.") {
       res.status(400).json({ message: error.message });
     } else {
-      res.status(404).json({ message: error.message });
+      res.status(error.message === "Session not found" ? 404 : 500).json({ message: error.message === "Session not found" ? error.message : "Unable to finish interview. Please retry." });
     }
   }
 });

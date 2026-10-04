@@ -8,12 +8,16 @@ import { emitResumeStatus } from "../services/socketService.js";
 /**
  * @desc    Receive webhook from Python AI service when process step completes
  * @route   POST /api/resume/webhook/process-resume/:id
- * @access  Public (Should ideally be protected by a shared secret)
+ * @access  Internal shared-key authentication (route middleware)
  */
 export const processResumeWebhook = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const payload = req.body;
 
+  if (!payload || typeof payload.success !== "boolean" || (payload.success && (!payload.data || typeof payload.data !== "object"))) {
+    res.status(400).json({ error: "Invalid callback payload" });
+    return;
+  }
   const resume = await resumeRepository.findById(id as string);
   if (!resume) {
     res.status(404).json({ error: "Resume not found" });
@@ -54,6 +58,11 @@ export const processResumeWebhook = asyncHandler(async (req: Request, res: Respo
       });
     }
     res.status(200).json({ status: "handled_invalid" });
+    return;
+  }
+
+  if (processResult.success === false || typeof processResult.raw_text !== "string" || !processResult.raw_text.trim()) {
+    res.status(400).json({ error: "Invalid successful processing result" });
     return;
   }
 

@@ -18,7 +18,7 @@ class MockIntersectionObserver implements IntersectionObserver {
 }
 
 globalThis.IntersectionObserver =
-  globalThis.IntersectionObserver ?? (MockIntersectionObserver as any);
+  globalThis.IntersectionObserver ?? MockIntersectionObserver;
 
 // jsdom also lacks scrollTo / matchMedia in some versions — guard both.
 if (!globalThis.matchMedia) {
@@ -31,5 +31,5 @@ if (!globalThis.matchMedia) {
     addEventListener: () => {},
     removeEventListener: () => {},
     dispatchEvent: () => false,
-  })) as any;
+  }));
 }

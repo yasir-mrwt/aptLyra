@@ -3,7 +3,7 @@ import type { PayloadAction } from "@reduxjs/toolkit";
 import api from "../../services/api";
 import { handleThunkError } from "../../utils/thunkUtils";
 import { updateSessionFromSocket } from "./sessionUtils";
-import type { SessionState, Session, SocketUpdatePayload, PaginatedSessionsResponse } from "../../types/session";
+import type { SessionState, Session, CreateSessionRequest, CreateSessionResponse, SocketUpdatePayload, PaginatedSessionsResponse } from "../../types/session";
 
 const initialState: SessionState = {
     sessions: [],
@@ -36,11 +36,11 @@ export const getSession = createAsyncThunk<PaginatedSessionsResponse, { page?: n
 /**
  * Initialize a new interview session and trigger AI question generation.
  */
-export const createSession = createAsyncThunk<Session, Record<string, unknown>, { rejectValue: string }>(
+export const createSession = createAsyncThunk<CreateSessionResponse, CreateSessionRequest, { rejectValue: string }>(
     "session/create",
     async (sessionData, thunkAPI) => {
         try {
-            const response = await api.post<Session>(`/sessions`, sessionData);
+            const response = await api.post<CreateSessionResponse>(`/sessions`, sessionData);
             return response.data;
         } catch (error) {
             return thunkAPI.rejectWithValue(handleThunkError(error));
@@ -220,7 +220,12 @@ export const sessionSlice = createSlice({
             })
 
             // Submit answer
-            .addCase(submitAnswer.pending, () => { })
+             .addCase(submitAnswer.pending, (state, action) => {
+                state.isError = false;
+                const index = Number(action.meta.arg.formData.get("questionIndex"));
+                const q = state.activeSession?._id === action.meta.arg.sessionId ? state.activeSession.questions[index] : undefined;
+                if (q && !q.isEvaluated) { q.isSubmitted = true; delete q.processingError; }
+            })
             .addCase(submitAnswer.fulfilled, (state, action) => {
                 state.isLoading = false;
                 if (action.payload && Array.isArray(action.payload.questions)) {
@@ -231,6 +236,9 @@ export const sessionSlice = createSlice({
                 state.isLoading = false;
                 state.isError = true;
                 state.message = action.payload || "Evaluation submission failed";
+                const index = Number(action.meta.arg.formData.get("questionIndex"));
+                const q = state.activeSession?._id === action.meta.arg.sessionId ? state.activeSession.questions[index] : undefined;
+                if (q && !q.isEvaluated) { q.isSubmitted = false; q.processingError = state.message; }
             })
 
             // End session

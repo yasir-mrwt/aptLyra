@@ -1,3 +1,4 @@
+import { getResumeCallbackUrl } from "./callbackUrl.js";
 import fs from "fs/promises";
 import FormData from "form-data";
 import fetch from "node-fetch";
@@ -20,16 +21,18 @@ export const stepProcess = async (resume: any): Promise<any> => {
   const cached = await getCachedResult("process", fileHash);
   if (cached) {
     console.log(`[Worker] Cache HIT for process. Firing webhook locally...`);
-    const port = process.env.PORT || 5000;
-    const backendUrl = process.env.BACKEND_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
-    const webhookUrl = `${backendUrl}/api/resume/webhook/process-resume/${resume._id}`;
+    const webhookUrl = getResumeCallbackUrl(resume._id);
 
-    // Fire webhook asynchronously without blocking
-    fetch(webhookUrl, {
+    // Await callback acknowledgement so rejected cache delivery fails the job
+    const response = await fetch(webhookUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-API-Key": process.env.INTERNAL_API_KEY || "" },
+      signal: AbortSignal.timeout(15_000),
+      redirect: "error",
+      size: 1024 * 1024,
       body: JSON.stringify({ success: true, data: cached })
-    }).catch(err => console.error("[Worker] Failed to fire local cache webhook:", err));
+    });
+    if (!response.ok) throw new Error("Cached resume callback was rejected");
 
     return { success: true, status: "async_dispatched_via_cache" };
   }
@@ -47,9 +50,7 @@ export const stepProcess = async (resume: any): Promise<any> => {
     finalContentType = "text/plain";
   }
 
-  const port = process.env.PORT || 5000;
-  const backendUrl = process.env.BACKEND_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
-  const webhookUrl = `${backendUrl}/api/resume/webhook/process-resume/${resume._id}`;
+  const webhookUrl = getResumeCallbackUrl(resume._id);
 
   // Send to the AI service, retrying on cold-start gateway errors. On free
   // hosting the AI service can be asleep and take ~50s to wake, during which
@@ -73,7 +74,7 @@ export const stepProcess = async (resume: any): Promise<any> => {
     }
     headers["X-API-Key"] = process.env.INTERNAL_API_KEY || "";
 
-    console.log(`[Worker] STEP 1/4: Sending resume ${resume._id} for async processing (attempt ${attempt}/${MAX_ATTEMPTS})... Webhook: ${webhookUrl}`);
+    console.log(`[Worker] STEP 1/4: Sending resume ${resume._id} for async processing (attempt ${attempt}/${MAX_ATTEMPTS})...`);
 
     let response: any = null;
     try {
@@ -81,6 +82,9 @@ export const stepProcess = async (resume: any): Promise<any> => {
         method: "POST",
         body: formData,
         headers,
+        signal: AbortSignal.timeout(90_000),
+        redirect: "error",
+        size: 1024 * 1024,
       });
     } catch (err: any) {
       // Network-level failure (connection reset while the service cold-boots).

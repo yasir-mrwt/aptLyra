@@ -1,6 +1,7 @@
 import { userRepository } from "../models/User.js";
 import { sessionRepository, ISession } from "../models/Session.js";
 import { gamificationRepository, IGamification } from "../models/Gamification.js";
+import { withDatabaseLock } from "../config/db.js";
 import redisClient from "../config/redisConfig.js";
 import { ACHIEVEMENTS, XP_REWARDS, getLevelForXP } from "../config/achievements.js";
 
@@ -35,6 +36,19 @@ export const gamificationService = {
 
   /** Flush the buffered XP counter into the persistent gamification record. */
   async flushXP(userId: string) {
+    return withDatabaseLock(`gamification:${userId}`, () => this.flushXPLocked(userId));
+  },
+
+  /** Completion XP is persisted in the same SQL transaction as completed status.
+   * Redis continues to buffer question XP; it never receives completion XP. */
+  async rewardCompletion(userId: string) {
+    return withDatabaseLock(`gamification:${userId}`, async () => {
+      await this.updateStreakLocked(userId);
+      return this.flushXPLocked(userId, XP_REWARDS.COMPLETE_INTERVIEW);
+    });
+  },
+
+  async flushXPLocked(userId: string, completionXP = 0) {
     const redisKey = `user:${userId}:xp_buffer`;
 
     // Atomically get and delete to prevent race conditions
@@ -43,11 +57,12 @@ export const gamificationService = {
 
     const record = await this.ensureGamificationRecord(userId);
 
-    let bufferedXP = 0;
+    let bufferedXP = completionXP;
     if (bufferedXPStr && parseInt(bufferedXPStr, 10) > 0) {
-      bufferedXP = parseInt(bufferedXPStr, 10);
-      record.xp += bufferedXP;
+      bufferedXP += parseInt(bufferedXPStr, 10);
     }
+
+    record.xp += bufferedXP;
 
     // Run deep achievement check (XP rewards added before leveling)
     const newlyEarnedBadges = await this.checkAndAwardBadges(userId, record);
@@ -182,6 +197,10 @@ export const gamificationService = {
   },
 
   async updateStreak(userId: string) {
+    return withDatabaseLock(`gamification:${userId}`, () => this.updateStreakLocked(userId));
+  },
+
+  async updateStreakLocked(userId: string) {
     const record = await this.ensureGamificationRecord(userId);
 
     const now = new Date();

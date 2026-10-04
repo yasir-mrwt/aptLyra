@@ -21,7 +21,7 @@ class SpeechAnalysisService:
             cmd_silence = [
                 'ffmpeg', '-i', file_path, '-af', 'silencedetect=noise=-30dB:d=0.8', '-f', 'null', '-'
             ]
-            output = subprocess.check_output(cmd_silence, stderr=subprocess.STDOUT).decode('utf-8')
+            output = subprocess.check_output(cmd_silence, stderr=subprocess.STDOUT, timeout=30).decode('utf-8')
             
             pause_time_sec = 0.0
             pause_count = 0
@@ -52,14 +52,9 @@ class SpeechAnalysisService:
                             
             speaking_time_sec = max(0.0, duration_sec - pause_time_sec)
             
-        except Exception as e:
-            logger.warning(f"ffmpeg failed ({e}), falling back to heuristic duration")
-            words_temp = re.findall(r"\b\w+\b", transcript)
-            duration_sec = (len(words_temp) / 130.0) * 60.0
-            estimated_speaking_time = duration_sec
-            speaking_time_sec = min(duration_sec, estimated_speaking_time)
-            pause_time_sec = max(0, duration_sec - speaking_time_sec)
-            pause_count = int(len(words_temp) / 15) if pause_time_sec > 2.0 else 0
+        except (OSError, subprocess.SubprocessError, ValueError):
+            logger.warning("Speech metrics unavailable: audio decoder failed")
+            return None  # Content can be evaluated; do not fabricate pace or pauses.
 
         try:
             speaking_time_min = speaking_time_sec / 60.0 if speaking_time_sec > 0 else (duration_sec / 60.0)

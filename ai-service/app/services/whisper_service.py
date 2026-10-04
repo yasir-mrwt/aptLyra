@@ -1,86 +1,56 @@
+"""Cloud STT. A provider failure is an error, never an empty candidate answer."""
 import os
-import logging
 import requests
-from fastapi import UploadFile
+from fastapi import UploadFile, HTTPException
 
-logger = logging.getLogger(__name__)
-
-# Service to handle audio transcription.
-# Migrated to Groq Whisper API for blazing fast and perfectly accurate
-# verbatim transcription, replacing Gemini.
+MAX_AUDIO_BYTES = 10 * 1024 * 1024
 
 class WhisperService:
-    def __init__(self):
-        # We don't need to load heavy machine learning models locally anymore!
-        self.model = True  # Compatibility flag
+    model = True
 
     def load_model(self):
-        """No-op kept for backward compatibility with existing startup logic."""
         pass
 
     def _call_groq(self, audio_bytes: bytes, filename: str) -> str:
         from app.services.groq_service import get_current_api_key, rotate_api_key, parse_retry_seconds
-
-        api_key = get_current_api_key()
-        if not api_key:
-            logger.error("GROQ_API_KEY is not set.")
-            return ""
-
-        url = "https://api.groq.com/openai/v1/audio/transcriptions"
-        files = {
-            "file": (filename, audio_bytes)
-        }
-        data = {
-            "model": "whisper-large-v3-turbo",
-            "response_format": "json",
-            "prompt": "um, uh, ah, ahh, hmm, like, you know"
-        }
-
+        if not audio_bytes:
+            raise HTTPException(422, "Audio is empty. Please record again.")
+        if len(audio_bytes) > MAX_AUDIO_BYTES:
+            raise HTTPException(413, "Audio exceeds the 10 MiB limit.")
+        key = get_current_api_key()
+        if not key:
+            raise HTTPException(503, "Transcription is unavailable. Please retry later.")
+        def send(api_key):
+            return requests.post("https://api.groq.com/openai/v1/audio/transcriptions",
+                headers={"Authorization": f"Bearer {api_key}"},
+                files={"file": (filename, audio_bytes)},
+                data={"model": "whisper-large-v3-turbo", "response_format": "json",
+                      "prompt": "um, uh, ah, ahh, hmm, like, you know"},
+                timeout=(5, 60), allow_redirects=False)
         try:
-            response = requests.post(url, headers={"Authorization": f"Bearer {api_key}"}, files=files, data=data)
-
-            # Rate limited → fail over once to the next configured key
+            response = send(key)
             if response.status_code == 429:
-                rotated = rotate_api_key(api_key, parse_retry_seconds(response.text) or 90)
-                if rotated != api_key:
-                    response = requests.post(url, headers={"Authorization": f"Bearer {rotated}"}, files=files, data=data)
-
+                rotated = rotate_api_key(key, parse_retry_seconds(response.text) or 90)
+                if rotated != key:
+                    response = send(rotated)
             response.raise_for_status()
-            text = response.json().get("text", "")
-            logger.info(f"Groq Whisper Transcription: '{text}'")
-            return text
-        except Exception as e:
-            logger.error(f"[CRITICAL] Groq Transcription error: {e}")
-            if hasattr(e, 'response') and e.response is not None:
-                logger.error(f"Response data: {e.response.text}")
-            return ""
+            payload = response.json()
+            text = payload.get("text") if isinstance(payload, dict) else None
+            if not isinstance(text, str):
+                raise ValueError("Invalid transcription response")
+        except (requests.RequestException, ValueError, TypeError):
+            raise HTTPException(502, "Transcription failed. Please retry.") from None
+        if not text.strip():
+            raise HTTPException(422, "No speech detected. Please record again.")
+        return text.strip()
 
     def transcribe(self, file: UploadFile):
-        """
-        Sends audio data to Groq Whisper API for transcription.
-        """
-        try:
-            audio_data = file.file.read()
-            filename = file.filename if file.filename else "audio.webm"
-            text = self._call_groq(audio_data, filename)
-            return {"text": text.strip()}
-        except Exception as e:
-            logger.error(f"[CRITICAL] Transcription error: {e}")
-            return {"text": ""}
+        return {"text": self._call_groq(file.file.read(MAX_AUDIO_BYTES + 1), file.filename or "audio.webm")}
 
     @classmethod
     def transcribe_audio(cls, file_path: str):
-        """Synchronous helper for transcription from file path"""
-        try:
-            with open(file_path, "rb") as f:
-                audio_data = f.read()
-            filename = os.path.basename(file_path)
-            
-            # Use the global instance to make the call
-            text = whisper_service._call_groq(audio_data, filename)
-            return {"text": text.strip()}
-        except Exception as e:
-            logger.error(f"[CRITICAL] Transcription error from path: {e}")
-            return {"text": ""}
+        with open(file_path, "rb") as audio:
+            content = audio.read(MAX_AUDIO_BYTES + 1)
+        return {"text": whisper_service._call_groq(content, os.path.basename(file_path))}
 
 whisper_service = WhisperService()

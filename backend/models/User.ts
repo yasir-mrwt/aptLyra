@@ -167,6 +167,7 @@ export const userRepository = {
   /** Strip sensitive fields before attaching to req.user / API responses. */
   toSafeObject(user: IUser): Omit<IUser, "password"> {
     const { password: _password, ...safe } = user;
+    void _password; // password must never appear in the public user object
     return safe;
   },
 };

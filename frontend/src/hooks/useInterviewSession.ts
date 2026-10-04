@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -18,7 +18,7 @@ import api from "../services/api";
  * @param setRecordingTime - Callback to reset timer UI.
  * @param recordingStartTime - Unix timestamp of when the session recording began.
  */
-export const useInterviewSession = (stopRecording: () => void, setRecordingTime: (time: number) => void) => {
+export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, setRecordingTime: (time: number) => void) => {
     const { sessionId } = useParams<{ sessionId: string }>();
     const navigate = useNavigate();
     const dispatch = useDispatch<AppDispatch>();
@@ -31,6 +31,8 @@ export const useInterviewSession = (stopRecording: () => void, setRecordingTime:
     const selectedLanguage = languageOverride ?? defaultLang;
     const setSelectedLanguage = setLanguageOverride;
 
+    const submittingRef = useRef(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [submittedLocal, setSubmittedLocal] = useState<Record<number, boolean>>({});
 
     // Initial drafts state from IDB with empty fallback
@@ -75,7 +77,7 @@ export const useInterviewSession = (stopRecording: () => void, setRecordingTime:
     const currentQuestion = activeSession?.questions?.[currentQuestionIndex];
     const isReduxSubmitted = currentQuestion?.isSubmitted === true;
     const isLocallySubmitted = submittedLocal[currentQuestionIndex] === true;
-    const isEvaluationError = sessionError && sessionMessage.includes("Failed");
+    const isEvaluationError = !!currentQuestion?.processingError || (sessionError && /failed|error/i.test(sessionMessage));
 
     useEffect(() => {
         if (isEvaluationError && isLocallySubmitted) {
@@ -89,12 +91,13 @@ export const useInterviewSession = (stopRecording: () => void, setRecordingTime:
         }
     }, [isEvaluationError, isLocallySubmitted, currentQuestionIndex, sessionMessage]);
 
-    const isQuestionLocked = isReduxSubmitted || (isLocallySubmitted && !isEvaluationError);
-    const isProcessing = isQuestionLocked && !currentQuestion?.isEvaluated;
+    const isQuestionLocked = activeSession?.status !== "in-progress" || isSubmitting || isReduxSubmitted || (isLocallySubmitted && !isEvaluationError);
+    const isProcessing = activeSession?.status === "in-progress" && (isSubmitting || isReduxSubmitted || (isLocallySubmitted && !isEvaluationError)) && !currentQuestion?.isEvaluated;
 
-    const handleNavigation = (index: number) => {
+    const handleNavigation = async (index: number) => {
+        if (submittingRef.current) return;
         if (activeSession?.questions && index >= 0 && index < activeSession.questions.length) {
-            stopRecording();
+            await stopRecording();
             setCurrentQuestionIndex(index);
             setRecordingTime(0);
         }
@@ -135,55 +138,45 @@ export const useInterviewSession = (stopRecording: () => void, setRecordingTime:
     };
 
     const handleSubmitAnswer = async () => {
-        if (isQuestionLocked || !sessionId) return;
-        stopRecording();
-
-        const draft = drafts[currentQuestionIndex] || {};
-        const code = draft.code || "";
-        const audio = draft.audio || null;
-        const diagram = draft.diagram || null;
-
-        if (!code && !audio && !diagram) {
-            toast.error("Please provide an answer before submitting.");
-            return;
-        }
-
-        setSubmittedLocal(prev => ({
-            ...prev, [currentQuestionIndex]: true
-        }));
-
-        let diagramImageUrl = "";
-        if (diagram) {
-            try {
-                const diagFormData = new FormData();
-                diagFormData.append("diagram", diagram, "diagram.png");
-
-                const res = await api.post(`/diagrams/upload`, diagFormData, {
-                    timeout: 10000,
-                });
-
-                if (res.data && res.data.url) {
-                    diagramImageUrl = res.data.url;
-                }
-            } catch (err) {
-                console.error("Failed to upload diagram", err);
-                toast.warning("Failed to upload whiteboard diagram. Submitting without it.");
+        if (isQuestionLocked || !sessionId || submittingRef.current) return;
+        submittingRef.current = true;
+        setIsSubmitting(true);
+        const index = currentQuestionIndex;
+        try {
+            const recordedAudio = await stopRecording();
+            const draft = drafts[index] || {};
+            const code = draft.code || "";
+            const audio = recordedAudio || draft.audio;
+            const diagram = draft.diagram;
+            if ((currentQuestion?.questionType === "oral" && !audio?.size) ||
+                (currentQuestion?.questionType === "coding" && !code.trim()) ||
+                (!code.trim() && !audio?.size && !diagram?.size)) {
+                toast.error("Please provide an answer before submitting.");
+                return;
             }
+            let diagramImageUrl = "";
+            if (diagram) {
+                const data = new FormData();
+                data.append("diagram", diagram, "diagram.png");
+                const res = await api.post("/diagrams/upload", data, { timeout: 10000 });
+                if (!res.data?.url) throw new Error("Diagram upload failed");
+                diagramImageUrl = res.data.url;
+            }
+            const formData = new FormData();
+            formData.append("questionIndex", index.toString());
+            if (code) formData.append("code", code);
+            if (selectedLanguage) formData.append("language", selectedLanguage);
+            if (audio) formData.append("audio", audio, audio.type.includes("mp4") ? "audio.m4a" : "audio.webm");
+            if (diagramImageUrl) formData.append("diagramImageUrl", diagramImageUrl);
+            setSubmittedLocal(prev => ({ ...prev, [index]: true }));
+            await dispatch(submitAnswer({ sessionId, formData })).unwrap();
+        } catch {
+            setSubmittedLocal(prev => ({ ...prev, [index]: false }));
+            toast.error("Answer upload failed. Your draft is preserved; please retry.");
+        } finally {
+            submittingRef.current = false;
+            setIsSubmitting(false);
         }
-
-        const formData = new FormData();
-        formData.append("questionIndex", currentQuestionIndex.toString());
-        if (code) formData.append("code", code);
-        if (selectedLanguage) formData.append("language", selectedLanguage);
-        if (audio) formData.append("audio", audio, 'audio.webm');
-        if (diagramImageUrl) formData.append("diagramImageUrl", diagramImageUrl);
-
-        dispatch(submitAnswer({ sessionId, formData })).unwrap().catch(() => {
-            setSubmittedLocal(prev => ({
-                ...prev, [currentQuestionIndex]: false
-            }));
-            toast.error("Failed to submit answer. Please try again.");
-        });
     };
 
     const confirmFinishInterview = async () => {
@@ -193,8 +186,9 @@ export const useInterviewSession = (stopRecording: () => void, setRecordingTime:
             deleteDrafts(sessionId);
             navigate(`/review/${sessionId}`);
             toast.success("Interview ended successfully.");
-        }).catch(() => {
+        }).catch((error: unknown) => {
             toast.error("Failed to end interview. Please try again.");
+            throw error;
         });
     };
 
@@ -202,7 +196,9 @@ export const useInterviewSession = (stopRecording: () => void, setRecordingTime:
         sessionId,
         activeSession,
         isLoading,
+        isSubmitting,
         sessionMessage,
+        sessionError,
         currentQuestionIndex,
         currentQuestion,
         selectedLanguage,

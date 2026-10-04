@@ -8,6 +8,12 @@ import InterviewerAvatar from "./InterviewerAvatar";
 
 interface InterviewerPanelProps {
     speaking: boolean;
+    listening?: boolean;
+    processing?: boolean;
+    preparing?: boolean;
+    completed?: boolean;
+    error?: string | null;
+    usingBrowserVoice?: boolean;
     amplitude: number;
     muted: boolean;
     onToggleMute: () => void;
@@ -15,7 +21,7 @@ interface InterviewerPanelProps {
 }
 
 const InterviewerPanel: React.FC<InterviewerPanelProps> = ({
-    speaking,
+    speaking, listening, processing, preparing, completed, error, usingBrowserVoice,
     amplitude,
     muted,
     onToggleMute,
@@ -33,8 +39,8 @@ const InterviewerPanel: React.FC<InterviewerPanelProps> = ({
             </div>
 
             {/* Live status */}
-            <div className="h-5 flex items-center gap-2">
-                {speaking ? (
+            <div role="status" aria-live="polite" className="min-h-5 flex items-center gap-2 text-center">
+                {speaking && !listening && !processing && !completed ? (
                     <>
                         <span className="flex items-end gap-[3px] h-4">
                             {[0, 1, 2, 3].map((i) => (
@@ -54,16 +60,18 @@ const InterviewerPanel: React.FC<InterviewerPanelProps> = ({
                     </>
                 ) : (
                     <span className="text-[9px] font-black uppercase tracking-[0.25em] text-surface-600">
-                        {muted ? "Voice Off" : "Listening"}
+                        {completed ? "Completed" : processing ? "Processing answer" : listening ? "Listening" : preparing ? "Preparing voice" : error ? "Retry available" : muted ? "Voice Off" : usingBrowserVoice ? "Browser voice" : "Ready"}
                     </span>
                 )}
             </div>
+
+            {error && <p role="alert" className="text-xs text-rose-300 text-center break-words">{error}</p>}
 
             {/* Controls */}
             <div className="flex items-center gap-3">
                 <button
                     onClick={onReplay}
-                    disabled={muted}
+                    disabled={muted || listening || processing || preparing || completed}
                     title="Repeat the question"
                     className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-surface-300 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                 >

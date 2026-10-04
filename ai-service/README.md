@@ -24,7 +24,7 @@ The AI microservice backend for TechVera. This service specialized in handling h
 ## 🛠️ Installation & Setup
 
 ### 1. Prerequisites
-- **Python 3.10+**
+- **Python 3.11.x**
 - (Recommended) **Virtual Environment**
 
 ### 2. Environment Setup
@@ -83,3 +83,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 - **Stateless Design**: Allows the service to be horizontally scaled without sticky sessions.
 - **JSON Mode**: Explicitly uses `response_mime_type: application/json` for deterministic AI responses.
 
+
+## Stable baseline verification
+
+Use the supported runtimes and commands in [SETUP.md](../SETUP.md#phase-1-verification). Contracts, state transitions, and known limits are documented in [ARCHITECTURE.md](../ARCHITECTURE.md) and [SECURITY.md](../SECURITY.md).

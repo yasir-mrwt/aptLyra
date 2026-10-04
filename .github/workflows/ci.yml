@@ -27,10 +27,16 @@ jobs:
         cache-dependency-path: "./backend/package-lock.json"
 
     - name: Install NPM dependencies
-      run: npm install
+      run: npm ci
+
+    - name: Lint Backend
+      run: npm run lint
+
+    - name: Typecheck Backend
+      run: npm run typecheck
 
     - name: Run Backend Tests
-      run: npm run test -- --passWithNoTests
+      run: npm test
 
     - name: Build Backend
       run: npm run build
@@ -55,11 +61,13 @@ jobs:
         cache-dependency-path: "./frontend/package-lock.json"
 
     - name: Install NPM dependencies
-      run: npm install
+      run: npm ci
 
     - name: Lint Frontend
       run: npm run lint
-      continue-on-error: true
+
+    - name: Typecheck Frontend
+      run: npm run typecheck
 
     - name: Run Frontend Tests
       run: npm run test
@@ -94,7 +102,7 @@ jobs:
 
     - name: Lint with Ruff
       run: |
-        ruff check . --select=E9,F63,F7,F82 --show-source
+        ruff check . --select=E9,F63,F7,F82
         ruff check . --exit-zero
 
     - name: Run Pytest

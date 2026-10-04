@@ -11,6 +11,7 @@ This is the isolated Python Microservice dedicated exclusively to running heavy 
 """
 
 import os
+import secrets
 import sys
 import uvicorn
 from fastapi import FastAPI, Depends, HTTPException, Security
@@ -39,7 +40,7 @@ async def verify_api_key(api_key: str = Security(api_key_header)):
     if not expected_api_key:
         # In development, you might want to bypass this, but for security we enforce it.
         raise HTTPException(status_code=500, detail="INTERNAL_API_KEY not configured on server")
-    if api_key != expected_api_key:
+    if not api_key or not secrets.compare_digest(api_key.encode(), expected_api_key.encode()):
         raise HTTPException(status_code=401, detail="Invalid or missing API Key")
     return api_key
 

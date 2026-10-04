@@ -10,3 +10,15 @@ backend/verify_resume_system.py
 backend/dist*
 .venv
 .vscode
+.env.*
+!.env.example
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.pyc
+*.tsbuildinfo
+venv/
+uploads/
+*.log
+.local-test-data/

@@ -159,3 +159,13 @@ In the browser, complete a full flow: register with email and confirm the OTP ar
 | Resume upload shows a `502 Bad Gateway` HTML page | The AI service is unreachable — asleep (cold start), crashed, or `AI_SERVICE_URL` is wrong. Confirm `curl <your-ai-service-url>/` returns JSON, and check the AI service's own Render logs. The backend now retries cold starts automatically. |
 | Resume stays stuck on "processing" and never completes | `BACKEND_URL` is not set on the backend, so the AI service cannot post results back to the webhook. Set it to the backend's own URL. |
 | The first request is slow | All three free-tier services are waking from idle; see section 6 |
+
+## Phase 1 callback configuration
+
+Set AI `NODE_ENV=production` and `RESUME_CALLBACK_BASE_URL` to the exact HTTPS
+backend origin already configured as backend `BACKEND_URL` (no path/query). Both
+services require the same `INTERNAL_API_KEY`. Resume callbacks now fail closed
+when the origin/key is missing or mismatched. Docker now uses Python 3.11.
+General remote diagram URLs are rejected; keep the existing Cloudinary PNG
+whiteboard upload flow. This is configuration documentation, not a deployment
+migration. See [SECURITY.md](SECURITY.md) for remaining reliability limits.

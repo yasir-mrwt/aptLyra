@@ -1,3 +1,21 @@
+export type InterviewType = "oral-only" | "coding-mix" | "company-specific";
+
+export interface CreateSessionRequest {
+    role: string;
+    level: string;
+    interviewType: InterviewType;
+    count: number;
+    company?: string;
+    companyTrack?: string;
+    resumeId?: string;
+}
+
+export interface CreateSessionResponse {
+    message: string;
+    sessionId: string;
+    status: "processing";
+}
+
 export interface SpeechMetrics {
     fillerWordCount: number;
     fillerWords: { word: string; count: number }[];
@@ -21,6 +39,9 @@ export interface Question {
     confidenceScore?: number;
     aiFeedback?: string;
     speechMetrics?: SpeechMetrics;
+    speechMetricsStatus?: "available" | "unavailable";
+    processingError?: string;
+    followUpPending?: boolean;
     /** Set when this question is a follow-up probe of an earlier answer. */
     followUpOf?: number;
 }
@@ -100,4 +121,4 @@ export interface SocketUpdatePayload {
 /**
  * Structure for locally persisted interview drafts in IndexedDB.
  */
-export type DraftRecord = Record<number, { code?: string; audio?: Blob }>;
+export type DraftRecord = Record<number, { code?: string; audio?: Blob }>;

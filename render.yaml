@@ -60,6 +60,10 @@ services:
     plan: free # Change to starter/standard if needed
     autoDeploy: false
     envVars:
+      - key: NODE_ENV
+        value: production
+      - key: RESUME_CALLBACK_BASE_URL
+        sync: false
       - key: PORT
         sync: false
       - key: GROQ_API_KEY

@@ -133,6 +133,7 @@ const NewInterviewForm: React.FC<NewInterviewFormProps> = ({
                 {/* Footer — helper note left, primary action right */}
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-5 border-t border-white/5 pt-7">
                     <p className="text-[12px] text-surface-500 font-medium text-center sm:text-left">
+                        Company and track selections are saved with the interview. {formData.interviewType === "company-specific" ? "Both are required for this mode. " : "They are optional in other modes. "}
                         Ava will build <span className="text-surface-300 font-bold">{formData.count} questions</span> tailored to a{" "}
                         <span className="text-surface-300 font-bold">{formData.level} {formData.role}</span>
                         {formData.resumeId ? <> — grounded in <span className="text-primary-300 font-bold">your resume</span></> : null}.

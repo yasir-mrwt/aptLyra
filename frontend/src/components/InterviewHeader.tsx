@@ -10,6 +10,7 @@ interface InterviewHeaderProps {
     handleNavigation: (index: number) => void;
     handleFinishInterview: () => void;
     isLoading: boolean;
+    finishDisabled?: boolean;
     company?: string;
 }
 
@@ -21,7 +22,7 @@ const InterviewHeader: React.FC<InterviewHeaderProps> = ({
     submittedLocal,
     handleNavigation,
     handleFinishInterview,
-    isLoading,
+    isLoading, finishDisabled,
     company
 }) => {
     const [elapsedTime, setElapsedTime] = useState("00:00");
@@ -78,7 +79,7 @@ const InterviewHeader: React.FC<InterviewHeaderProps> = ({
             </div>
             <button
                 onClick={handleFinishInterview}
-                disabled={isLoading}
+                disabled={isLoading || finishDisabled}
                 className="btn-danger flex items-center justify-center gap-3 px-8! py-3! w-full sm:w-auto shrink-0 cursor-pointer text-sm font-bold uppercase tracking-widest"
             >
                 {isLoading ? (

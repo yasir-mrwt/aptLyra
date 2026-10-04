@@ -28,7 +28,7 @@ The core orchestrator for TechVera. This Node.js service manages the API, user a
 ## 🛠️ Installation & Setup
 
 ### 1. Prerequisites
-- **Node.js 18+**
+- **Node.js 20.19+ within 20.x**
 - **npm** or **yarn**
 - **Upstash Redis** database (free tier) — copy the `rediss://` TCP URL from the Upstash console
 
@@ -90,3 +90,7 @@ npm start
 - **Rate Limiting**: Automated IP-based throttling on sensitive creation endpoints.
 - **Graceful Shutdown**: Handles process signals to close DB connections cleanly.
 
+
+## Stable baseline verification
+
+Use the supported runtimes and commands in [SETUP.md](../SETUP.md#phase-1-verification). Contracts, state transitions, and known limits are documented in [ARCHITECTURE.md](../ARCHITECTURE.md) and [SECURITY.md](../SECURITY.md).

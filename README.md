@@ -1,12 +1,12 @@
 # TechVera — Evidence-Grounded AI Technical Interview Coach
 
-> Phase 0 rebrand of the upstream PrepTalk application. Evidence grounding is the project direction; retrieval, provenance, and calibrated evaluation confidence are not implemented yet. See [the source-verified audit](../docs/phase-0-audit.md) and [current architecture](../docs/architecture-current.md). Upstream licensing and contributor attribution are preserved.
+> Phase 1 stable baseline of the upstream PrepTalk application. Evidence grounding remains the project direction; retrieval, provenance, and calibrated evaluator confidence are not implemented. See [architecture](ARCHITECTURE.md), [setup and verification](SETUP.md), and [baseline decisions](docs/decisions.md). Upstream licensing and contributor attribution are preserved.
 
 > **Skip the Nerves. Ace the Interview.**
 
 TechVera is a **voice-first AI mock interview platform**. You sit across from **Ava** — an animated AI interviewer who *speaks her questions out loud* (lip-synced to real TTS audio), listens to your spoken answers, **cross-questions you when your answer is weak**, runs your code live, reads your system-design diagrams, and hands you a shareable **Report Card PDF** at the end.
 
-Built end-to-end on **Groq** (Llama 3.3 70B + Llama 4 Scout Vision + Whisper v3 Turbo + Orpheus TTS) with **Google Gemini** as an automatic resume-analyzer fallback, and a fully serverless data tier — **Neon PostgreSQL** as the primary database and **Upstash Redis** for queues, caches and the leaderboard buffer. Zero servers to manage.
+Built end-to-end on **Groq** (Llama 3.3 70B + Llama 4 Scout Vision + Whisper v3 Turbo + Orpheus TTS) with **Google Gemini** as an automatic resume-analyzer fallback, and a fully serverless data tier — **Neon PostgreSQL** as the primary database and **Upstash Redis** for queues, caches and the leaderboard buffer. The same stack also supports disposable local PostgreSQL/Redis fixtures.
 
 > 📖 **[SETUP.md](./SETUP.md)** — local setup &nbsp;·&nbsp; 🏛️ **[ARCHITECTURE.md](./ARCHITECTURE.md)** — how it all works &nbsp;·&nbsp; ☁️ **[DEPLOYMENT.md](./DEPLOYMENT.md)** — deploy to Render + Vercel
 
@@ -30,7 +30,7 @@ Built end-to-end on **Groq** (Llama 3.3 70B + Llama 4 Scout Vision + Whisper v3 
 ### 🗣️ Ava — The Talking AI Interviewer
 - Animated female interviewer avatar with **real-time lip-sync** — her mouth moves with the actual amplitude of the speech audio (WebAudio `AnalyserNode`), plus idle blinking, breathing sway, and eyebrow raises while speaking
 - Questions are spoken aloud via **Groq Orpheus TTS** (natural "autumn" voice); automatic fallback to browser `speechSynthesis` if TTS is unavailable
-- Replay 🔊 and mute controls; mute preference persists across sessions
+- Replay 🔊 and mute controls; mute preference persists across sessions. Ava shows ready, voice preparation, speaking, recording/listening, processing, retry, and completed states.
 - TTS is served **server-side by question index** — clients can never synthesize arbitrary text through your Groq quota
 
 ### 🔁 Cross-Questioning (Follow-up Probes)
@@ -49,7 +49,7 @@ Built end-to-end on **Groq** (Llama 3.3 70B + Llama 4 Scout Vision + Whisper v3 
 
 ### 🧠 Intelligent Evaluation + Speech Analytics
 - Technical + confidence scores, detailed AI feedback, and ideal answers per question
-- **Whisper-powered speech analytics**: speaking pace (WPM), filler words, pauses, clarity score
+- **Whisper-powered speech analytics**: speaking pace (WPM), filler words, pauses, clarity score when ffmpeg measurements are available. STT errors release the answer for retry without grading; unavailable metrics are explicitly marked.
 
 ### 📄 Report Card PDF
 - One-click branded A4 PDF from the session review: overall/technical/confidence scores, speech analytics, per-question breakdown with feedback and follow-up badges — LinkedIn-share-worthy
@@ -86,11 +86,11 @@ graph TD
 |---|---|---|
 | `frontend/` | React 19, Vite, TypeScript, Tailwind v4, Redux Toolkit, Framer Motion, Socket.io-client | UI, Ava's avatar + voice playback, code editor, whiteboard, PDF export |
 | `backend/` | Node.js, Express 5, pg (Neon), ioredis, BullMQ, Socket.io, JWT (HttpOnly cookies) | Auth (email + Google OAuth), session orchestration, follow-up logic, TTS proxy, resume job queue, gamification |
-| `ai-service/` | Python 3.10+, FastAPI, Groq API, PyMuPDF, Pytesseract | Question generation, evaluation, follow-ups, TTS, transcription, resume parsing/scoring |
+| `ai-service/` | Python 3.11, FastAPI, Groq API, PyMuPDF, Pytesseract | Question generation, evaluation, follow-ups, TTS, transcription, resume parsing/scoring |
 
 ### 🗄️ Data Tier — Neon Postgres (primary) + Upstash Redis (secondary)
 
-**Neon PostgreSQL** holds all durable data. Flexible AI output lives in JSONB columns, relational things get real constraints and indexes. The schema bootstraps itself on first boot (`CREATE TABLE IF NOT EXISTS`) — no migration tooling needed.
+**Neon PostgreSQL** holds all durable data. Flexible AI output lives in JSONB columns, relational things get real constraints and indexes. The schema bootstraps itself on first boot (`CREATE TABLE IF NOT EXISTS`) — schema changes still require a reviewed migration strategy.
 
 | Table | Highlights |
 |---|---|
@@ -109,7 +109,7 @@ graph TD
 | `resume-view:*` | 24h API response cache |
 | `user:{id}:xp_buffer` | Atomic XP counter during interviews (flushed to Postgres on completion) |
 
-Concurrent question evaluations are serialized with a **per-session in-process lock** so whole-blob writes never lose updates.
+Concurrent question evaluations are serialized with a **PostgreSQL transaction/advisory lock** so whole-blob writes never lose updates.
 
 ---
 
@@ -121,8 +121,8 @@ Concurrent question evaluations are serialized with a **per-session in-process l
 
 | Requirement | Notes |
 |---|---|
-| **Node.js 18+** | backend + frontend |
-| **Python 3.10+** | ai-service (3.14 works too) |
+| **Node.js 20.19+ (20.x)** | backend + frontend |
+| **Python 3.11** | ai-service; Docker also provides Python 3.11 |
 | **Neon PostgreSQL** | free tier — [console.neon.tech](https://console.neon.tech) |
 | **Upstash Redis** | free tier — [console.upstash.com](https://console.upstash.com) |
 | **Groq API key** | free tier — [console.groq.com](https://console.groq.com) |
@@ -140,14 +140,14 @@ Concurrent question evaluations are serialized with a **per-session in-process l
 git clone <your-repo-url> techvera && cd techvera
 
 # Backend
-cd backend && npm install && cd ..
+cd backend && npm ci && cd ..
 
 # Frontend
-cd frontend && npm install && cd ..
+cd frontend && npm ci && cd ..
 
 # AI service
 cd ai-service
-python3 -m venv .venv && source .venv/bin/activate
+python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cd ..
 ```
@@ -171,6 +171,7 @@ JWT_SECRET=<any long random string>
 INTERNAL_API_KEY=<any random string — MUST match ai-service>
 
 AI_SERVICE_URL=http://localhost:8000
+BACKEND_URL=http://localhost:5001
 
 # Optional integrations (use dummy values to boot without them)
 GOOGLE_CLIENT_ID=...
@@ -208,6 +209,8 @@ GROQ_MIN_CALL_INTERVAL=1
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-2.5-flash
 
+NODE_ENV=development
+RESUME_CALLBACK_BASE_URL=http://localhost:5001
 ALLOWED_ORIGINS=http://localhost:5001,http://localhost:5173
 REQUEST_TIMEOUT=60
 INTERNAL_API_KEY=<same as backend>
@@ -259,7 +262,7 @@ curl http://localhost:8000/
 
 ## 📡 API Overview
 
-All `/api/*` routes require the HttpOnly JWT cookie (set on login). Backend ↔ AI-service calls are protected by `X-API-Key`.
+Interview and resume user routes require the HttpOnly JWT cookie. Login/registration are public. The resume callback and backend ↔ AI calls require `X-API-Key`.
 
 | Endpoint | Method | Description |
 |---|---|---|
@@ -273,7 +276,7 @@ All `/api/*` routes require the HttpOnly JWT cookie (set on login). Backend ↔ 
 | `/api/resume/upload` | POST | Enqueue resume analysis pipeline (BullMQ) |
 | `/api/resume/:id/rewrite` · `/cover-letter` | POST | Streaming AI rewrites / cover letter |
 | `/api/analytics` | GET | Aggregated performance + speech + gamification stats |
-| `/api/gamification/leaderboard` | GET | Top users from the Redis ZSET |
+| `/api/gamification/leaderboard` | GET | Top opted-in users from PostgreSQL |
 | `/api/code/execute` | POST | Run code via JDoodle |
 
 **Socket.io events:** `AI_GENERATING` → `QUESTIONS_READY` → `AI_TRANSCRIBING` → `AI_EVALUATING` → `AI_FOLLOWUP` → `FOLLOW_UP_ADDED` → `evaluation completed` → `session completed`, plus `resume:status` for the analyzer pipeline.
@@ -291,7 +294,7 @@ techvera/
 │       ├── hooks/            # useInterviewerVoice (TTS + amplitude), useInterviewSession, useAudioRecorder
 │       └── features/         # Redux slices: auth, session, resume, gamification, analytics
 ├── backend/
-│   ├── models/               # Redis repositories: User, Session, Resume, Gamification, RefreshToken
+│   ├── models/               # PostgreSQL repositories: User, Session, Resume, Gamification, RefreshToken
 │   ├── services/             # sessionService (evaluation + follow-ups), aiService (FastAPI proxy), queue/
 │   ├── controllers/ routes/  # REST layer
 │   └── config/               # redisConfig (Upstash client), envValidator, achievements
@@ -312,7 +315,7 @@ cd frontend && npm test         # Vitest + Testing Library
 cd ai-service && pytest         # Pytest (+ ruff / mypy for linting)
 ```
 
-CI runs all three suites via GitHub Actions on every push.
+CI runs the isolated suites plus mandatory lint/type/build checks. See [SETUP.md](SETUP.md#phase-1-verification) for real PostgreSQL/Redis verification and the Python 3.11 container. Provider fixtures verify contracts and failure handling, not AI scoring quality.
 
 ---
 

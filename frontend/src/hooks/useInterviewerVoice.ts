@@ -14,6 +14,9 @@ const MUTE_STORAGE_KEY = "preptalk_interviewer_muted";
 
 interface UseInterviewerVoiceResult {
     isSpeaking: boolean;
+    isPreparing: boolean;
+    voiceError: string | null;
+    usingBrowserVoice: boolean;
     isMuted: boolean;
     /** 0..1 — drives the avatar's mouth openness. */
     amplitude: number;
@@ -26,8 +29,12 @@ interface UseInterviewerVoiceResult {
 export const useInterviewerVoice = (
     sessionId: string | undefined,
     questionIndex: number,
-    questionText: string | undefined
+    questionText: string | undefined,
+    enabled = true
 ): UseInterviewerVoiceResult => {
+    const [isPreparing, setIsPreparing] = useState(false);
+    const [voiceError, setVoiceError] = useState<string | null>(null);
+    const [usingBrowserVoice, setUsingBrowserVoice] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [amplitude, setAmplitude] = useState(0);
     const [isMuted, setIsMuted] = useState<boolean>(
@@ -58,12 +65,18 @@ export const useInterviewerVoice = (
             window.speechSynthesis.cancel();
         }
         setIsSpeaking(false);
+        setIsPreparing(false);
         setAmplitude(0);
     }, []);
 
     /** Browser speechSynthesis fallback with a simulated mouth movement. */
     const speakWithBrowser = useCallback((text: string, generation: number) => {
-        if (!window.speechSynthesis) return;
+        setIsPreparing(false);
+        if (!window.speechSynthesis) {
+            setVoiceError("Voice unavailable. Read the question and retry voice when ready.");
+            return;
+        }
+        setUsingBrowserVoice(true);
 
         const utterance = new SpeechSynthesisUtterance(text);
         const voices = window.speechSynthesis.getVoices();
@@ -82,6 +95,7 @@ export const useInterviewerVoice = (
             }, 90);
         };
         const finish = () => {
+            if (generationRef.current !== generation) return;
             if (fallbackTimerRef.current) {
                 clearInterval(fallbackTimerRef.current);
                 fallbackTimerRef.current = null;
@@ -92,7 +106,11 @@ export const useInterviewerVoice = (
             }
         };
         utterance.onend = finish;
-        utterance.onerror = finish;
+        utterance.onerror = () => {
+            if (generationRef.current !== generation) return;
+            finish();
+            setVoiceError("Voice playback failed. Use Replay to retry.");
+        };
 
         window.speechSynthesis.cancel();
         window.speechSynthesis.speak(utterance);
@@ -144,9 +162,12 @@ export const useInterviewerVoice = (
     }, []);
 
     const speakQuestion = useCallback(async (qIndex: number, text: string) => {
-        if (!sessionId || !text) return;
+        if (!enabled || isMuted || !sessionId || !text) return;
         stopSpeaking();
         const generation = generationRef.current;
+        setIsPreparing(true);
+        setVoiceError(null);
+        setUsingBrowserVoice(false);
 
         try {
             if (!audioCtxRef.current) {
@@ -158,6 +179,7 @@ export const useInterviewerVoice = (
 
             const cached = audioCacheRef.current.get(qIndex);
             if (cached) {
+                setIsPreparing(false);
                 playBuffer(cached, generation);
                 return;
             }
@@ -170,8 +192,9 @@ export const useInterviewerVoice = (
             if (generationRef.current !== generation) return;
 
             const buffer = await audioCtxRef.current.decodeAudioData(res.data);
-            audioCacheRef.current.set(qIndex, buffer);
             if (generationRef.current !== generation) return;
+            audioCacheRef.current.set(qIndex, buffer);
+            setIsPreparing(false);
 
             playBuffer(buffer, generation);
         } catch {
@@ -180,28 +203,19 @@ export const useInterviewerVoice = (
                 speakWithBrowser(text, generation);
             }
         }
-    }, [sessionId, stopSpeaking, playBuffer, speakWithBrowser]);
+    }, [sessionId, enabled, isMuted, stopSpeaking, playBuffer, speakWithBrowser]);
 
     const speak = useCallback(() => {
         if (questionText) speakQuestion(questionIndex, questionText);
     }, [questionIndex, questionText, speakQuestion]);
 
     const toggleMute = useCallback(() => {
-        setIsMuted((prev) => {
-            const next = !prev;
-            localStorage.setItem(MUTE_STORAGE_KEY, String(next));
-            if (next) stopSpeaking();
-            return next;
-        });
-    }, [stopSpeaking]);
-
-    // Auto-speak whenever a new question comes into view
-    useEffect(() => {
-        if (isMuted || !questionText || !sessionId) return;
-        if (lastSpokenRef.current === questionIndex) return;
-        lastSpokenRef.current = questionIndex;
-        speakQuestion(questionIndex, questionText);
-    }, [questionIndex, questionText, sessionId, isMuted, speakQuestion]);
+        const next = !isMuted;
+        localStorage.setItem(MUTE_STORAGE_KEY, String(next));
+        setIsMuted(next);
+        lastSpokenRef.current = -1;
+        if (next) stopSpeaking();
+    }, [isMuted, stopSpeaking]);
 
     // Reset the spoken marker when the session changes + cleanup on unmount
     useEffect(() => {
@@ -214,5 +228,22 @@ export const useInterviewerVoice = (
         };
     }, [sessionId, stopSpeaking]);
 
-    return { isSpeaking, isMuted, amplitude, speak, stopSpeaking, toggleMute };
+    useEffect(() => {
+        if (enabled) return;
+        const timer = window.setTimeout(stopSpeaking, 0);
+        return () => window.clearTimeout(timer);
+    }, [enabled, stopSpeaking]);
+
+    // Auto-speak whenever a new question comes into view
+    useEffect(() => {
+        if (!enabled || isMuted || !questionText || !sessionId) return;
+        if (lastSpokenRef.current === questionIndex) return;
+        const timer = window.setTimeout(() => {
+            lastSpokenRef.current = questionIndex;
+            void speakQuestion(questionIndex, questionText);
+        }, 0);
+        return () => window.clearTimeout(timer);
+    }, [questionIndex, questionText, sessionId, enabled, isMuted, speakQuestion]);
+
+    return { isSpeaking, isPreparing, voiceError, usingBrowserVoice, isMuted, amplitude, speak, stopSpeaking, toggleMute };
 };
