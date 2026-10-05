@@ -22,3 +22,10 @@ venv/
 uploads/
 *.log
 .local-test-data/
+
+# Local Phase 5 model artifacts and vector exports stay outside Git.
+*.onnx
+*.download
+.model-cache/
+embedding-cache/
+*.vectors.json

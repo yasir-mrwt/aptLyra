@@ -356,3 +356,79 @@ review exact source contract/content hashes. Never run approval blindly. Product
 staging ingestion operations additionally require a final `--apply`.
 
 No candidate-facing Phase 4 behavior; reviewed corpus is preparatory for Phase 5/6.
+
+
+## Phase 5 local retrieval verification — CURRENTLY IMPLEMENTED
+
+Requirements: supported Node 20.x, Docker, disposable ports 15432/15433/16379/18005,
+and an absolute writable model cache **outside** the product repository. Use
+Python 3.11 for native AI environments; Windows x64/macOS ARM64 wheels exist but
+native performance was not verified. The measured configuration is Docker Linux
+ARM64 on Apple M1. Existing Node dependencies/lockfiles are unchanged; Python adds
+pinned ONNX Runtime/tokenizers/NumPy and their new transitive requirements.
+
+Unix shell example (PowerShell: set the same external path with
+`$env:EMBEDDING_TEST_MODEL_DIR`, adapting shell variable syntax):
+
+```bash
+export EMBEDDING_TEST_MODEL_DIR=/tmp/techvera-phase5-models/l3
+docker compose -f compose.test.yml --profile embeddings build embeddings
+docker compose -f compose.test.yml --profile embeddings run --rm --no-deps \
+  -v "$EMBEDDING_TEST_MODEL_DIR:/models" embeddings \
+  python prepare_embedding_model.py --directory /models
+docker compose -f compose.test.yml --profile embeddings --profile without-vector \
+  up -d --wait postgres redis embeddings postgres-without-vector
+npm --prefix backend run build
+npm --prefix backend run corpus:seed-manifest
+npm --prefix backend run test:schema
+npm --prefix backend run test:ingestion
+npm --prefix backend run test:seed
+npm --prefix backend run test:retrieval
+npm --prefix backend run test:pgvector-unavailable
+npm --prefix backend run retrieval:benchmark
+npm --prefix backend run test:persistence
+npm --prefix backend run test:smoke
+docker compose -f compose.test.yml --profile embeddings --profile without-vector down
+```
+
+Unset `DATABASE_URL`, `NEON_DATABASE_URL`, `REDIS_URL` and `UPSTASH_REDIS_URL` before
+verification: scripts reject external datastore configuration, create random local
+DBs and drop them. The benchmark fixes its embedding URL to localhost and uses
+Compose's disposable internal credential; it never imports into production.
+Preparation explicitly downloads fixed-revision, hash-checked weights/tokenizer
+and retains license/NOTICE outside Git. No download occurs during serving.
+The benchmark writes only safe metrics to `/tmp`; product evidence artifacts do
+not contain vectors, credentials or database dumps.
+
+For authorized operator use against an intentionally selected database, apply
+reviewed migrations with `npm --prefix backend run db:migrate`, publish only the
+exact approved bytes using [ingestion](docs/ingestion.md), configure existing
+`AI_SERVICE_URL` / `INTERNAL_API_KEY` and local AI `EMBEDDING_MODEL_DIR`, then:
+
+```bash
+npm --prefix backend run retrieval -- embed --dry-run
+npm --prefix backend run retrieval -- embed
+npm --prefix backend run retrieval -- questions "binary search progress" '{"competencies":["dsa"]}'
+npm --prefix backend run retrieval -- references "reviewed technical explanation"
+```
+
+Production/staging commands additionally require deliberate `--apply`; no such
+migration/import was run in Phase 5. Keep queries public in CLI arguments to avoid
+shell-history disclosure. The internal service accepts typed objects for later
+planner use; no candidate-facing endpoint/UI is exposed.
+
+AI verification uses the existing checks profile, now with scoped embedding typing:
+
+```bash
+docker compose -f compose.test.yml --profile checks run --build --rm ai-checks
+```
+
+Equivalent scoped mypy covers the three embedding modules (and both new helpers
+were checked locally). Full-service `mypy --ignore-missing-imports .` retains 29
+errors in 10 older files, reproduced on committed Phase 4. Ruff critical checks and
+all 54 AI tests pass; a pre-existing TestClient deprecation warning remains. Do not
+claim full-service typing is clean. See [retrieval](docs/retrieval.md),
+[model decision](docs/embedding-model-selection.md) and
+[benchmark](docs/retrieval-benchmark.md).
+
+No live interview behavior change in Phase 5; retrieval is ready for the Phase 6 planner.

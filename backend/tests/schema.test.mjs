@@ -93,10 +93,10 @@ after(async () => {
 });
 
 test('clean database, history, repeated and concurrent migration no-ops', async () => {
-  assert.equal(initialMigrations.applied.length,4);
+  assert.equal(initialMigrations.applied.length,5);
   assert.deepEqual(secondMigrations.applied,[]);
   const history = (await query('SELECT * FROM schema_migrations ORDER BY name')).rows;
-  assert.equal(history.length,4); assert.ok(history.every(r => /^[a-f0-9]{64}$/.test(r.checksum) && r.applied_at));
+  assert.equal(history.length,5); assert.ok(history.every(r => /^[a-f0-9]{64}$/.test(r.checksum) && r.applied_at));
   const runs = await Promise.all([runMigrations(pool),runMigrations(pool)]);
   assert.ok(runs.every(r => !r.applied.length));
 });
@@ -108,7 +108,7 @@ test('compiled migration CLI runs twice and requires explicit production apply',
   try {
     for (let n=0;n<2;n++) {
       const result=await execute(process.execPath,[cli],{cwd:directory,env});
-      assert.match(result.stdout,/Migrations current: 4; applied: none/);
+      assert.match(result.stdout,/Migrations current: 5; applied: none/);
     }
     await assert.rejects(()=>execute(process.execPath,[cli],{cwd:directory,env:{...env,NODE_ENV:'production'}}),
       e=>e.code===1 && e.stderr.includes('require explicit --apply') && !e.stderr.includes(fixtureUrl));
@@ -137,17 +137,17 @@ test('migration failure rolls back DDL/history and a corrected unapplied file ca
   const directory=await mkdtemp(join(tmpdir(),'techvera-migrations-'));
   try {
     for (const name of initialMigrations.current) await cp(join(migrationDirectory,name),join(directory,name));
-    await writeFile(join(directory,'005_failure.sql'),'CREATE TABLE rollback_marker(id integer); SELECT deliberately_missing_function();');
-    await assert.rejects(() => runMigrations(adoption,directory),/005_failure.sql rolled back/);
+    await writeFile(join(directory,'006_failure.sql'),'CREATE TABLE rollback_marker(id integer); SELECT deliberately_missing_function();');
+    await assert.rejects(() => runMigrations(adoption,directory),/006_failure.sql rolled back/);
     assert.equal((await adoption.query("SELECT to_regclass('rollback_marker') AS name")).rows[0].name,null);
-    assert.equal((await adoption.query('SELECT count(*)::int AS n FROM schema_migrations')).rows[0].n,4);
-    await writeFile(join(directory,'005_failure.sql'),'CREATE TABLE rollback_marker(id integer);');
-    assert.deepEqual((await runMigrations(adoption,directory)).applied,['005_failure.sql']);
+    assert.equal((await adoption.query('SELECT count(*)::int AS n FROM schema_migrations')).rows[0].n,5);
+    await writeFile(join(directory,'006_failure.sql'),'CREATE TABLE rollback_marker(id integer);');
+    assert.deepEqual((await runMigrations(adoption,directory)).applied,['006_failure.sql']);
     assert.deepEqual((await runMigrations(adoption,directory)).applied,[]);
     await writeFile(join(directory,'001_legacy_baseline.sql'),'SELECT 1;');
     await assert.rejects(() => runMigrations(adoption,directory),/history mismatch/);
     await assert.rejects(() => runMigrations(adoption),/history mismatch/);
-    await writeFile(join(directory,'005_duplicate.sql'),'SELECT 1;');
+    await writeFile(join(directory,'006_duplicate.sql'),'SELECT 1;');
     await assert.rejects(() => runMigrations(adoption,directory),/Duplicate migration/);
   } finally { await rm(directory,{recursive:true,force:true}); }
 });
@@ -266,8 +266,8 @@ test('answers and evaluations deny cross-user access and reject invalid score/co
   await rejected('UPDATE evaluations SET technical_score=100 WHERE id=$1',[fixture.evaluation]);
   await rejected('UPDATE evaluations SET supersedes_id=$2 WHERE id=$1',[fixture.evaluation,abstained]);
 });
-test('embedding metadata is model-neutral, exclusive and bounded; no vector is installed', async () => {
-  assert.equal((await query("SELECT count(*)::int AS n FROM pg_extension WHERE extname='vector'")).rows[0].n,0);
+test('embedding metadata is model-neutral, exclusive and bounded; pgvector is installed', async () => {
+  assert.equal((await query("SELECT count(*)::int AS n FROM pg_extension WHERE extname='vector'")).rows[0].n,1);
   const insert=`INSERT INTO embedding_metadata(id,question_version_id,chunk_id,purpose,model_id,model_revision,dimension,normalization,embedding_version,content_hash,corpus_generation)
     VALUES($1,$2,$3,'technical-grounding','fixture-model','fixture-revision',$4,'l2','fixture-v1',$5,'fixture')`;
   await rejected(insert,[randomUUID(),fixture.version,fixture.chunk,384,hash]);

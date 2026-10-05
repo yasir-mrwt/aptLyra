@@ -21,8 +21,8 @@ does not authorize starting the next phase or adding dependencies now.
 | Phase | Deliverable and boundary | Functional frontend / Ava work in that phase | Required verification |
 |---|---|---|---|
 | 3 — Interview knowledge schema (implemented) | Versioned migrations, taxonomy and knowledge/rubric/plan/evidence/answer/embedding-metadata/operation/outbox/reward primitives; legacy JSONB preserved; vector/model deferred | No public contract or user-facing change; internal types/repositories only | Clean/adopted DB, repeat/concurrent migrations, rollback/checksum/CLI, ownership/version and legacy tests verified locally |
-| 4 — Interview-data ingestion (implemented; completion checks required) | Permitted adapters, PII/terms quarantine, review and source/question versions; approved seed corpus; no unrestricted scraping | Source quality/availability and submission consent/status when exposed | Permission, PII, dedupe, timestamp, review, withdrawal and injection fixtures |
-| 5 — Embeddings + pgvector retrieval | Versioned embeddings, filtered retrieval/provenance and bounded caches; choose model/index from measurements | Honest evidence/no-evidence status and source attribution where applicable | Model/version mismatch, filters, relevance fixtures, withdrawal invalidation, latency |
+| 4 — Interview-data ingestion (implemented and verified locally) | Permitted adapters, PII/terms quarantine, review and source/question versions; approved seed corpus; no unrestricted scraping | Source quality/availability and submission consent/status when exposed | Permission, PII, dedupe, timestamp, review, withdrawal and injection fixtures |
+| 5 — Embeddings + pgvector retrieval (implemented) | Pinned measured local CPU model, versioned vectors, filtered two-channel retrieval/provenance/evidence; cache deferred | Internal primitives only; no live interview/UI change | Real 48-question embedding, 32-query development benchmark, contract/filter/withdrawal fixtures and baseline regressions |
 | 6 — Interview planner | Persisted deterministic coverage/count/time plan, constraints, source/fallback reasons, stable item IDs | Scoped setup choices, preview/shortage confirmation, planned progress and Ava preparing/transition states | Plan invariants, core-mode budgets, shortages and legacy transport compatibility |
 | 7 — Rubric evaluation + confidence | Reviewed/provisional concepts/weights, answer/test evidence, scoring/abstention and distinct confidence semantics | Provisional labels, retry/abstention, question/competency report and delivery separation | Bounded/evidence-linked scores, withheld failures, reviewed aggregation, development-set agreement |
 | 8 — End-to-end intelligence integration | Durable operations/outbox/recovery, complete retrieval→plan→answer→rubric→probe→report path; remove crash-stranded flags and reward-loss path | Complete functional Ava turn states, reconnect/retry, probe/original distinction, consistent report/PDF and deletion lifecycle | Real SQL/Redis and provider-fixture E2E, restart/disconnect/idempotency/reward and stale-result tests |
@@ -56,6 +56,20 @@ and [manifest](corpus-manifest.md). HTTP adapters, public submissions and automa
 purge scheduling are deferred explicitly.
 
 No candidate-facing Phase 4 behavior; reviewed corpus is preparatory for Phase 5/6.
-Phase 4 status/verification gaps are recorded privately; finish its required checks
-before declaring completion. Recommend only **Phase 5 — Embeddings + pgvector
-retrieval**, on explicit authorization. This document starts no Phase 5 work.
+Phase 4 required persistence/smoke verification subsequently passed in disposable
+local fixtures. Phase 5 was explicitly authorized and its evidence is recorded below.
+
+
+## Phase 5 implementation evidence
+
+The real approved 48-question corpus was embedded through the FastAPI/backend CLI
+in disposable pgvector; a repeat skipped all 48 compatible vectors. All 32 manually
+defined development queries found their expected question in the top five; this is
+not a held-out evaluation. Filters, mismatch/no-evidence, duplicate/family controls,
+lineage and withdrawal were verified. CPU inference and PostgreSQL latency are
+reported in [the benchmark](retrieval-benchmark.md). New AI typing passes; full
+service typing retains 29 pre-existing errors confirmed at the Phase 4 commit.
+
+No live interview behavior change in Phase 5; retrieval is ready for the Phase 6 planner.
+Recommend only **Phase 6 — Interview Planner**, on a new explicit prompt. No Phase 6
+work is started by this roadmap or the Phase 5 implementation.

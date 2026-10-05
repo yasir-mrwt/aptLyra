@@ -1,6 +1,6 @@
 # TechVera — Evidence-Grounded AI Technical Interview Coach
 
-> The Phase 1 stable baseline of the upstream PrepTalk application is implemented; Phase 2 froze the FYP scope and architecture. Evidence-grounded interview behavior remains planned: retrieval-backed selection, provenance in user reports, reviewed-rubric evaluation and evaluator-confidence computation are not implemented. Upstream licensing and contributor attribution are preserved.
+> Phase 5 adds internal semantic retrieval (see below). The Phase 1 stable baseline of the upstream PrepTalk application is implemented; Phase 2 froze the FYP scope and architecture. Evidence-grounded interview behavior remains planned: retrieval-backed selection, provenance in user reports, reviewed-rubric evaluation and evaluator-confidence computation are not implemented. Upstream licensing and contributor attribution are preserved.
 
 **Phase 3 storage foundation is implemented:** versioned SQL migrations, the 8-root/
 24-child taxonomy, relational knowledge/evidence and durability prerequisites, and
@@ -15,8 +15,8 @@ this baseline; provider-dependent paths still require configuration.
 
 **PLANNED FOR LATER PHASE:** junior technical preparation for final-year students and
 candidates with 0–2 years' experience. Oral, coding and mixed modes are core;
-company focus, resume context and design-lite are optional. The target adds reviewed
-knowledge, PostgreSQL/pgvector retrieval, persisted plans, known/provisional rubrics,
+company focus, resume context and design-lite are optional. Reviewed knowledge and internal pgvector retrieval are implemented in Phases 4–5.
+The remaining target adds persisted plans, known/provisional rubrics,
 distinct evaluator confidence, source trace and competency reports. It does not make
 hiring or personality judgments. Phase 2 changed documentation only; Phase 3 adds
 schema without turning on these features.
@@ -404,4 +404,20 @@ PostgreSQL. No production import is claimed. See [ingestion](docs/ingestion.md),
 [source policy](docs/source-policy.md) and [corpus manifest](docs/corpus-manifest.md).
 
 No candidate-facing Phase 4 behavior; reviewed corpus is preparatory for Phase 5/6.
-Embedding/RAG/planner/scoring behavior remains PLANNED FOR LATER PHASE.
+Phase 4 itself added no embeddings. Phase 5 internal retrieval is described below;
+live retrieval-backed interviews, planning and scoring remain PLANNED FOR LATER PHASE.
+
+
+## Phase 5 retrieval — CURRENTLY IMPLEMENTED
+
+The reviewed 48-question corpus now has an internal semantic retrieval path:
+FastAPI computes pinned local CPU embeddings; Express controls generation/filtering
+and PostgreSQL/pgvector owns vector storage, ranking and evidence. Migration 005
+adds a 384-dimension vector table, staged/active generations and availability/
+lineage guards without changing migrations 001–004 or legacy session execution.
+Question and technical-reference channels are separate; current technical-reference
+coverage is zero and is reported honestly. No shared candidate data is indexed.
+See [retrieval](docs/retrieval.md), [model decision](docs/embedding-model-selection.md)
+and [development benchmark](docs/retrieval-benchmark.md).
+
+No live interview behavior change in Phase 5; retrieval is ready for the Phase 6 planner.

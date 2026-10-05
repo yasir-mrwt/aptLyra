@@ -112,3 +112,32 @@ Status: CURRENTLY IMPLEMENTED, independent of legacy interview execution.
 No candidate-facing Phase 4 behavior; reviewed corpus is preparatory for Phase 5/6.
 See [ingestion](ingestion.md), [policy](source-policy.md) and [manifest](corpus-manifest.md).
 Stop after Phase 4. Recommend Phase 5 only once Phase 4 verification is complete.
+
+
+## Phase 5: measured local embeddings and pgvector retrieval
+
+- Chose pinned three-layer MiniLM ONNX, mean pooling / L2, 384d, after comparing
+  real encoders on the approved seed and 32 fixed development queries. It matched
+  top-five presence at smaller size and about half query CPU time; no statistical
+  significance or held-out evaluation claim. See [model decision](embedding-model-selection.md).
+- Preserve Express ownership of durable writes/filtering; FastAPI computes only.
+  Add a forward 005 migration; preserve 001–004 checksums, legacy JSONB and deployed
+  stack. Actual vectors link Phase 3 metadata to one atomically active generation.
+- Use exact filtered cosine SQL for 48 entities, with bounded groups/hits and
+  provenance-bearing deduplication. No ANN is justified for this corpus size.
+  Defer Redis retrieval caching: no measured benefit has been established, and it
+  cannot replace eligibility checks or audit writes. Compare measured total latency
+  with the design target in the benchmark. A 1000-entity job budget fails closed
+  pending scale measurement.
+- Question-selection evidence is separate from reviewed technical ground truth;
+  seed editorial notes are not technical references or reviewed rubrics. Missing
+  technical grounding is explicitly no evidence, never invented.
+- Persist query hashes and actual lineage/rank/reasons; revalidate availability
+  and retire affected vectors on withdrawal, preserving historical audit. Do not
+  implement planner fallback or personalize the shared index in Phase 5.
+- Full-service mypy has 29 pre-existing errors in 10 files, reproduced at the
+  committed Phase 4 baseline. New embedding modules/helpers pass scoped typing;
+  unrelated legacy typing refactors are deferred and not claimed fixed.
+
+No live interview behavior change in Phase 5; retrieval is ready for the Phase 6 planner.
+Stop after Phase 5. Recommend only Phase 6 — Interview Planner.

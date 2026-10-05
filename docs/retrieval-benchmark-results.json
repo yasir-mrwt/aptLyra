@@ -1,0 +1,367 @@
+{
+  "kind": "Real-model development benchmark; not Phase 11 held-out evaluation",
+  "model": {
+    "modelId": "sentence-transformers/paraphrase-MiniLM-L3-v2",
+    "modelRevision": "4ca70771034acceecb2e72475f72050fcdde4ddc",
+    "dimension": 384,
+    "normalization": "l2",
+    "embeddingVersion": "onnx-mean-l2-v1"
+  },
+  "embedding": {
+    "eligible": 48,
+    "embedded": 48,
+    "skipped": 0,
+    "failed": 0,
+    "corpusGeneration": "corpus-e8b6176608050edbe2956cd90aa3b9b34ef5b616229e2778116d09e86c0fb447",
+    "dryRun": false
+  },
+  "repeatedEmbedding": {
+    "eligible": 48,
+    "embedded": 0,
+    "skipped": 48,
+    "failed": 0,
+    "corpusGeneration": "corpus-e8b6176608050edbe2956cd90aa3b9b34ef5b616229e2778116d09e86c0fb447",
+    "dryRun": false
+  },
+  "activeCountsBeforeWithdrawal": [
+    {
+      "purpose": "question-selection",
+      "dimension": 384,
+      "status": "active",
+      "count": 48
+    }
+  ],
+  "queryCount": 32,
+  "hitRateAt1": 0.90625,
+  "hitRateAt5": 1,
+  "rootFilteredHitRateAt5": 1,
+  "filterChecks": {
+    "rootRequests": 96,
+    "fullyConstrainedRequests": 32,
+    "violations": 0
+  },
+  "warm": {
+    "embedding": {
+      "samples": 96,
+      "medianMs": 11.265874999997322,
+      "p95Ms": 16.198833000002196
+    },
+    "postgres": {
+      "samples": 96,
+      "medianMs": 78.46058400000038,
+      "p95Ms": 162.7648339999996
+    },
+    "total": {
+      "samples": 96,
+      "medianMs": 1131.590333,
+      "p95Ms": 1242.8376250000001
+    }
+  },
+  "firstEmbeddingHttpMs": 512.6319999999998,
+  "firstServiceProcessingMs": 478.516,
+  "checks": {
+    "filters": true,
+    "familyUniqueness": true,
+    "technicalNoEvidence": true,
+    "modelMismatch": true,
+    "corpusMismatch": true,
+    "companyAndUnknownDateNoMatch": true,
+    "exactMatch": true,
+    "withdrawalExcluded": true,
+    "withdrawalRetiredEmbedding": true,
+    "provenancePersisted": true,
+    "queryTextNotPersisted": true
+  },
+  "unfiltered": [
+    {
+      "id": "q01",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q02",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q03",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q04",
+      "expectedRank": 3,
+      "outcome": "success"
+    },
+    {
+      "id": "q05",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q06",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q07",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q08",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q09",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q10",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q11",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q12",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q13",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q14",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q15",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q16",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q17",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q18",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q19",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q20",
+      "expectedRank": 2,
+      "outcome": "success"
+    },
+    {
+      "id": "q21",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q22",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q23",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q24",
+      "expectedRank": 2,
+      "outcome": "success"
+    },
+    {
+      "id": "q25",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q26",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q27",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q28",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q29",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q30",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q31",
+      "expectedRank": 1,
+      "outcome": "success"
+    },
+    {
+      "id": "q32",
+      "expectedRank": 1,
+      "outcome": "success"
+    }
+  ],
+  "filtered": [
+    {
+      "id": "q01",
+      "expectedPresent": true
+    },
+    {
+      "id": "q02",
+      "expectedPresent": true
+    },
+    {
+      "id": "q03",
+      "expectedPresent": true
+    },
+    {
+      "id": "q04",
+      "expectedPresent": true
+    },
+    {
+      "id": "q05",
+      "expectedPresent": true
+    },
+    {
+      "id": "q06",
+      "expectedPresent": true
+    },
+    {
+      "id": "q07",
+      "expectedPresent": true
+    },
+    {
+      "id": "q08",
+      "expectedPresent": true
+    },
+    {
+      "id": "q09",
+      "expectedPresent": true
+    },
+    {
+      "id": "q10",
+      "expectedPresent": true
+    },
+    {
+      "id": "q11",
+      "expectedPresent": true
+    },
+    {
+      "id": "q12",
+      "expectedPresent": true
+    },
+    {
+      "id": "q13",
+      "expectedPresent": true
+    },
+    {
+      "id": "q14",
+      "expectedPresent": true
+    },
+    {
+      "id": "q15",
+      "expectedPresent": true
+    },
+    {
+      "id": "q16",
+      "expectedPresent": true
+    },
+    {
+      "id": "q17",
+      "expectedPresent": true
+    },
+    {
+      "id": "q18",
+      "expectedPresent": true
+    },
+    {
+      "id": "q19",
+      "expectedPresent": true
+    },
+    {
+      "id": "q20",
+      "expectedPresent": true
+    },
+    {
+      "id": "q21",
+      "expectedPresent": true
+    },
+    {
+      "id": "q22",
+      "expectedPresent": true
+    },
+    {
+      "id": "q23",
+      "expectedPresent": true
+    },
+    {
+      "id": "q24",
+      "expectedPresent": true
+    },
+    {
+      "id": "q25",
+      "expectedPresent": true
+    },
+    {
+      "id": "q26",
+      "expectedPresent": true
+    },
+    {
+      "id": "q27",
+      "expectedPresent": true
+    },
+    {
+      "id": "q28",
+      "expectedPresent": true
+    },
+    {
+      "id": "q29",
+      "expectedPresent": true
+    },
+    {
+      "id": "q30",
+      "expectedPresent": true
+    },
+    {
+      "id": "q31",
+      "expectedPresent": true
+    },
+    {
+      "id": "q32",
+      "expectedPresent": true
+    }
+  ]
+}

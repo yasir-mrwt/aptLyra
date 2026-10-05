@@ -180,8 +180,8 @@ export const knowledgeRepository = {
       [id,input.operationKey,nullable(input.sessionId),userId,nullable(input.planId),nullable(input.redactedQuery),input.queryHash,
         json(input.filters || {}),json(input.embeddingMetadata || {}),input.corpusVersion,input.sourcePolicyRevision,input.outcome,input.cacheHit || false]);
       for (const hit of input.results) await query(
-        "INSERT INTO retrieval_results(id,retrieval_id,question_version_id,chunk_id,rank,similarity,selected,reason) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
-        [randomUUID(),id,nullable(hit.questionVersionId),nullable(hit.chunkId),hit.rank,nullable(hit.similarity),hit.selected || false,hit.reason]);
+        "INSERT INTO retrieval_results(id,retrieval_id,question_version_id,chunk_id,rank,similarity,selected,reason,provenance_snapshot) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+        [randomUUID(),id,nullable(hit.questionVersionId),nullable(hit.chunkId),hit.rank,nullable(hit.similarity),hit.selected || false,hit.reason,json(hit.provenanceSnapshot || [])]);
       return id;
     });
   },

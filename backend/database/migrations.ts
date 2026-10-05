@@ -52,7 +52,8 @@ export async function runMigrations(database: Pool, directory = migrationDirecto
       } catch (error) {
         await client.query("ROLLBACK");
         const code = (error as { code?: string }).code || "unknown";
-        const failure = new Error(`Migration ${file.name} rolled back (${code})`);
+        const detail = code === "55000" ? "; pgvector must be installed on this PostgreSQL server" : "";
+        const failure = new Error(`Migration ${file.name} rolled back (${code})${detail}`);
         Object.defineProperty(failure, "cause", { value: error });
         throw failure;
       }

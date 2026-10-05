@@ -140,13 +140,12 @@ tombstones need the later privacy workflow; cascade tests do not claim full eras
 
 ## PLANNED FOR LATER PHASE
 
-The explicit reviewed local corpus import is described below; no rubrics are seeded. No vector search,
+The explicit reviewed local corpus import is described below; no rubrics are seeded. Internal vector search is implemented in Phase 5 (see below). No live
 planner, scorer, evaluator-confidence computation, queue executor/dispatcher,
-crash-safe XP migration or retention jobs exist. `embedding_metadata` stores metadata
-only: stock disposable PostgreSQL 16.15 has no available `vector` extension. Actual
-extension, dimension-specific column/index and embedding model remain Phase 5
-decisions after availability/measurement review. No model is selected by this phase;
-the test-only dimension/model placeholders are fixtures.
+crash-safe XP migration or retention jobs exist. `embedding_metadata` remains model-neutral, while Phase 5 now stores compatible
+384d values separately. The earlier Phase 3 stock PostgreSQL fixture had no vector
+extension; Phase 5 uses a pinned pgvector/PostgreSQL 16 fixture and explicitly tests
+clear failure/rollback on stock PostgreSQL. Earlier placeholder vectors/models were fixtures.
 
 Full context/filter population, publish/review authorization, semantic/provenance
 quality checks, plan completeness, confidence gates and recovery/deletion policies
@@ -181,7 +180,33 @@ SQL administrators are not isolated by these checks.
 Clean pending versions/chunks remain quarantined/staged until explicit review;
 flagged data keeps only hashes/codes. Withdrawal retires imported questions/chunks,
 redacts source text/specifications/voluntary prose, and preserves identity/audit.
-No table is coupled to legacy session JSONB, no vector extension is added, and no
+No Phase 4 table is coupled to legacy session JSONB, Phase 4 added no vector extension, and no
 candidate resume/answer becomes shared knowledge. See [ingestion](ingestion.md).
 The reviewed corpus is an explicit CLI import, not a migration seed or automatic
 startup action. No expected concepts or rubric seeds were added.
+
+
+## Phase 5 additions — CURRENTLY IMPLEMENTED
+
+Migration `005_pgvector_retrieval.sql` enables available pgvector and adds:
+
+| Structure | Purpose |
+|---|---|
+| `embedding_generations` | Model/revision/dimension/normalization/embedding-version registry, count, staged/active/retired status and activation time; one global active generation |
+| `embedding_vectors` | FK to Phase 3 metadata, duplicate-group identity and finite normalized `vector(384)` value |
+| `retrieval_available_chunks` (view) | Complete permitted/reviewed/non-fixture source/document/chunk availability |
+| `retrieval_entities` (view) | Eligible reviewed questions and separate technical-reference chunks, with actual aggregated provenance |
+| `retrieval_results.provenance_snapshot` | Bounded historical JSON lineage checked against actual source/document/chunk/question relationships |
+
+Existing `embedding_metadata` contains exclusive question-version/chunk identity,
+purpose, model/revision/dimension/normalization, content hash, embedding version,
+corpus generation/status and timestamp; it is not duplicated into an alternative
+store. Active identity indexes, a generation/status index, immutable vector metadata,
+deferred space checks and withdrawal triggers keep states compatible. Exact cosine
+search uses filtered SQL; no ANN index is created for this small corpus. Migrated
+fixtures have 41 tables including migration history (39 prior + 2 new), plus views.
+
+Retrieval outcomes add `success`, `no_match`, `invalid_filters`, `model_mismatch`,
+`corpus_unavailable`, preserving historical outcome values. Legacy sessions remain
+JSONB and unchanged. Candidate private tables are not read by indexing. See
+[retrieval contract](retrieval.md) and [migration operations](migrations.md).

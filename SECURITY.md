@@ -117,9 +117,35 @@ directories; local filesystem elapsed checks cannot cancel a stalled OS call.
 Seven-day expiry prevents publication immediately; physical quarantine purge requires
 running/scheduling `expire`, not an implemented daemon. SQL admins can bypass access
 conventions. Immutable retired question history remains, so later retrieval must
-check every source/document/chunk/question state. No cache/vector invalidation claim.
+check every source/document/chunk/question state. Phase 4 introduced no vectors; Phase 5 invalidation is described below.
 Permission evidence is a human assertion; fixtures never prove external rights.
 
 See [ingestion limitations](docs/ingestion.md), [policy](docs/source-policy.md) and
 [data/privacy](docs/data-and-privacy.md). Existing baseline/TLS/dependency limitations
 above remain. No dependency changes, provider calls or deployment are part of Phase 4.
+
+
+## Phase 5 embedding/retrieval boundary — CURRENTLY IMPLEMENTED
+
+The authenticated embedding route uses a fixed hash-checked local ONNX model,
+strict byte/text/batch/token bounds, finite dimension/norm validation and safe
+failure codes. It never receives SQL credentials, source-selected models/tools or
+personalized corpus data. Requests do not download weights. Explicit downloads use
+fixed revisions/checksums and an operator-owned cache outside the checkout. The
+single inference slot remains occupied after response timeout until work exits;
+native execution is not forcibly killed. Model/service capacity remains bounded.
+
+Express parameterizes filters and cosine SQL, checks full human-review/rights/
+availability lineage, and atomically pins a single model/corpus space. SQL guards
+reject forged provenance snapshots and vector identity changes. Source/document/
+chunk/question/permission/reviewer changes retire unavailable vectors; each request
+revalidates rather than serving stale cache entries. No retrieval cache exists.
+Evidence retains query hashes, validated metadata and actual lineage, not query
+text or candidate answers/resumes/audio. Hashes are linkable metadata, not a claim
+of anonymization. The CLI requires existing authorized OS/DB access, with explicit
+`--apply` for production/staging; no public admin/search route was added.
+
+Full-service mypy still reports the same 29 errors in 10 older modules as the
+committed Phase 4 baseline. All five new Python modules/helpers pass scoped typing;
+54 deterministic AI tests pass. Provider, deployment, administrator privilege and
+full lifecycle retention limitations above remain. See [retrieval](docs/retrieval.md).

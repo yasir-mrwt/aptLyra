@@ -28,7 +28,14 @@
     "test:ingestion": "node --test tests/ingestion.test.mjs",
     "pretest:seed": "npm run build",
     "test:seed": "node tests/seed-publication.mjs",
-    "corpus:seed-manifest": "node dist/ingestion/seedManifest.js"
+    "corpus:seed-manifest": "node dist/ingestion/seedManifest.js",
+    "retrieval": "node dist/retrieval/cli.js",
+    "pretest:retrieval": "npm run build",
+    "test:retrieval": "node --test tests/retrieval.test.mjs",
+    "preretrieval:benchmark": "npm run build",
+    "retrieval:benchmark": "node tests/retrieval-benchmark.mjs",
+    "pretest:pgvector-unavailable": "npm run build",
+    "test:pgvector-unavailable": "node tests/pgvector-unavailable.mjs"
   },
   "dependencies": {
     "@types/bcrypt": "^6.0.0",

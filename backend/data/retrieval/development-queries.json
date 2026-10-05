@@ -1,0 +1,358 @@
+{
+  "version": "development-v1",
+  "labels": "Manually specified before model measurements; development only, not independent human or held-out evaluation",
+  "queries": [
+    {
+      "id": "q01",
+      "query": "Undo actions in reverse order versus handling customers in arrival order",
+      "expectedKeys": [
+        "dsa.structures-1"
+      ],
+      "competency": "dsa.structures",
+      "root": "dsa",
+      "category": "conceptual-oral",
+      "difficulty": "easy"
+    },
+    {
+      "id": "q02",
+      "query": "How does sequential iteration compare with a nested loop in big O?",
+      "expectedKeys": [
+        "dsa.complexity-1"
+      ],
+      "competency": "dsa.complexity",
+      "root": "dsa",
+      "category": "conceptual-oral",
+      "difficulty": "easy"
+    },
+    {
+      "id": "q03",
+      "query": "Diagnose a binary search that never advances its lower bound",
+      "expectedKeys": [
+        "dsa.search-sort-2"
+      ],
+      "competency": "dsa.search-sort",
+      "root": "dsa",
+      "category": "debugging",
+      "difficulty": "stretch"
+    },
+    {
+      "id": "q04",
+      "query": "Find the earliest duplicate integer efficiently",
+      "expectedKeys": [
+        "dsa.structures-2"
+      ],
+      "competency": "dsa.structures",
+      "root": "dsa",
+      "category": "coding",
+      "difficulty": "standard"
+    },
+    {
+      "id": "q05",
+      "query": "Prevent clients from corrupting a shopping cart total by editing its list",
+      "expectedKeys": [
+        "oop.encapsulation-2"
+      ],
+      "competency": "oop.encapsulation",
+      "root": "oop",
+      "category": "scenario",
+      "difficulty": "standard"
+    },
+    {
+      "id": "q06",
+      "query": "Replace a payment implementation without changing checkout logic",
+      "expectedKeys": [
+        "oop.polymorphism-1"
+      ],
+      "competency": "oop.polymorphism",
+      "root": "oop",
+      "category": "conceptual-oral",
+      "difficulty": "easy"
+    },
+    {
+      "id": "q07",
+      "query": "Avoid many notification subclasses for retry and logging combinations",
+      "expectedKeys": [
+        "oop.composition-2"
+      ],
+      "competency": "oop.composition",
+      "root": "oop",
+      "category": "scenario",
+      "difficulty": "stretch"
+    },
+    {
+      "id": "q08",
+      "query": "Protect a bank account invariant with methods",
+      "expectedKeys": [
+        "oop.encapsulation-1"
+      ],
+      "competency": "oop.encapsulation",
+      "root": "oop",
+      "category": "conceptual-oral",
+      "difficulty": "easy"
+    },
+    {
+      "id": "q09",
+      "query": "SQL count orders per customer including customers with none",
+      "expectedKeys": [
+        "dbms-sql.queries-1"
+      ],
+      "competency": "dbms-sql.queries",
+      "root": "dbms-sql",
+      "category": "sql",
+      "difficulty": "standard"
+    },
+    {
+      "id": "q10",
+      "query": "Repeated customer contact fields cause inconsistent updates",
+      "expectedKeys": [
+        "dbms-sql.modeling-2"
+      ],
+      "competency": "dbms-sql.modeling",
+      "root": "dbms-sql",
+      "category": "scenario",
+      "difficulty": "standard"
+    },
+    {
+      "id": "q11",
+      "query": "Make both sides of an account transfer atomic",
+      "expectedKeys": [
+        "dbms-sql.transactions-indexes-1"
+      ],
+      "competency": "dbms-sql.transactions-indexes",
+      "root": "dbms-sql",
+      "category": "scenario",
+      "difficulty": "standard"
+    },
+    {
+      "id": "q12",
+      "query": "Aggregate paid purchases and filter customer groups by total",
+      "expectedKeys": [
+        "dbms-sql.queries-2"
+      ],
+      "competency": "dbms-sql.queries",
+      "root": "dbms-sql",
+      "category": "sql",
+      "difficulty": "stretch"
+    },
+    {
+      "id": "q13",
+      "query": "Shared address space and isolation of threads versus processes",
+      "expectedKeys": [
+        "os.process-thread-1"
+      ],
+      "competency": "os.process-thread",
+      "root": "os",
+      "category": "conceptual-oral",
+      "difficulty": "easy"
+    },
+    {
+      "id": "q14",
+      "query": "A growing cache survives garbage collection and exhausts memory",
+      "expectedKeys": [
+        "os.memory-2"
+      ],
+      "competency": "os.memory",
+      "root": "os",
+      "category": "debugging",
+      "difficulty": "standard"
+    },
+    {
+      "id": "q15",
+      "query": "Two tasks acquire locks in opposite order and become stuck",
+      "expectedKeys": [
+        "os.synchronization-2"
+      ],
+      "competency": "os.synchronization",
+      "root": "os",
+      "category": "debugging",
+      "difficulty": "stretch"
+    },
+    {
+      "id": "q16",
+      "query": "Prevent lost updates when workers increment a shared counter",
+      "expectedKeys": [
+        "os.synchronization-1"
+      ],
+      "competency": "os.synchronization",
+      "root": "os",
+      "category": "scenario",
+      "difficulty": "standard"
+    },
+    {
+      "id": "q17",
+      "query": "Compare reliable byte streams to datagram delivery",
+      "expectedKeys": [
+        "networks.transport-1"
+      ],
+      "competency": "networks.transport",
+      "root": "networks",
+      "category": "conceptual-oral",
+      "difficulty": "easy"
+    },
+    {
+      "id": "q18",
+      "query": "Health check works but an API URL returns not found",
+      "expectedKeys": [
+        "networks.http-dns-2"
+      ],
+      "competency": "networks.http-dns",
+      "root": "networks",
+      "category": "debugging",
+      "difficulty": "standard"
+    },
+    {
+      "id": "q19",
+      "query": "Fix a client certificate error without disabling verification",
+      "expectedKeys": [
+        "networks.tls-basics-2"
+      ],
+      "competency": "networks.tls-basics",
+      "root": "networks",
+      "category": "scenario",
+      "difficulty": "stretch"
+    },
+    {
+      "id": "q20",
+      "query": "Explain DNS and TLS when opening a secure website",
+      "expectedKeys": [
+        "networks.http-dns-1"
+      ],
+      "competency": "networks.http-dns",
+      "root": "networks",
+      "category": "conceptual-oral",
+      "difficulty": "easy"
+    },
+    {
+      "id": "q21",
+      "query": "Specify stable pagination for a notes REST API",
+      "expectedKeys": [
+        "backend-web.api-contracts-1"
+      ],
+      "competency": "backend-web.api-contracts",
+      "root": "backend-web",
+      "category": "scenario",
+      "difficulty": "standard"
+    },
+    {
+      "id": "q22",
+      "query": "Prevent editing another user record using only its identifier",
+      "expectedKeys": [
+        "backend-web.auth-validation-1"
+      ],
+      "competency": "backend-web.auth-validation",
+      "root": "backend-web",
+      "category": "debugging",
+      "difficulty": "standard"
+    },
+    {
+      "id": "q23",
+      "query": "A crashed notification worker repeats its side effect on retry",
+      "expectedKeys": [
+        "backend-web.persistence-jobs-1"
+      ],
+      "competency": "backend-web.persistence-jobs",
+      "root": "backend-web",
+      "category": "scenario",
+      "difficulty": "stretch"
+    },
+    {
+      "id": "q24",
+      "query": "Prevent mass assignment of administrator privileges",
+      "expectedKeys": [
+        "backend-web.auth-validation-2"
+      ],
+      "competency": "backend-web.auth-validation",
+      "root": "backend-web",
+      "category": "scenario",
+      "difficulty": "standard"
+    },
+    {
+      "id": "q25",
+      "query": "Sketch client API and storage for borrowing library books",
+      "expectedKeys": [
+        "design-lite.requirements-1"
+      ],
+      "competency": "design-lite.requirements",
+      "root": "design-lite",
+      "category": "system-design-lite",
+      "difficulty": "easy"
+    },
+    {
+      "id": "q26",
+      "query": "Design event registration with capacity checks and unique attendees",
+      "expectedKeys": [
+        "design-lite.service-data-1"
+      ],
+      "competency": "design-lite.service-data",
+      "root": "design-lite",
+      "category": "system-design-lite",
+      "difficulty": "standard"
+    },
+    {
+      "id": "q27",
+      "query": "A slow optional dependency must not block checkout",
+      "expectedKeys": [
+        "design-lite.reliability-2"
+      ],
+      "competency": "design-lite.reliability",
+      "root": "design-lite",
+      "category": "scenario",
+      "difficulty": "standard"
+    },
+    {
+      "id": "q28",
+      "query": "Save orders reliably while email delivery is unavailable",
+      "expectedKeys": [
+        "design-lite.reliability-1"
+      ],
+      "competency": "design-lite.reliability",
+      "root": "design-lite",
+      "category": "system-design-lite",
+      "difficulty": "stretch"
+    },
+    {
+      "id": "q29",
+      "query": "Group strings into buckets by length preserving order",
+      "expectedKeys": [
+        "programming.control-data-2"
+      ],
+      "competency": "programming.control-data",
+      "root": "programming",
+      "category": "coding",
+      "difficulty": "standard"
+    },
+    {
+      "id": "q30",
+      "query": "Maximum finder fails on all negative numbers",
+      "expectedKeys": [
+        "programming.debug-test-1"
+      ],
+      "competency": "programming.debug-test",
+      "root": "programming",
+      "category": "debugging",
+      "difficulty": "standard"
+    },
+    {
+      "id": "q31",
+      "query": "Async write reports success before completion",
+      "expectedKeys": [
+        "programming.error-handling-2"
+      ],
+      "competency": "programming.error-handling",
+      "root": "programming",
+      "category": "debugging",
+      "difficulty": "standard"
+    },
+    {
+      "id": "q32",
+      "query": "Collapse adjacent repeated letters in a string",
+      "expectedKeys": [
+        "programming.debug-test-2"
+      ],
+      "competency": "programming.debug-test",
+      "root": "programming",
+      "category": "coding",
+      "difficulty": "standard"
+    }
+  ]
+}

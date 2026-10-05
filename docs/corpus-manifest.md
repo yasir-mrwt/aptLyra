@@ -99,4 +99,25 @@ Unset external datastore environment variables before tests. `corpus:seed-manife
 
 ## PLANNED FOR LATER PHASE
 
-No embeddings, RAG, planner, live selection, scoring or confidence computation. Expected concepts/rubrics remain Phase 7 review work; no external company corpus is claimed. The only next recommended phase is Phase 5 after Phase 4 validation/review is complete.
+Internal semantic retrieval is now implemented in Phase 5; live selection/planning,
+scoring and confidence remain later work. Expected concepts/rubrics remain Phase 7
+review work, and no external company corpus is claimed. Recommend Phase 6 only.
+
+
+## Phase 5 embedding evidence — CURRENTLY IMPLEMENTED
+
+The exact approved packet and linked JSON bytes are unchanged. All 48 eligible
+published questions were embedded with pinned L3 MiniLM, dimension 384 / mean-L2,
+through the real FastAPI/backend CLI in a fresh disposable PostgreSQL/pgvector
+fixture; zero technical-reference chunks, private data or fictional corpus records
+were indexed. The repeated run embedded zero / skipped 48 / failed zero. Exact
+counts and run-specific generation are in [the measurement artifact](retrieval-benchmark-results.json).
+The corpus generation fingerprints database-local entity/version IDs, content
+hashes and model settings, so a fresh publication has a different generation.
+
+Benchmark withdrawal checks then retire one document/question in that disposable
+run; the count 48 is the verified active count **before** those checks. Fixtures
+are dropped afterward. No persistent/production corpus was populated, no approval
+was extended beyond the recorded packet hash, and no technical rubric/reference
+was manufactured. See [model decision](embedding-model-selection.md),
+[retrieval benchmark](retrieval-benchmark.md) and [setup](../SETUP.md).

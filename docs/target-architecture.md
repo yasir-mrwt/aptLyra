@@ -8,8 +8,8 @@ caches/XP and BullMQ resume jobs, REST and authenticated Socket.IO updates. Ques
 and scores are generated through prompts. Interview work runs in the API process.
 Phase 3 supplies versioned migrations, taxonomy and preparatory knowledge, rubric,
 plan, evidence, embedding-metadata and operation/outbox tables. These are not used
-by current interview execution: no durable interview jobs, embeddings/retrieval,
-generated plans or new rubric/confidence computation exists. Reload reads an
+by current interview execution: no durable interview jobs, generated plans or new rubric/confidence computation
+exists. Phase 5 internal embeddings/retrieval now exist separately from live execution. Reload reads an
 owned session over REST; current events have no durable revision/replay protocol.
 See [database schema](database-schema.md) and [migration policy](migrations.md).
 No Phase 3 user-facing behavior change; schema is preparatory.
@@ -34,7 +34,7 @@ run the worker with the backend; a separate process uses the same code and contr
 flowchart LR
     UI[React / Redux / Ava] -->|Owned REST commands and reads| API[Express orchestration]
     API -->|Authenticated Socket.IO notifications| UI
-    API --> PG[(PostgreSQL + planned pgvector)]
+    API --> PG[(PostgreSQL + pgvector)]
     API --> Redis[(Redis / BullMQ / bounded caches)]
     Redis --> Worker[Backend workers]
     Worker -->|Read and transactional commit| PG
@@ -44,7 +44,8 @@ flowchart LR
 ```
 
 Phase 2 supplied this design without implementation. Phase 3 implements its schema
-foundation; no new worker, pgvector extension or endpoint is enabled.
+foundation; no interview worker or candidate-facing intelligence endpoint is enabled.
+Phase 5 enables pgvector and an authenticated internal embedding endpoint.
 
 ## Target lifecycle and recovery
 
@@ -222,8 +223,9 @@ exclude raw resumes, audio and candidate answers from the shared index. Store mo
 identifier/revision, dimension, normalization, embedding version, chunker version,
 content hash and creation time. One query uses one compatible model/dimension/corpus
 version. Re-embedding creates a staged version; an atomic active-version switch
-prevents mixed spaces. Model selection, dimension and index tuning are Phase 5
-decisions based on the corpus/latency experiment; none is installed now.
+prevents mixed spaces. Phase 5 selected pinned local L3 MiniLM / 384d / mean-L2 from the development
+benchmark, with exact filtered pgvector search and no ANN index. See the implemented
+[retrieval contract](retrieval.md), which supersedes planned retrieval details here.
 
 Retrieve in two channels: interview-experience/question candidates for selection,
 and reviewed technical-reference chunks for generation/evaluation. Apply approved
@@ -239,7 +241,7 @@ hits. Return IDs/versions, permitted excerpts, source title/link/license, qualit
 timestamps, filter snapshot, rank/similarity, model/corpus version and exclusion
 reasons. Similarity alone cannot override licensing, role, or evidence quality.
 
-Fallback order: exact filtered retrieval → adjacent junior difficulty with explicit
+PLANNED FOR PHASE 6 planner fallback order: exact filtered retrieval → adjacent junior difficulty with explicit
 reason → unchanged reviewed local seed for the selected competency → deterministic
 approved template labeled fallback → underfilled plan/no-score practice when valid
 technical grounding is absent. A candidate must confirm any company/date constraint
@@ -254,7 +256,7 @@ must fit the existing bounded internal HTTP requests; provider outages return ho
 progress/failure and fallback. Phase 10/11 will report cold starts, provider time,
 queue wait and hardware separately and revise these targets if evidence warrants.
 
-Redis may cache approved public retrieval results for five minutes, keyed by query
+PLANNED ONLY IF MEASUREMENTS WARRANT: Redis may cache approved public retrieval results for five minutes, keyed by query
 hash, complete filters, model and corpus/policy revision. Recheck permission/status
 before use and invalidate on withdrawal or version switch. Personalized queries are
 session/owner-scoped and excluded from shared caches. Persist the selected retrieval
@@ -393,7 +395,19 @@ distinguishes real reviewed artifacts/disposable imports from fictional test dat
 
 No candidate-facing Phase 4 behavior; reviewed corpus is preparatory for Phase 5/6.
 
-The target retrieval/planner/scoring contracts above remain PLANNED FOR LATER PHASE.
-No model extraction, vector generation/index, live question selection or concept/
+The planner/scoring/runtime integration contracts remain PLANNED FOR LATER PHASE.
+Phase 5 retrieval is implemented separately. No model extraction, live question selection or concept/
 rubric engine is activated. Backend owns every durable ingestion write; FastAPI has
 no new database access. Phase 2 remains the architecture source of truth.
+
+
+## Phase 5 implementation boundary
+
+CURRENTLY IMPLEMENTED: backend-owned reviewed-corpus jobs, active/staged compatible
+spaces, two internal retrieval channels, complete filters/provenance/evidence,
+deduplication and immediate withdrawal checks, pinned FastAPI CPU embeddings and
+measured development benchmarks. Retrieval caching is deferred pending measured
+benefit; no ANN index is justified for this corpus size.
+Technical-reference corpus count is zero. Query hashes are stored without raw text.
+
+No live interview behavior change in Phase 5; retrieval is ready for the Phase 6 planner.

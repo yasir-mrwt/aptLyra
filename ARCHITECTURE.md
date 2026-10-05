@@ -4,8 +4,8 @@
 
 The Phase 1 baseline preserves React 19/Vite/TypeScript, Express 5/TypeScript,
 FastAPI/Pydantic, PostgreSQL, and Redis/BullMQ. Ava remains the existing SVG
-interviewer with cloud TTS and browser voice fallback. There is no local GPU,
-RAG, pgvector, research agent, or new scoring engine.
+interviewer with cloud TTS and browser voice fallback. The live baseline has no retrieval integration, research agent or new scoring engine.
+Phase 5 adds CPU semantic retrieval separately, described below; no local GPU is required.
 
 ## CURRENTLY IMPLEMENTED: Phase 3 storage foundation
 
@@ -16,8 +16,8 @@ integrity. Express owns writes; FastAPI has no database access. Current intervie
 still use Phase 1 JSONB/scoring/background work. Startup verifies the old bootstrap;
 knowledge migrations are explicit. No Phase 3 user-facing behavior change; schema
 is preparatory. See [database schema](docs/database-schema.md) and
-[migration operations](docs/migrations.md). No pgvector/model, ingestion, planner,
-evaluator or durable executor is enabled.
+[migration operations](docs/migrations.md). Phase 3 itself enabled no ingestion/model/retrieval execution; Phases 4–5 now add
+editorial ingestion and internal retrieval. Planner, evaluator and durable executor remain later work.
 
 ## PLANNED FOR LATER PHASE: frozen FYP architecture
 
@@ -28,9 +28,9 @@ unbounded role coverage in the target design. Technical performance, candidate
 delivery feedback and evaluator confidence are separate outputs.
 
 Express remains the owner of authentication, orchestration and PostgreSQL writes.
-FastAPI computes validated AI results; later pgvector retrieval stays in PostgreSQL,
+FastAPI computes validated AI results; Phase 5 pgvector retrieval stays in PostgreSQL,
 with Redis/BullMQ for jobs/caches. Versioned questions, rubrics, plans and evidence
-supplement compatible legacy session JSONB at the schema level. Their runtime use
+supplement compatible legacy session JSONB at the schema level. Live planner/evaluator use
 and durable operations/outbox recovery remain planned; current interviews do not use them.
 
 | Design document | Purpose |
@@ -235,3 +235,18 @@ No candidate-facing Phase 4 behavior; reviewed corpus is preparatory for Phase 5
 
 See [ingestion](docs/ingestion.md), [source policy](docs/source-policy.md),
 [reviewed corpus](docs/corpus-manifest.md) and [schema](docs/database-schema.md).
+
+
+## Phase 5 retrieval — CURRENTLY IMPLEMENTED
+
+The reviewed 48-question corpus now has an internal semantic retrieval path:
+FastAPI computes pinned local CPU embeddings; Express controls generation/filtering
+and PostgreSQL/pgvector owns vector storage, ranking and evidence. Migration 005
+adds a 384-dimension vector table, staged/active generations and availability/
+lineage guards without changing migrations 001–004 or legacy session execution.
+Question and technical-reference channels are separate; current technical-reference
+coverage is zero and is reported honestly. No shared candidate data is indexed.
+See [retrieval](docs/retrieval.md), [model decision](docs/embedding-model-selection.md)
+and [development benchmark](docs/retrieval-benchmark.md).
+
+No live interview behavior change in Phase 5; retrieval is ready for the Phase 6 planner.

@@ -62,8 +62,8 @@ export interface PlanInput {
 export interface RetrievalInput {
   operationKey: string; sessionId?: string; planId?: string; redactedQuery?: string; queryHash: string;
   filters?: JsonObject; embeddingMetadata?: JsonObject; corpusVersion: string; sourcePolicyRevision: string;
-  outcome: "hits" | "no-evidence" | "unavailable"; cacheHit?: boolean;
-  results: { questionVersionId?: string; chunkId?: string; rank: number; similarity?: number; selected?: boolean; reason: string }[];
+  outcome: "hits" | "no-evidence" | "unavailable" | "success" | "no_match" | "invalid_filters" | "model_mismatch" | "corpus_unavailable"; cacheHit?: boolean;
+  results: { questionVersionId?: string; chunkId?: string; rank: number; similarity?: number; selected?: boolean; reason: string; provenanceSnapshot?: Json[] }[];
 }
 export interface AnswerInput {
   planItemId: string; attempt: number; inputKind: "text" | "audio" | "code" | "diagram" | "mixed";

@@ -82,10 +82,25 @@ def create_app() -> FastAPI:
     # Include Routers: Modular API endpoints for generation and evaluation
     # We apply the API key dependency to these routers so they are protected
     from app.api.speech import router as speech_router
+    from app.api.embeddings import router as embeddings_router
 
     app.include_router(interview_router, tags=["Interview"], dependencies=[Depends(verify_api_key)])
     app.include_router(v2_resume_router, dependencies=[Depends(verify_api_key)])
     app.include_router(speech_router, prefix="/speech", tags=["Speech"], dependencies=[Depends(verify_api_key)])
+    app.include_router(embeddings_router, dependencies=[Depends(verify_api_key)])
+    from app.api.embedding_body_limit import EmbeddingBodyLimit
+    app.add_middleware(EmbeddingBodyLimit)
+
+    # Validation errors for this internal contract must not echo personalized text.
+    from fastapi.exceptions import RequestValidationError
+    from fastapi.exception_handlers import request_validation_exception_handler
+    from fastapi.responses import JSONResponse
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request, exc):
+        if request.url.path == "/internal/embeddings":
+            return JSONResponse(status_code=422, content={"detail": {"code": "invalid_input"}})
+        return await request_validation_exception_handler(request, exc)
 
     @app.get("/", tags=["Health"])
     async def root():

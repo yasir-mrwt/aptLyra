@@ -1,7 +1,7 @@
 name: techvera-baseline
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:0.8.2-pg16
     environment:
       POSTGRES_DB: techvera_test
       POSTGRES_USER: techvera_test
@@ -23,6 +23,20 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+  postgres-without-vector:
+    profiles: [without-vector]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: techvera_test
+      POSTGRES_USER: techvera_test
+      POSTGRES_PASSWORD: techvera_local_fixture
+    ports: ["127.0.0.1:15433:5432"]
+    tmpfs: [/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U techvera_test -d techvera_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
   ai-checks:
     profiles: [checks]
     build: ./ai-service
@@ -30,4 +44,18 @@ services:
     environment:
       NODE_ENV: development
       PYTHONDONTWRITEBYTECODE: "1"
-    command: ["sh", "-c", "python -c 'import main, requests, fitz, docx, pytesseract, pdf2image' && ruff check --no-cache . --select E9,F63,F7,F82 && python -m pytest -p no:cacheprovider tests -q"]
+      PYTHON_DOTENV_DISABLED: "1"
+    command: ["sh", "-c", "python -c 'import main, requests, fitz, docx, pytesseract, pdf2image' && ruff check --no-cache . --select E9,F63,F7,F82 && mypy --cache-dir=/tmp/mypy --ignore-missing-imports --follow-imports=silent app/services/embedding_runtime.py app/api/embeddings.py app/api/embedding_body_limit.py && python -m pytest -p no:cacheprovider tests -q"]
+  embeddings:
+    profiles: [embeddings]
+    build: ./ai-service
+    ports: ["127.0.0.1:18005:8000"]
+    volumes:
+      - "./ai-service:/app:ro"
+      - "${EMBEDDING_TEST_MODEL_DIR:-/tmp/techvera-phase5-models/l3}:/model:ro"
+    environment:
+      EMBEDDING_MODEL_DIR: /model
+      INTERNAL_API_KEY: phase5-local-fixture-only
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHON_DOTENV_DISABLED: "1"
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

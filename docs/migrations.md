@@ -11,6 +11,8 @@ new dependency. Run compiled code with the supported Node 20.x baseline.
 | `001_legacy_baseline.sql` | Adopt the unchanged idempotent five-table bootstrap, preserving populated legacy rows |
 | `002_knowledge_foundation.sql` | Add domains, relational knowledge/evidence/durability structures, constraints/triggers/indexes and session ownership FK target |
 | `003_junior_taxonomy.sql` | Seed only frozen `junior-se-v1`: eight roots and 24 children |
+| `004_controlled_ingestion.sql` | Local adapters, reviewers, quarantine/candidates, experiences, append-only review audit and publication guards |
+| `005_pgvector_retrieval.sql` | pgvector, 384d values, generations, eligibility views, identity/withdrawal guards and retrieval lineage snapshots |
 
 Migration filenames use unique ordered `NNN_name.sql` sequences. The runner locks
 the database using a fixed session advisory-lock key, creates `schema_migrations`,
@@ -103,8 +105,8 @@ reviewed runner/policy extension; do not silently place them in these files.
 
 ## PLANNED FOR LATER PHASE
 
-Phase 4 now provides permitted local ingestion (see the addition below). Model choice/embedding values/pgvector extension
-and vector indexes belong to Phase 5. Planner/scoring execution and durable job/
+Phase 4 now provides permitted local ingestion (see the addition below). Phase 5 now adds the selected model, compatible embedding values and pgvector
+(see below). Planner/scoring execution and durable job/
 outbox dispatch remain later work. These tables are prerequisites only. See
 [database schema](database-schema.md) and [the roadmap](implementation-roadmap.md).
 
@@ -117,3 +119,21 @@ not startup or migrations. Clean/adopted/repeat/concurrent/rollback/immutability
 regressions now test all four files. Test-only failure migration is numbered 005.
 Run `test:ingestion` and `test:seed` alongside `test:schema` and baseline checks.
 See [ingestion](ingestion.md). No production migration was performed in Phase 4.
+
+
+## Phase 5 migration — CURRENTLY IMPLEMENTED
+
+Use the checksum-safe explicit migration command after confirming target PG support.
+`vector` must be installed on the server and the migrator must be allowed to enable
+it. Migration 005 fails with SQLSTATE 55000 and a safe pgvector installation message
+when unavailable; it never substitutes fake vectors. Stock PostgreSQL failure is
+verified with the optional `without-vector` disposable fixture on port 15433.
+Migrations 001–004 are unchanged. No cloud/production migration was performed.
+
+The normal disposable fixture now uses `pgvector/pgvector:0.8.2-pg16` (PostgreSQL 16).
+This is the test image pin, not an instruction to update a deployed PG version.
+For native installation or supported hosted availability consult the
+[official pgvector installation guide](https://github.com/pgvector/pgvector).
+Dimension/model changes require a new reviewed forward migration/generation design;
+do not edit applied files or reuse incompatible vector space. CLI creation of
+embeddings is separate from DDL and publication. See [retrieval](retrieval.md).

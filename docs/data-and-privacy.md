@@ -105,4 +105,24 @@ must run/schedule it**; physical cleanup without that command and full account/m
 provider/backup erasure remain unimplemented. Withdrawal clears source/chunk content,
 retires imported questions and preserves minimal audit; immutable historical question
 versions remain retired. Later selection must check availability throughout the chain.
-No cache/embedding exists yet to invalidate. See [source policy](source-policy.md).
+Phase 4 itself had no cache/embedding; Phase 5 invalidates unavailable vectors
+and uses no retrieval cache. See [source policy](source-policy.md).
+
+
+## Phase 5 shared retrieval privacy — CURRENTLY IMPLEMENTED
+
+Only published, actually reviewed non-fixture editorial questions and eligible
+technical-reference chunks can be indexed. Candidate answers, resumes and audio
+never enter the shared corpus or model benchmark. Local CPU inference sends no
+source/query content to an external embedding provider. Explicit pinned model
+artifact downloads contact upstream hosts once during operator preparation; serving
+requests read local files and never download. Caches/models stay outside Git.
+
+Retrieval audits persist query hashes, validated filters and real source lineage,
+not raw query text or arbitrary personalized content. Hashes can be linkable and
+are not an anonymization guarantee. No Redis retrieval cache is added. Availability
+and generation checks plus database retirement triggers exclude withdrawn sources,
+documents, chunks and questions immediately for new retrieval, while preserving
+minimal historical evidence. Shared vector history remains versioned/retired;
+physical deletion/backup erasure and personalized owner/retention integration remain
+later lifecycle work. See [retrieval](retrieval.md) for precise bounds and reasons.

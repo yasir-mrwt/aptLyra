@@ -1,0 +1,132 @@
+{
+  "environment": "Linux-7.0.12-linuxkit-aarch64-with-glibc2.41",
+  "threads": 2,
+  "results": [
+    {
+      "key": "l3",
+      "model": {
+        "id": "sentence-transformers/paraphrase-MiniLM-L3-v2",
+        "revision": "4ca70771034acceecb2e72475f72050fcdde4ddc",
+        "dimension": 384,
+        "normalization": "l2",
+        "embeddingVersion": "onnx-mean-l2-v1",
+        "maxTokens": 128,
+        "sha256": {
+          "model.onnx": "84007b609c7a626b0adf825b1e36b839e705cd5995b4865b6e6696541d0a6350",
+          "tokenizer.json": "a9576e4dadfe7f78f071a1c00ba6902cc83ec6ed7e9b590ee974950bd4d54393"
+        }
+      },
+      "onnxBytes": 69044978,
+      "queryCount": 32,
+      "hitRateAt1": 0.90625,
+      "hitRateAt5": 1.0,
+      "rootFilteredHitRateAt5": 1.0,
+      "minimumExpectedSimilarity": 0.33523986923429233,
+      "ranks": [
+        1,
+        1,
+        1,
+        3,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        2,
+        1,
+        1,
+        1,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "queryEmbedding": {
+        "medianMs": 6.82,
+        "p95Ms": 7.204
+      },
+      "modelLoad": {
+        "medianMs": 516.14,
+        "p95Ms": 971.741
+      }
+    },
+    {
+      "key": "l6",
+      "model": {
+        "id": "sentence-transformers/all-MiniLM-L6-v2",
+        "revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+        "dimension": 384,
+        "normalization": "l2",
+        "embeddingVersion": "onnx-mean-l2-v1",
+        "maxTokens": 256,
+        "sha256": {
+          "model.onnx": "6fd5d72fe4589f189f8ebc006442dbb529bb7ce38f8082112682524616046452",
+          "tokenizer.json": "be50c3628f2bf5bb5e3a7f17b1f74611b2561a3a27eeab05e5aa30f411572037"
+        }
+      },
+      "onnxBytes": 90405214,
+      "queryCount": 32,
+      "hitRateAt1": 0.9375,
+      "hitRateAt5": 1.0,
+      "rootFilteredHitRateAt5": 1.0,
+      "minimumExpectedSimilarity": 0.3560955475535894,
+      "ranks": [
+        1,
+        1,
+        1,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "queryEmbedding": {
+        "medianMs": 13.407,
+        "p95Ms": 14.514
+      },
+      "modelLoad": {
+        "medianMs": 456.614,
+        "p95Ms": 658.451
+      }
+    }
+  ]
+}

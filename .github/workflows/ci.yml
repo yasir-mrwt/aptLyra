@@ -11,8 +11,19 @@ jobs:
     name: PostgreSQL migration and repository checks
     runs-on: ubuntu-latest
     services:
-      postgres:
+      postgres-without-vector:
         image: postgres:16-alpine
+        env:
+          POSTGRES_DB: techvera_test
+          POSTGRES_USER: techvera_test
+          POSTGRES_PASSWORD: techvera_local_fixture
+        ports:
+          - 15433:5432
+        options: >-
+          --health-cmd "pg_isready -U techvera_test -d techvera_test"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+      postgres:
+        image: pgvector/pgvector:0.8.2-pg16
         env:
           POSTGRES_DB: techvera_test
           POSTGRES_USER: techvera_test
@@ -36,6 +47,8 @@ jobs:
     - run: npm run test:schema
     - run: npm run test:ingestion
     - run: npm run test:seed
+    - run: npm run test:retrieval
+    - run: npm run test:pgvector-unavailable
 
   backend-checks:
     name: Backend Node.js Checks
@@ -136,5 +149,10 @@ jobs:
         ruff check . --exit-zero
 
     - name: Run Pytest
+      env:
+        PYTHON_DOTENV_DISABLED: "1"
       run: |
         python -m pytest tests/
+
+    - name: Typecheck embedding implementation
+      run: mypy --ignore-missing-imports --follow-imports=silent app/services/embedding_runtime.py app/api/embeddings.py app/api/embedding_body_limit.py
