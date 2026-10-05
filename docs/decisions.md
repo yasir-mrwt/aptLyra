@@ -141,3 +141,7 @@ Stop after Phase 4. Recommend Phase 5 only once Phase 4 verification is complete
 
 No live interview behavior change in Phase 5; retrieval is ready for the Phase 6 planner.
 Stop after Phase 5. Recommend only Phase 6 — Interview Planner.
+
+## Phase 6 — Deterministic planner and legacy coexistence
+
+Run deterministic-v1 allocation in Express, consuming existing Phase 5 retrieval instead of introducing a second planning service/store. Preserve reviewed content and real provenance, including strict company/date constraints. Approved fallback templates reference unchanged seed versions; no new generated questions or expanded human approval. Use additive migration 006, immutable relational UUID items and an owned session link. Preview persists only configuration/evidence; confirmation revalidates under editorial→session locks and projects questions into the legacy runner. Label legacy grading explicitly. Keep frozen estimates and honest reduced-count/difficulty warnings; bounded requests are not durable operations. Name-neutral planning components share the existing display profile. Preserve compatibility identifiers and all upstream/model attribution. Details: [planner](interview-planner.md). Phase 7 is not implemented.

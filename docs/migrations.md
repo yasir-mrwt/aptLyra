@@ -106,7 +106,7 @@ reviewed runner/policy extension; do not silently place them in these files.
 ## PLANNED FOR LATER PHASE
 
 Phase 4 now provides permitted local ingestion (see the addition below). Phase 5 now adds the selected model, compatible embedding values and pgvector
-(see below). Planner/scoring execution and durable job/
+(see below). Phase 6 adds planner execution below; scoring execution and durable job/
 outbox dispatch remain later work. These tables are prerequisites only. See
 [database schema](database-schema.md) and [the roadmap](implementation-roadmap.md).
 
@@ -137,3 +137,7 @@ For native installation or supported hosted availability consult the
 Dimension/model changes require a new reviewed forward migration/generation design;
 do not edit applied files or reuse incompatible vector space. CLI creation of
 embeddings is separate from DDL and publication. See [retrieval](retrieval.md).
+
+## Phase 6 migration
+
+`006_interview_planner.sql` is additive owned plan/session linkage, immutable setup/provenance snapshots and planner-specific invariant guards. Fresh and adopted databases apply six migrations; reapplication is a no-op. Failure-fixture migration is now 007. Migration checksums 001–005 remain unchanged. Rollout still requires the explicit reviewed migration command; no production/staging migration is performed. See [schema](database-schema.md) and [planner](interview-planner.md).

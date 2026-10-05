@@ -11,6 +11,7 @@ import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
+import InterviewPlan from "./pages/InterviewPlan";
 import InterviewRunner from "./pages/InterviewRunner";
 import SessionReview from "./pages/SessionReview";
 import PrivateRoute from "./components/PrivateRoute";
@@ -85,6 +86,7 @@ function App() {
 
                 <Route element={<PrivateRoute />} >
                   <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/plans/:planId" element={<InterviewPlan />} />
                   <Route path="/resume-analyzer" element={<ResumeAnalyzer />} />
                   <Route path="/analytics" element={<AnalyticsDashboard />} />
                   <Route path="/interview/:sessionId" element={<InterviewRunner />} />

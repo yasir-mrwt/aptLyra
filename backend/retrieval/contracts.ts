@@ -5,17 +5,19 @@ export const MODEL = Object.freeze({modelId:"sentence-transformers/paraphrase-Mi
   embeddingVersion:"onnx-mean-l2-v1"});
 export type Purpose = "question-selection" | "technical-grounding";
 export type Outcome = "success" | "no_match" | "unavailable" | "invalid_filters" | "model_mismatch" | "corpus_unavailable";
-export type Reason = "exact_match" | "semantic_match" | "no_relevant_hit" | "no_permitted_source" | "model_unavailable" | "corpus_unavailable" | "invalid_filters" | "model_mismatch";
+export type Reason = "exact_match" | "semantic_match" | "reviewed_seed_available" | "no_relevant_hit" | "no_permitted_source" | "model_unavailable" | "corpus_unavailable" | "invalid_filters" | "model_mismatch";
 export interface Filters {
   taxonomyVersion?: string; competencies?: string[]; role?: "Software Engineer" | "Backend Developer" | "Full Stack Developer";
   difficulties?: Difficulty[]; categories?: QuestionCategory[]; origins?: QuestionOrigin[];
   qualities?: ("technical-reference" | "reported-experience" | "unverified")[];
   sourceStates?: "enabled"[]; reviewStates?: "approved"[];
   company?: string; occurredAfter?: string; occurredBefore?: string;
+  sourceKeys?: string[]; documentKeys?: string[];
   excludedFamilies?: string[]; excludedVersions?: string[]; alreadySelectedIds?: string[];
 }
 export interface RetrievalRequest { query: string; filters?: Filters; limit?: number; candidatePool?: number;
-  minimumSimilarity?: number; expectedCorpusGeneration?: string; expectedModelRevision?: string }
+  minimumSimilarity?: number; expectedCorpusGeneration?: string; expectedModelRevision?: string;
+  strategy?: "semantic" | "structured-seed"; ownership?: { userId: string; sessionId: string } }
 export interface EmbeddingBatch { modelId: string; modelRevision: string; dimension: number; normalization: string;
   embeddingVersion: string; vectors: number[][]; processingMs: number }
 export interface Embedder { embed(texts: string[], mode: "documents" | "query"): Promise<EmbeddingBatch> }
@@ -29,7 +31,7 @@ export interface Entity {
 export interface RetrievalHit {
   questionId: string | null; questionVersionId: string | null; chunkId: string | null; familyKey: string | null;
   text: string; competency: string | null; category: QuestionCategory | null; difficulty: Difficulty | null; origin: QuestionOrigin | null;
-  provenance: Record<string, Json>[]; provenanceAvailable: true; similarity: number; rank: number; reason: Reason;
+  provenance: Record<string, Json>[]; provenanceAvailable: true; similarity: number | null; rank: number; reason: Reason;
   retrievalOperationId: string; model: typeof MODEL; corpusGeneration: string;
 }
 export interface RetrievalResponse {

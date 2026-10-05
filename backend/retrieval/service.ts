@@ -11,7 +11,7 @@ import type { RetrievalInput } from "../types/knowledge.js";
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const normalize=(s:string)=>s.normalize("NFKC").trim().replace(/\s+/g," ").toLowerCase();
 const keys=new Set(["taxonomyVersion","competencies","role","difficulties","categories","origins","qualities",
-  "sourceStates","reviewStates","company","occurredAfter","occurredBefore","excludedFamilies","excludedVersions","alreadySelectedIds"]);
+  "sourceStates","reviewStates","company","occurredAfter","occurredBefore","excludedFamilies","excludedVersions","alreadySelectedIds","sourceKeys","documentKeys"]);
 function validDate(value:unknown) {
   return typeof value==="string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
     && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0,10)===value;
@@ -25,9 +25,11 @@ function validate(request:RetrievalRequest): Filters {
     || (request.minimumSimilarity!==undefined && (!Number.isFinite(request.minimumSimilarity) || request.minimumSimilarity<0 || request.minimumSimilarity>1))
     || (f.taxonomyVersion!==undefined && (typeof f.taxonomyVersion!=="string" || f.taxonomyVersion.length>100))
     || (request.expectedCorpusGeneration!==undefined && !/^corpus-[0-9a-f]{64}$/.test(request.expectedCorpusGeneration))
-    || (request.expectedModelRevision!==undefined && (typeof request.expectedModelRevision!=="string" || request.expectedModelRevision.length>100)))
+    || (request.expectedModelRevision!==undefined && (typeof request.expectedModelRevision!=="string" || request.expectedModelRevision.length>100))
+    || (request.strategy!==undefined && !["semantic","structured-seed"].includes(request.strategy))
+    || (request.strategy==="structured-seed" && (!f.sourceKeys?.length || f.sourceKeys.some(k=>k!=="techvera-junior-se-seed-v1"))))
     throw new RetrievalFailure("invalid_filters");
-  const choices:Record<string,string[]|null>={competencies:null,excludedFamilies:null,excludedVersions:null,alreadySelectedIds:null,
+  const choices:Record<string,string[]|null>={competencies:null,excludedFamilies:null,excludedVersions:null,alreadySelectedIds:null,sourceKeys:null,documentKeys:null,
     difficulties:["easy","standard","stretch"],categories:["conceptual-oral","scenario","coding","debugging","sql","system-design-lite"],
     origins:["retrieved","generated","adapted","fallback","follow-up"],qualities:["technical-reference","reported-experience","unverified"],
     sourceStates:["enabled"],reviewStates:["approved"]};
@@ -90,6 +92,8 @@ export function filterSql(f:Filters,purpose:Purpose) {
     if(ids.length)clauses.push(`NOT e.entity_id=ANY(${add(ids)}::uuid[])`);
   }
   const lineage:string[]=[];
+  if(f.sourceKeys?.length)clauses.push(`EXISTS(SELECT 1 FROM jsonb_array_elements(e.provenance) p JOIN sources s ON s.id=(p->>'sourceId')::uuid WHERE s.stable_key=ANY(${add(f.sourceKeys)}::text[]))`);
+  if(f.documentKeys?.length)lineage.push(`p->>'externalKey'=ANY(${add(f.documentKeys)}::text[])`);
   if(f.qualities?.length)lineage.push(`p->>'quality'=ANY(${add(f.qualities)}::text[])`);
   if(f.company)lineage.push(`p->>'company'=${add(f.company)} AND p->>'sourceType'='voluntary-experience'`);
   if(f.occurredAfter)lineage.push(`(p->>'occurredOn')::date>=${add(f.occurredAfter)}::date`);
@@ -101,7 +105,7 @@ export function filterSql(f:Filters,purpose:Purpose) {
   return {sql:clauses.join(" AND "),params};
 }
 
-type Candidate=Entity & {similarity:number; exact:boolean; representative:number; duplicate_group:string};
+type Candidate=Entity & {similarity:number|null; exact:boolean; representative:number; duplicate_group:string};
 export class RetrievalService {
   constructor(private embedder:Embedder=new EmbeddingClient()) {}
   retrieveQuestions(request:RetrievalRequest) { return this.retrieve("question-selection",request); }
@@ -111,7 +115,7 @@ export class RetrievalService {
     let embeddingMs=0,databaseMs=0;let candidates:Candidate[]=[];
     let outcome:Outcome="no_match",reason:Reason="no_relevant_hit";
     const selected=new Map<string,Reason>();
-    let vector:number[]|null=null;
+    let vector:number[]|null=null;let structured=false;
     try {
       filters=validate(request);
       const taxonomy=(await query("SELECT id FROM competencies WHERE taxonomy_version=$1 AND status='active'",[filters.taxonomyVersion])).rows;
@@ -129,8 +133,11 @@ export class RetrievalService {
             WHERE coalesce(m.question_version_id,m.chunk_id)=e.entity_id AND m.purpose=e.purpose AND m.content_hash=e.content_hash
               AND m.status='active' AND m.corpus_generation=$2)`,[purpose,generation])).rows[0].n;
         if(missing)throw new RetrievalFailure("corpus_unavailable");
-        const start=performance.now();const batch=validateBatch(await this.embedder.embed([request.query],"query"),1);
-        vector=batch.vectors[0];embeddingMs=performance.now()-start;
+        if(request.strategy==="structured-seed")structured=true;
+        else {
+          const start=performance.now();const batch=validateBatch(await this.embedder.embed([request.query],"query"),1);
+          vector=batch.vectors[0];embeddingMs=performance.now()-start;
+        }
       } else reason="no_permitted_source";
     } catch(error) {
       const code=error instanceof RetrievalFailure?error.code:"model_unavailable";
@@ -141,7 +148,7 @@ export class RetrievalService {
     }
     const response=await withDatabaseLock<RetrievalResponse>("ingestion:editorial:v1",async()=>{
       await query("SET LOCAL statement_timeout='5s'");
-      if(vector) {
+      if(vector || structured) {
         const current=(await query(`SELECT g.id,EXISTS(SELECT 1 FROM retrieval_entities e WHERE e.purpose=$1
           AND NOT EXISTS(SELECT 1 FROM embedding_metadata m JOIN embedding_vectors ev ON ev.metadata_id=m.id
             WHERE coalesce(m.question_version_id,m.chunk_id)=e.entity_id AND m.purpose=e.purpose
@@ -151,9 +158,9 @@ export class RetrievalService {
         else {
           const start=performance.now(),built=filterSql(filters,purpose);
           const add=(v:unknown)=>{built.params.push(v);return `$${built.params.length}`;};
-          const g=add(generation),v=add(JSON.stringify(vector)),q=add(normalize(request.query)),pool=add(request.candidatePool || 20);
+          const g=add(generation),v=structured?null:add(JSON.stringify(vector)),q=add(normalize(request.query)),pool=add(request.candidatePool || 20);
           candidates=(await query(`WITH scored AS MATERIALIZED (
-            SELECT e.*,ev.duplicate_group,least(1.0,greatest(-1.0,1-(ev.value <=> ${v}::vector))) AS similarity,
+            SELECT e.*,ev.duplicate_group,${structured?"NULL::double precision":`least(1.0,greatest(-1.0,1-(ev.value <=> ${v}::vector)))`} AS similarity,
               lower(regexp_replace(btrim(e.text),'\\s+',' ','g'))=${q} AS exact
             FROM retrieval_entities e JOIN embedding_metadata m ON coalesce(m.question_version_id,m.chunk_id)=e.entity_id AND m.purpose=e.purpose
             JOIN embedding_vectors ev ON ev.metadata_id=m.id
@@ -165,18 +172,18 @@ export class RetrievalService {
           ) SELECT r.* FROM ranked r JOIN groups USING(duplicate_group)
             ORDER BY (r.representative=1) DESC,exact DESC,similarity DESC,entity_id LIMIT 100`,built.params)).rows as Candidate[];
           databaseMs=performance.now()-start;
-          for(const c of candidates) if(c.representative===1 && (c.exact || c.similarity>=(request.minimumSimilarity ?? 0.3))
-            && selected.size<(request.limit || 5))selected.set(c.entity_id,c.exact?"exact_match":"semantic_match");
+          for(const c of candidates) if(c.representative===1 && (structured || c.exact || (c.similarity ?? -1)>=(request.minimumSimilarity ?? 0.3))
+            && selected.size<(request.limit || 5))selected.set(c.entity_id,structured?"reviewed_seed_available":c.exact?"exact_match":"semantic_match");
           outcome=selected.size?"success":"no_match";
-          reason=selected.size?(candidates.some(c=>selected.get(c.entity_id)==="exact_match")?"exact_match":"semantic_match")
+          reason=selected.size?(structured?"reviewed_seed_available":candidates.some(c=>selected.get(c.entity_id)==="exact_match")?"exact_match":"semantic_match")
             : candidates.length?"no_relevant_hit":"no_permitted_source";
         }
       }
       const results:RetrievalInput["results"]=candidates.map((c,i)=>({questionVersionId:c.entity_type==="question"?c.entity_id:undefined,
-        chunkId:c.entity_type==="chunk"?c.entity_id:undefined,rank:i+1,similarity:c.similarity,selected:selected.has(c.entity_id),
-        reason:selected.get(c.entity_id) || (c.representative!==1?"duplicate_collapsed":c.similarity<(request.minimumSimilarity ?? 0.3)?"below_threshold":"limit_excluded"),
+        chunkId:c.entity_type==="chunk"?c.entity_id:undefined,rank:i+1,similarity:c.similarity ?? undefined,selected:selected.has(c.entity_id),
+        reason:selected.get(c.entity_id) || (c.representative!==1?"duplicate_collapsed":!structured && (c.similarity ?? -1)<(request.minimumSimilarity ?? 0.3)?"below_threshold":"limit_excluded"),
         provenanceSnapshot:c.provenance}));
-      const operationId=await knowledgeRepository.recordRetrieval(null,{operationKey,queryHash:digest(typeof request.query==="string"?request.query:"invalid-query"),
+      const operationId=await knowledgeRepository.recordRetrieval(request.ownership?.userId ?? null,{operationKey,sessionId:request.ownership?.sessionId,queryHash:digest(typeof request.query==="string"?request.query:"invalid-query"),
         filters:JSON.parse(JSON.stringify(filters)),embeddingMetadata:{...MODEL,purpose,reason},corpusVersion:generation || "unavailable",
         sourcePolicyRevision:"source-policy-v1",outcome,cacheHit:false,results});
       return {operationId,outcome,reason,cacheHit:false,corpusGeneration:generation,

@@ -1,5 +1,6 @@
 import React from "react";
 import InterviewerAvatar from "./InterviewerAvatar";
+import { INTERVIEWER_PROFILE } from "../constants/interviewer";
 
 /**
  * The interviewer's "seat" — avatar, name plate, live speaking state
@@ -32,7 +33,7 @@ const InterviewerPanel: React.FC<InterviewerPanelProps> = ({
             <InterviewerAvatar speaking={speaking} amplitude={amplitude} size={150} />
 
             <div className="text-center">
-                <p className="text-white font-black tracking-tight">Ava</p>
+                <p className="text-white font-black tracking-tight">{INTERVIEWER_PROFILE.displayName}</p>
                 <p className="text-[9px] font-black uppercase tracking-[0.25em] text-surface-500 mt-0.5">
                     AI Interviewer
                 </p>

@@ -17,7 +17,7 @@ still use Phase 1 JSONB/scoring/background work. Startup verifies the old bootst
 knowledge migrations are explicit. No Phase 3 user-facing behavior change; schema
 is preparatory. See [database schema](docs/database-schema.md) and
 [migration operations](docs/migrations.md). Phase 3 itself enabled no ingestion/model/retrieval execution; Phases 4–5 now add
-editorial ingestion and internal retrieval. Planner, evaluator and durable executor remain later work.
+editorial ingestion and internal retrieval. Phase 6 now implements the planner below; evaluator and durable executor remain later work.
 
 ## PLANNED FOR LATER PHASE: frozen FYP architecture
 
@@ -250,3 +250,7 @@ See [retrieval](docs/retrieval.md), [model decision](docs/embedding-model-select
 and [development benchmark](docs/retrieval-benchmark.md).
 
 No live interview behavior change in Phase 5; retrieval is ready for the Phase 6 planner.
+
+## CURRENTLY IMPLEMENTED: Phase 6 planner
+
+The dashboard now uses deterministic Express planning over Phase 5 retrieval, owned persisted previews and explicit confirmation. Relational immutable plan/item/evidence snapshots link to sessions; confirmation projects server-selected originals into the existing JSONB runner. New setup is junior/scoped; old sessions and routes remain compatible. Evaluation/follow-ups/reports are still legacy, visibly labeled. No rubric scoring, evaluator confidence or durable interview worker is implemented. See [planner](docs/interview-planner.md) for budgets, constraints, availability checks, frontend states and legal/compatibility audit.

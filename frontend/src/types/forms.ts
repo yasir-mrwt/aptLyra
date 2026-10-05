@@ -1,5 +1,4 @@
-import type { CreateSessionRequest } from "./session";
-import type { ChangeEvent, SyntheticEvent } from "react";
+import type { ChangeEvent } from "react";
 
 /**
  * Universal event type for form change handlers, supporting both native
@@ -13,8 +12,6 @@ export type FormChangeEvent =
  * Props for the New Interview creation form.
  */
 export interface NewInterviewFormProps {
-    formData: CreateSessionRequest;
-    onChange: (e: FormChangeEvent) => void;
-    onSubmit: (e: SyntheticEvent) => void;
-    isProcessing: boolean;
+    preferredRole?: string;
+    onCreated: (planId: string) => void;
 }

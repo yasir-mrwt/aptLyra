@@ -172,6 +172,8 @@ export const speakQuestion = asyncHandler(async (req: AuthenticatedRequest, res:
     return;
   }
 
+  if(question.evidenceUnavailable){res.status(409).json({message:"This planned question is unavailable. Create a fresh plan."});return;}
+
   try {
     const audio = await aiService.synthesizeSpeech(question.questionText);
     res.setHeader("Content-Type", "audio/wav");

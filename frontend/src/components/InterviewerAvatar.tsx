@@ -1,7 +1,7 @@
 import React from "react";
 
 /**
- * Ava — the animated AI interviewer.
+ * Animated AI interviewer. The character appearance remains unchanged for Phase 9.
  *
  * A flat-vector professional woman whose mouth opens with the REAL amplitude
  * of the TTS audio (WebAudio analyser), with idle blinking, breathing sway

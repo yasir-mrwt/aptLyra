@@ -33,6 +33,13 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U techvera_test -d techvera_test"
           --health-interval 2s --health-timeout 3s --health-retries 30
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 16379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s --health-timeout 3s --health-retries 30
     defaults:
       run:
         working-directory: ./backend
@@ -48,6 +55,7 @@ jobs:
     - run: npm run test:ingestion
     - run: npm run test:seed
     - run: npm run test:retrieval
+    - run: npm run test:planner
     - run: npm run test:pgvector-unavailable
 
   backend-checks:

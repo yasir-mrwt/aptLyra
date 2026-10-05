@@ -28,7 +28,7 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
     // Derive selected language securely without side-effects (React paradigm)
     const [languageOverride, setLanguageOverride] = useState<string | null>(null);
     const defaultLang = activeSession?.role ? ROLE_LANGUAGE_MAP[activeSession.role] || "plaintext" : "javascript";
-    const selectedLanguage = languageOverride ?? defaultLang;
+    const selectedLanguage = activeSession?.planId ? activeSession.questions[currentQuestionIndex]?.language || defaultLang : languageOverride ?? defaultLang;
     const setSelectedLanguage = setLanguageOverride;
 
     const submittingRef = useRef(false);

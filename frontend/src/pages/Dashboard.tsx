@@ -1,18 +1,16 @@
 import { useState, useEffect } from "react"
 import { useSelector, useDispatch } from "react-redux"
 import { useNavigate } from "react-router-dom"
-import { createSession, deleteSession, getSession } from "../features/session/sessionSlice"
+import { deleteSession, getSession } from "../features/session/sessionSlice"
 import type { RootState, AppDispatch } from "../app/store"
 import { toast } from "react-toastify"
 import SessionCard from "../components/SessionCard"
 import SkeletonSessionCard from "../components/SkeletonSessionCard"
 import ConfirmModal from "../components/ConfirmModal"
-import type { Session, CreateSessionRequest } from "../types/session"
-import { ROLES, LEVELS, TYPES, COUNTS } from "../constants/interview"
+import type { Session } from "../types/session"
 
 
 import NewInterviewForm from "../components/NewInterviewForm"
-import type { FormChangeEvent } from "../types/forms"
 import { ResumeHistoryWidget } from "../features/resume/components/ResumeHistoryWidget"
 import { GamificationWidget } from "../features/gamification/components/GamificationWidget"
 import { motion } from "framer-motion"
@@ -22,25 +20,14 @@ import { motion } from "framer-motion"
  * 
  * The primary control center for the user. It allows users to:
  * - View a summary of their interview activity (Total, Completed, Pending).
- * - Initiate new AI-generated interview sessions via the NewInterviewForm.
+ * - Preview and confirm persisted junior interview plans via the NewInterviewForm.
  * - Access historical interview records and analytics.
  */
 const Dashboard = () => {
     const dispatch = useDispatch<AppDispatch>()
     const navigate = useNavigate()
     const { user } = useSelector((state: RootState) => state.auth)
-    const { sessions, isLoading, isGenerating, isError, message, pagination, stats } = useSelector((state: RootState) => state.session)
-    const isProcessing = isGenerating || isLoading;
-    const [formData, setFormData] = useState<CreateSessionRequest>({
-        role: user?.preferredRole || ROLES[0],
-        level: LEVELS[0],
-        interviewType: TYPES[1].value,
-        count: COUNTS[0],
-        company: "general",
-        companyTrack: "general",
-        resumeId: "",
-    })
-
+    const { sessions, isLoading, isError, message, pagination, stats } = useSelector((state: RootState) => state.session)
     const [modalConfig, setModalConfig] = useState({
         isOpen: false,
         sessionId: '',
@@ -56,20 +43,10 @@ const Dashboard = () => {
         }
     }, [isError, message, dispatch]);
 
-    const onChange = (e: FormChangeEvent) => {
-        setFormData((prev) => ({
-            ...prev,
-            [e.target.name]: e.target.value,
-        }));
-    };
-
-    const onSubmit = (e: React.SyntheticEvent) => {
-        e.preventDefault();
-        dispatch(createSession(formData));
-    };
-
     const viewSession = (session: Session) => {
-        if (session.status === 'completed') {
+        if (session.planId && session.status === 'pending') {
+            navigate(`/plans/${session.planId}`)
+        } else if (session.status === 'completed') {
             navigate(`/review/${session._id}`)
         } else if (session.status === 'in-progress') {
             navigate(`/interview/${session._id}`)
@@ -187,12 +164,7 @@ const Dashboard = () => {
             >
                 <div className="absolute -inset-1 bg-white/5 rounded-[2.5rem] blur-xl opacity-0 group-hover:opacity-50 transition duration-1000"></div>
                 <div className="relative">
-                    <NewInterviewForm
-                        formData={formData}
-                        onChange={onChange}
-                        onSubmit={onSubmit}
-                        isProcessing={isProcessing}
-                    />
+                    <NewInterviewForm preferredRole={user?.preferredRole} onCreated={id => { dispatch(getSession()); navigate(`/plans/${id}`); }} />
                 </div>
             </motion.div>
 

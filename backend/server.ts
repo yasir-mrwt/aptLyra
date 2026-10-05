@@ -27,6 +27,7 @@ import rateLimit from "express-rate-limit";
 import connectDB, { pool } from "./config/db.js";
 import redisClient from "./config/redisConfig.js";
 import sessionRoutes from "./routes/sessionRoutes.js";
+import plannerRoutes from "./routes/plannerRoutes.js";
 import resumeRoutes from "./routes/resumeRoutes.js";
 import codeRoutes from "./routes/codeRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
@@ -156,6 +157,7 @@ app.get("/health", async (req: Request, res: Response) => {
 });
 
 app.use("/api/sessions", sessionRoutes);
+app.use("/api/interview-plans", plannerRoutes);
 app.use("/api/resume", resumeRoutes);
 app.use("/api/code", codeRoutes);
 app.use("/api/user", userRoutes);

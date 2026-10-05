@@ -153,7 +153,7 @@ export const knowledgeRepository = {
     return result.rows.length ? (result.rows[0].versioned ? "versioned" : "legacy") : null;
   },
   async addPlanItem(userId: string, input: { planId: string; position: number; questionVersionId: string;
-    rubricVersionId?: string; retrievalId?: string; selectionReason: string; estimatedMinutes: number; parentItemId?: string }): Promise<string> {
+    rubricVersionId?: string; retrievalId?: string; selectionReason: string; estimatedMinutes: number; parentItemId?: string; provenanceRefs?: import("../types/knowledge.js").Json[] }): Promise<string> {
     return withDatabaseLock(`plan:${input.planId}`, async () => {
       const plan = await this.findPlanForUser(input.planId,userId);
       if (!plan) throw new Error("Owned plan not found");
@@ -161,11 +161,11 @@ export const knowledgeRepository = {
       if (!question || question.status !== "published") throw new Error("Published question version not found");
       const id = randomUUID();
       await query(`INSERT INTO plan_items(id,plan_id,session_id,user_id,position,question_version_id,rubric_version_id,
-        taxonomy_version,primary_competency,category,difficulty,origin,retrieval_id,selection_reason,estimated_minutes,parent_item_id)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+        taxonomy_version,primary_competency,category,difficulty,origin,retrieval_id,selection_reason,estimated_minutes,parent_item_id,provenance_refs)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
       [id,plan.id,plan.session_id,userId,input.position,question.id,nullable(input.rubricVersionId),question.taxonomy_version,
         question.primary_competency,question.category,question.difficulty,question.origin,nullable(input.retrievalId),
-        input.selectionReason,input.estimatedMinutes,nullable(input.parentItemId)]);
+        input.selectionReason,input.estimatedMinutes,nullable(input.parentItemId),json(input.provenanceRefs || [])]);
       return id;
     });
   },

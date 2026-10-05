@@ -133,7 +133,9 @@ the operation fails and cannot create a durable retrieval evidence record.
 
 ## PLANNED FOR LATER PHASE
 
-Phase 6 chooses how to use retrieval in deterministic plans. Live session selection,
-scoring, provisional grading/confidence, adaptive probes, public source search and
-new Ava UI are not implemented here. See [benchmark](retrieval-benchmark.md),
+Phase 6 now uses retrieval for deterministic plans and scoped frontend selection, described below. Scoring, provisional grading/confidence, adaptive probes and public source search remain planned. See [benchmark](retrieval-benchmark.md),
 [model decision](embedding-model-selection.md) and [setup](../SETUP.md).
+
+## Phase 6 planner integration
+
+The planner now consumes this internal retrieval channel, with owned user/session operations linked to plans. Additive internal filters support source/document keys. Requested and adjacent difficulty, reviewed seed and deterministic approved-template stages retain all taxonomy/role/mode/company/date/exclusion/model/corpus/permission checks. Approved-template `structured-seed` retrieval is restricted to the reviewed original seed, uses identical current eligibility/index/evidence controls and records NULL similarity without calling the model. It is not a fake semantic match. Public clients cannot invoke these internal tools. Query raw text remains unstored. Plan persistence and confirmation recheck complete compatible corpus, provenance/availability and duplicates under editorial locks; fresh unavailable evidence is redacted. The ordinary Phase 5 semantic path and separate technical-reference channel remain intact. See [planner](interview-planner.md). Rubric evaluation and complete durable runtime are still planned.

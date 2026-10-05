@@ -1,6 +1,6 @@
 # 🛠️ TechVera — Local Setup Guide
 
-Run the existing three-service stack on Node 20 and Python 3.11. No local GPU or model download is required.
+Run the existing three-service stack on Node 20 and Python 3.11. No local GPU is required. Phase 5/6 CPU retrieval requires externally provisioned pinned model files, as described below.
 
 Phase 3 adds an explicit migration step for the knowledge schema; it does not
 change current interviews or run those migrations on web-server startup. See
@@ -432,3 +432,11 @@ claim full-service typing is clean. See [retrieval](docs/retrieval.md),
 [benchmark](docs/retrieval-benchmark.md).
 
 No live interview behavior change in Phase 5; retrieval is ready for the Phase 6 planner.
+
+## Phase 6 planner setup
+
+Apply migrations through 006 explicitly, then use the Phase 4 exact-hash reviewed import and Phase 5 embedding CLI to obtain a complete active compatible corpus. Provision the pinned CPU model files outside Git, including their license/NOTICE; planning is unavailable without a compatible indexed corpus. No migration/import against production or staging was performed here. Existing provider configuration is still needed for voice and legacy answer evaluation.
+
+For disposable verification: `docker compose -f compose.test.yml --profile without-vector up -d --wait postgres redis postgres-without-vector`, then backend `npm run test:planner` plus schema/ingestion/seed/retrieval/persistence/smoke suites. Tests refuse external datastore environment configuration and select localhost fixtures. The embeddings profile uses the external model cache for real model checks; it does not download or commit model files. Stop only these task fixtures afterward with the same Compose profiles.
+
+Use the dashboard to configure junior practice, then review `/plans/:planId` and confirm. An underfilled preview explains shortages; impossible coverage or stale evidence requires a fresh preview. The current corpus has no company reports or reviewed rubrics; resume/JD is unavailable for this setup. Evaluation remains legacy. See [planner operations/contracts](docs/interview-planner.md). Persisted deployment/asset/mute identifiers are intentionally retained; ordinary product presentation is TechVera.

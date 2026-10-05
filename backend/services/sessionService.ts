@@ -5,6 +5,7 @@ import { resumeRepository } from "../models/Resume.js";
 import { aiService } from "./aiService.js";
 import { pushSocketUpdate } from "./socketService.js";
 import { gamificationService } from "./gamificationService.js";
+import { query } from "../config/db.js";
 
 export class SessionStateError extends Error {
   constructor(message: string, public status = 409) { super(message); }
@@ -165,6 +166,11 @@ export const sessionService = {
     if (!session) {
       throw new Error("Session not found");
     }
+    if(session.planId) {
+      const available=(await query("SELECT entity_id FROM retrieval_entities WHERE purpose='question-selection' AND entity_id=ANY($1::uuid[])",[session.questions.map(q=>q.questionVersionId).filter(Boolean)])).rows;
+      session.questions=session.questions.map(q=>q.questionVersionId && !available.some(e=>e.entity_id===q.questionVersionId)
+        ? {...q,questionText:"This planned question is no longer available. Return to setup for a fresh plan.",idealAnswer:"",aiFeedback:undefined,evidenceUnavailable:true}:q);
+    }
     return session;
   },
 
@@ -172,7 +178,7 @@ export const sessionService = {
     return withSessionLock(sessionId, async () => {
       const session = await sessionRepository.findByIdForUser(sessionId, userId.toString());
       if (!session) throw new Error("Session not found");
-      if (session.status === "pending") throw new SessionStateError("Cannot delete a session while questions are being generated.");
+      if (session.status === "pending" && !session.planId) throw new SessionStateError("Cannot delete a session while questions are being generated.");
       if (session.questions.some(q => (q.isSubmitted && !q.isEvaluated) || q.followUpPending)) {
         throw new SessionStateError("Cannot delete a session while evaluation is in progress.");
       }
@@ -206,6 +212,9 @@ export const sessionService = {
 
       if (session.status !== "in-progress") throw new SessionStateError("This interview is not active");
       const q = session.questions[qIdx];
+      if(session.planId && q.questionVersionId && !(await query("SELECT entity_id FROM retrieval_entities WHERE purpose='question-selection' AND entity_id=$1",[q.questionVersionId])).rows.length)
+        throw new SessionStateError("This planned question is unavailable. Create a fresh plan.",409);
+      if(session.planId && q.questionType==="coding" && language!==q.language)throw new SessionStateError("Use the planned coding language",400);
       if (q.isSubmitted || q.isEvaluated) throw new SessionStateError("Answer already submitted");
       if (q.questionType === "oral" && !audioFilePath) throw new SessionStateError("Record an answer before submitting", 400);
       if (q.questionType === "coding" && !code?.trim()) throw new SessionStateError("Code is required", 400);

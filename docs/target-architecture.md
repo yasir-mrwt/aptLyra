@@ -7,9 +7,7 @@ React/Vite/Redux → Express/TypeScript → FastAPI, PostgreSQL JSONB sessions, 
 caches/XP and BullMQ resume jobs, REST and authenticated Socket.IO updates. Questions
 and scores are generated through prompts. Interview work runs in the API process.
 Phase 3 supplies versioned migrations, taxonomy and preparatory knowledge, rubric,
-plan, evidence, embedding-metadata and operation/outbox tables. These are not used
-by current interview execution: no durable interview jobs, generated plans or new rubric/confidence computation
-exists. Phase 5 internal embeddings/retrieval now exist separately from live execution. Reload reads an
+plan, evidence, embedding-metadata and operation/outbox tables. Phase 6 consumes Phase 5 retrieval for persisted deterministic question selection and preview/confirmation, described below. Confirmed originals use the existing runner; no durable interview jobs or new rubric/confidence computation exist. Reload reads an
 owned session over REST; current events have no durable revision/replay protocol.
 See [database schema](database-schema.md) and [migration policy](migrations.md).
 No Phase 3 user-facing behavior change; schema is preparatory.
@@ -19,7 +17,7 @@ No Phase 3 user-facing behavior change; schema is preparatory.
 The existing three-service architecture remains. Express owns authentication,
 authorization, source administration, lifecycle, jobs, and **all durable writes**
 through existing PostgreSQL repositories. BullMQ workers extend the backend's
-current queue infrastructure. FastAPI performs bounded embedding, planning,
+current queue infrastructure. FastAPI performs bounded embedding,
 extraction, and evaluation computations and returns validated results; it does
 not become a competing session store or a second application backend.
 
@@ -241,13 +239,9 @@ hits. Return IDs/versions, permitted excerpts, source title/link/license, qualit
 timestamps, filter snapshot, rank/similarity, model/corpus version and exclusion
 reasons. Similarity alone cannot override licensing, role, or evidence quality.
 
-PLANNED FOR PHASE 6 planner fallback order: exact filtered retrieval → adjacent junior difficulty with explicit
+CURRENTLY IMPLEMENTED Phase 6 planner fallback order: exact filtered retrieval → adjacent junior difficulty with explicit
 reason → unchanged reviewed local seed for the selected competency → deterministic
-approved template labeled fallback → underfilled plan/no-score practice when valid
-technical grounding is absent. A candidate must confirm any company/date constraint
-relaxation. No acceptable evidence means abstention or unscored practice, not an
-invented authoritative answer. Retrieval outage and no relevant hits have different
-reason codes. Generating a provisional item is optional, never required for recovery.
+approved template labeled fallback → underfilled plan or setup correction. Phase 6 uses unchanged reviewed seed references as templates and never generates new fallback text. Company/date constraints remain exact; changing them requires an explicit new setup/preview. No acceptable selection evidence means a non-confirmable correction. Legacy evaluation remains separately labeled; grounded scoring/abstention belongs to Phase 7. Retrieval outage and no relevant hits have different reason codes.
 
 Design targets, **not measurements**: warm retrieval p95 ≤1 second including query
 embedding; planning p95 ≤5 seconds without generation; grounded generation/evaluation
@@ -395,9 +389,8 @@ distinguishes real reviewed artifacts/disposable imports from fictional test dat
 
 No candidate-facing Phase 4 behavior; reviewed corpus is preparatory for Phase 5/6.
 
-The planner/scoring/runtime integration contracts remain PLANNED FOR LATER PHASE.
-Phase 5 retrieval is implemented separately. No model extraction, live question selection or concept/
-rubric engine is activated. Backend owns every durable ingestion write; FastAPI has
+Planner selection and preview/confirmation are now implemented in Phase 6. Scoring and durable runtime integration remain PLANNED FOR LATER PHASE.
+Phase 5 retrieval is implemented internally and consumed by Phase 6 selection. No new model extraction or concept/rubric engine is activated. Backend owns every durable ingestion write; FastAPI has
 no new database access. Phase 2 remains the architecture source of truth.
 
 
@@ -411,3 +404,7 @@ benefit; no ANN index is justified for this corpus size.
 Technical-reference corpus count is zero. Query hashes are stored without raw text.
 
 No live interview behavior change in Phase 5; retrieval is ready for the Phase 6 planner.
+
+## Phase 6 implementation boundary
+
+CURRENTLY IMPLEMENTED: Express deterministic planner→owned relational preview→confirmed server-selected JSONB originals→existing runner. FastAPI supplies embeddings and legacy AI computations; PostgreSQL owns all plan/retrieval writes. Frontend functional setup/preview and truthful planning states ship with this phase. Current score/report/follow-up behavior remains legacy; reviewed rubrics, evaluator confidence, durable operations and final avatar redesign remain later work. See [planner](interview-planner.md) for exact policies and compatibility. The service ownership/design above remains the frozen target; it does not claim future execution exists.

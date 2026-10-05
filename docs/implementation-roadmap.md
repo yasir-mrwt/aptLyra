@@ -71,5 +71,8 @@ reported in [the benchmark](retrieval-benchmark.md). New AI typing passes; full
 service typing retains 29 pre-existing errors confirmed at the Phase 4 commit.
 
 No live interview behavior change in Phase 5; retrieval is ready for the Phase 6 planner.
-Recommend only **Phase 6 — Interview Planner**, on a new explicit prompt. No Phase 6
-work is started by this roadmap or the Phase 5 implementation.
+Phase 6 was subsequently authorized; its implementation boundary is recorded below.
+
+## Phase 6 implementation evidence
+
+CURRENTLY IMPLEMENTED: deterministic retrieval-backed coverage/time/difficulty allocation; immutable owned plan/items/evidence, explicit fallbacks/shortages, scoped frontend setup and persisted preview/confirmation with truthful interviewer states. README now presents TechVera; required attribution and compatibility identifiers remain documented. Confirmed originals use the existing JSONB runner and legacy evaluator; this is not full runtime or scoring replacement. See [planner](interview-planner.md). Recommend only **Phase 7 — Rubric Evaluation + Evaluator Confidence**, when explicitly authorized. Phase 7 has not started.

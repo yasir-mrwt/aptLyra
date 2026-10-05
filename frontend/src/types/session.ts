@@ -28,6 +28,11 @@ export interface SpeechMetrics {
 }
 
 export interface Question {
+    planItemId?: string;
+    questionVersionId?: string;
+    category?: string;
+    evidenceUnavailable?: boolean;
+    language?: string;
     questionText: string;
     questionType: "coding" | "oral" | "system-design";
     isEvaluated: boolean;
@@ -47,6 +52,7 @@ export interface Question {
 }
 
 export interface Session {
+    planId?: string;
     _id: string;
     user: string;
     role: string;

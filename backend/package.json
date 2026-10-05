@@ -35,7 +35,9 @@
     "preretrieval:benchmark": "npm run build",
     "retrieval:benchmark": "node tests/retrieval-benchmark.mjs",
     "pretest:pgvector-unavailable": "npm run build",
-    "test:pgvector-unavailable": "node tests/pgvector-unavailable.mjs"
+    "test:pgvector-unavailable": "node tests/pgvector-unavailable.mjs",
+    "pretest:planner": "npm run build",
+    "test:planner": "node --test tests/planner.test.mjs"
   },
   "dependencies": {
     "@types/bcrypt": "^6.0.0",

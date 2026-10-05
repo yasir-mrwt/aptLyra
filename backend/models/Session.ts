@@ -21,6 +21,10 @@ export interface ISpeechMetrics {
 }
 
 export interface IQuestion {
+  planItemId?: string;
+  questionVersionId?: string;
+  category?: string;
+  evidenceUnavailable?: boolean;
   questionText: string;
   questionType: "oral" | "coding" | "system-design";
   idealAnswer: string;
@@ -45,6 +49,7 @@ export interface IQuestion {
 }
 
 export interface ISession {
+  planId?: string;
   _id: string;
   user: string;
   role: string;
@@ -70,6 +75,7 @@ const toISO = (v: any): string | null =>
   v == null ? null : v instanceof Date ? v.toISOString() : v;
 
 const rowToSession = (row: any): ISession => ({
+  planId: row.interview_plan_id || undefined,
   _id: row.id,
   user: row.user_id,
   role: row.role,

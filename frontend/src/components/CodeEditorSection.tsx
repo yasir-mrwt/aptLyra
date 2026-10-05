@@ -5,6 +5,7 @@ import CustomSelect from "./CustomSelect";
 
 interface CodeEditorSectionProps {
     language: string;
+    plannedLanguage?: boolean;
     code: string;
     isQuestionLocked: boolean;
     setLanguage: (lang: string) => void;
@@ -12,7 +13,7 @@ interface CodeEditorSectionProps {
 }
 
 const CodeEditorSection: React.FC<CodeEditorSectionProps> = ({
-    language,
+    language, plannedLanguage,
     code,
     isQuestionLocked,
     setLanguage,
@@ -61,7 +62,7 @@ const CodeEditorSection: React.FC<CodeEditorSectionProps> = ({
                     <CustomSelect 
                         label="" 
                         name="language" 
-                        options={SUPPORTED_LANGUAGES} 
+                        options={plannedLanguage ? SUPPORTED_LANGUAGES.filter(l => l.value === language) : SUPPORTED_LANGUAGES}
                         value={language} 
                         onChange={(_, val) => setLanguage(String(val))} 
                     />

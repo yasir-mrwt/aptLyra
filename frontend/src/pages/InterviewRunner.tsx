@@ -54,7 +54,7 @@ const InterviewRunner = () => {
         confirmFinishInterview
     } = useInterviewSession(stopRecording, setRecordingTime);
 
-    // Ava — the AI interviewer's voice (Groq TTS + live lip-sync amplitude)
+    // AI interviewer voice (Groq TTS + live lip-sync amplitude)
     const {
         isSpeaking,
         isPreparing,
@@ -68,7 +68,7 @@ const InterviewRunner = () => {
         activeSession?._id,
         currentQuestionIndex,
         currentQuestion?.questionText,
-        activeSession?.status === "in-progress" && !isRecording && !isStarting && !isProcessing
+        activeSession?.status === "in-progress" && !currentQuestion?.evidenceUnavailable && !isRecording && !isStarting && !isProcessing
     );
 
     const handleConfirmFinish = async () => {
@@ -98,9 +98,11 @@ const InterviewRunner = () => {
 
     const currentDraft = drafts[currentQuestionIndex] || {};
     const isCodingQuestion = currentQuestion?.questionType === 'coding';
+    if(currentQuestion?.evidenceUnavailable)return <div role="alert" className="p-6"><p>{currentQuestion.questionText}</p><Link to="/dashboard">Create a fresh plan</Link></div>;
 
     return (
         <div className="max-w-7xl mx-auto px-4 pb-32">
+            {activeSession.planId && <p className="mb-4">Planner-backed questions · Legacy evaluation (reviewed rubric scoring is planned).</p>}
             <InterviewHeader
                 role={activeSession.role}
                 startTime={activeSession.createdAt || activeSession.updatedAt || new Date().toISOString()}
@@ -146,6 +148,7 @@ const InterviewRunner = () => {
                 <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
                     <CodeEditorSection
                         language={selectedLanguage}
+                        plannedLanguage={!!activeSession.planId}
                         code={currentDraft.code || ""}
                         isQuestionLocked={isQuestionLocked}
                         setLanguage={setSelectedLanguage}

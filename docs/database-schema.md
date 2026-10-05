@@ -2,7 +2,7 @@
 
 ## CURRENTLY IMPLEMENTED
 
-Four explicit SQL migrations and a checksum-verified TypeScript runner adopt the
+The foundation migrations and a checksum-verified TypeScript runner adopt the
 five existing tables, add 27 preparatory knowledge/evidence/durability tables and
 seed `junior-se-v1` (8 roots, 24 children). `schema_migrations` is an additional
 runner-owned history table. Express/backend repositories own all durable writes;
@@ -56,7 +56,7 @@ an explicit caller owner. Composite foreign keys enforce ownership independently
 of repository checks: plan→owned session, item→plan/session/user, answer→item and
 question, evaluation→answer/rubric/question/policy, evidence→evaluation/concept/rubric.
 Scope ownership is not delegated to an LLM. These checks supplement cookie auth
-when APIs are added later; this phase exposes no new routes.
+in owned APIs; Phase 3 added no routes, and Phase 6 now adds planner routes.
 
 ## Enforced structural rules
 
@@ -88,8 +88,7 @@ when APIs are added later; this phase exposes no new routes.
   Promotion or any content change creates a new rubric version.
 - Plan item position is unique per plan. Question metadata and optional rubric must
   match the pinned question exactly. A probe has a same-plan original parent, at
-  most one probe per original, and no recursive probe chain. Full time/coverage
-  feasibility and the two-per-session adaptive policy remain later planner logic.
+  most one probe per original, and no recursive probe chain. Phase 6 implements original-question time/coverage feasibility; adaptive probe policy remains later runtime work.
 - Retrieval hits reference exactly one real question version or chunk; ranks are
   unique and 1–100, similarity −1..1. Personal session/plan context must match owner.
 - Scores are nullable and 0–100. Succeeded evaluations need high/medium confidence;
@@ -129,7 +128,7 @@ Existing JSONB questions/scores stay readable and unchanged, including older bro
 roles/seniority. No source/rubric/confidence is invented. Later versioned flows will
 write relational authority and compatible JSONB projections in the same database
 transaction; future reports label legacy technical/delivery scoring separately.
-Current report/API shapes and Ava behavior are unchanged, so no fake labels or
+Phase 3 kept report/API shapes and interviewer behavior unchanged, so no fake labels or
 future controls were added now.
 
 Session/user deletion cascades scoped plans/items/retrieval/answers/evaluations/
@@ -141,15 +140,13 @@ tombstones need the later privacy workflow; cascade tests do not claim full eras
 ## PLANNED FOR LATER PHASE
 
 The explicit reviewed local corpus import is described below; no rubrics are seeded. Internal vector search is implemented in Phase 5 (see below). No live
-planner, scorer, evaluator-confidence computation, queue executor/dispatcher,
+scorer, evaluator-confidence computation, queue executor/dispatcher,
 crash-safe XP migration or retention jobs exist. `embedding_metadata` remains model-neutral, while Phase 5 now stores compatible
 384d values separately. The earlier Phase 3 stock PostgreSQL fixture had no vector
 extension; Phase 5 uses a pinned pgvector/PostgreSQL 16 fixture and explicitly tests
 clear failure/rollback on stock PostgreSQL. Earlier placeholder vectors/models were fixtures.
 
-Full context/filter population, publish/review authorization, semantic/provenance
-quality checks, plan completeness, confidence gates and recovery/deletion policies
-remain governed by [the frozen design](target-architecture.md) and
+Current ingestion/retrieval and Phase 6 plan completeness obey the frozen design. Future confidence gates and recovery/deletion policies remain governed by [the frozen design](target-architecture.md) and
 [roadmap](implementation-roadmap.md). The storage foundation does not turn on those
 capabilities. SQL administrators can disable triggers; use least-privilege application
 and migration roles in the final deployment rather than treat schema checks as admin
@@ -210,3 +207,7 @@ Retrieval outcomes add `success`, `no_match`, `invalid_filters`, `model_mismatch
 `corpus_unavailable`, preserving historical outcome values. Legacy sessions remain
 JSONB and unchanged. Candidate private tables are not read by indexing. See
 [retrieval contract](retrieval.md) and [migration operations](migrations.md).
+
+## Phase 6 additive planner persistence
+
+Migration `006_interview_planner.sql` adds `interview_plans.setup_snapshot`, `confirmed_at`, creation-transaction identity; `plan_items.provenance_refs`; and `sessions.interview_plan_id` with composite owner/session FK and unique link. Relational plan/item UUIDs are durable identity. Selected retrieval records are owned and plan-linked. Planner-v1 snapshot/items become immutable outside their creation transaction; deferred constraints enforce count/coverage/difficulty/time/category/order/family/group invariants. Item publication requires actual compatible selected owned evidence, matching current provenance and active available vector lineage. Old plan contracts remain valid; old JSONB sessions and migrations 001–005 are unchanged. No new rubric/probe/job behavior. See [planner](interview-planner.md) for API, confirmation and legacy projection.

@@ -86,3 +86,7 @@ Functional setup, runner, report, and Ava behavior ship alongside each backend/A
 feature. Phase 9 consolidates visual, accessibility, responsive, and performance
 polish. [The roadmap](implementation-roadmap.md) defines the phase boundaries;
 Phase 2 implements none of the planned behavior above.
+
+## Current Phase 6 scope boundary
+
+The main flow now supports the frozen junior roles, English, 1–4 roots, 3–10 requested originals, 15–60 minutes and oral/coding/mixed setup. Effective count may be reduced with explicit preview warnings while preserving every root. Coding/mixed originals use the existing runner transport with stored Python/JavaScript choices (SQL for SQL questions). Company/date modifiers remain exact and appear only with eligible evidence; the reviewed seed provides none. Resume/JD personalization is unavailable for the planner; mixed design-lite is optional. Existing legacy role/mode/language/resume sessions remain readable. Scoring/report semantics remain legacy. See [planner](interview-planner.md); this updates implementation status, not the frozen future rubric design.
