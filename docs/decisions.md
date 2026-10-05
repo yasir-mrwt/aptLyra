@@ -1,4 +1,4 @@
-# Baseline decisions
+# Architecture decisions
 
 ## Phase 1: stable baseline
 
@@ -26,3 +26,30 @@
   Real datastore verification is separate from live-provider or AI-quality verification.
 - Stop after Phase 1. Knowledge storage, pgvector/RAG, recent-interview intelligence,
   planner/rubric changes, evaluator-confidence calibration and provenance remain future work.
+
+## Phase 2: scope and final architecture
+
+Status: **PLANNED FOR LATER PHASE**. These decisions freeze the design; Phase 2
+implements documentation only. The baseline above remains **CURRENTLY IMPLEMENTED**.
+
+| Decision | Rationale / consequence |
+|---|---|
+| Focus on junior Software Engineer, Backend Developer and Full Stack Developer; eight roots, English, Python/JavaScript benchmark and PostgreSQL SQL | A feasible FYP needs reviewed topic/score coverage. Existing broad catalogs remain legacy until functional setup integration; no specialist-role quality claim |
+| Oral, coding and mixed core; company/resume modifiers and design-lite optional | Preserve existing useful tools while guaranteeing core practice without external company data or personal uploads |
+| Express owns durable writes and filtered pgvector queries; FastAPI computes embeddings/plans/evidence/grades | Extend current repositories/auth/queue boundaries rather than introduce reference ORM/SQLite or duplicate session systems |
+| PostgreSQL + pgvector only; Redis stores disposable cache/dispatch | Avoid a competing FAISS persistence layer; versioned content/model/dimension must agree and citations survive cache eviction |
+| Immutable question/rubric/concept/evidence versions with relational authority, compatible session JSONB projections | Reproducible reports require stable lineage; legacy sessions must not acquire invented provenance |
+| Deterministic persisted coverage/time plan and reviewed-seed fallback | Availability and provider failure should produce visible shortages, not uncontrolled generation or silent company/date filter relaxation |
+| Separate technical score, delivery feedback and evaluator evidence confidence | Fluency is not correctness. Confidence is a gated evidence category, not an LLM probability or technical multiplier |
+| Known rubric reviewed; generated/materially adapted rubric provisional, confidence capped at medium | Retrieved text and generated expectations alone do not establish authoritative grading; no evidence means withheld score |
+| Reviewed original scores only in overall, with minimum coverage; probes/provisional scores shown separately | Avoid double-counting follow-ups, treating failures as zero, or inflating coverage from uncertain grading |
+| Permitted versioned source adapters and review; recent interview occurrence within 180 days | Fetch time does not prove recency or permission. Voluntary experiences inform selection, not sole technical ground truth |
+| Durable operation records, transactional outbox, leases and stale-result checks for later integration | Phase 1 transaction locks prevent cooperating write races, but do not recover in-process work or guarantee Redis/SQL reward delivery |
+| SVG Ava, truthful states, typed alternative and functional UI in each feature phase | Backend intelligence must be usable as it ships. Phase 9 is cohesive polish; 3D/barge-in/hints remain deferred |
+| Explicit consent/minimization/retention/deletion/provider disclosure required for FYP | Current controls cannot support a claim of complete erasure, zero provider retention or compliance certification |
+| Held-out human judgments, failure scenarios and consented user study | Fixture passes establish contracts, not relevance/scoring quality; report measured limitations and confidence coverage |
+
+Canonical details: [scope](final-scope.md), [taxonomy](competency-taxonomy.md),
+[target contracts and ownership](target-architecture.md), [scoring/research](evaluation-design.md),
+[privacy](data-and-privacy.md), and [phase boundaries](implementation-roadmap.md).
+The recommended next step is Phase 3 knowledge schema, only on explicit authorization.

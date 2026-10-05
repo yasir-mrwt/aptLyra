@@ -1,6 +1,24 @@
 # TechVera — Evidence-Grounded AI Technical Interview Coach
 
-> Phase 1 stable baseline of the upstream PrepTalk application. Evidence grounding remains the project direction; retrieval, provenance, and calibrated evaluator confidence are not implemented. See [architecture](ARCHITECTURE.md), [setup and verification](SETUP.md), and [baseline decisions](docs/decisions.md). Upstream licensing and contributor attribution are preserved.
+> The Phase 1 stable baseline of the upstream PrepTalk application is implemented; Phase 2 freezes the FYP scope and architecture. Evidence grounding remains planned: retrieval, provenance, reviewed rubrics, and evaluator confidence are not implemented. Upstream licensing and contributor attribution are preserved.
+
+**CURRENTLY IMPLEMENTED:** voice interviews with SVG Ava, prompt-generated questions,
+coding/diagram tools, resume context, bounded score-triggered follow-ups and legacy
+technical/delivery reports. The feature descriptions and screenshots below describe
+this baseline; provider-dependent paths still require configuration.
+
+**PLANNED FOR LATER PHASE:** junior technical preparation for final-year students and
+candidates with 0–2 years' experience. Oral, coding and mixed modes are core;
+company focus, resume context and design-lite are optional. The target adds reviewed
+knowledge, PostgreSQL/pgvector retrieval, persisted plans, known/provisional rubrics,
+distinct evaluator confidence, source trace and competency reports. It does not make
+hiring or personality judgments. Phase 2 changes documentation only.
+
+Read the [final scope](docs/final-scope.md), [target architecture](docs/target-architecture.md),
+[competencies](docs/competency-taxonomy.md), [evaluation/research design](docs/evaluation-design.md),
+[data/privacy requirements](docs/data-and-privacy.md), [remaining roadmap](docs/implementation-roadmap.md),
+and [architecture decisions](docs/decisions.md). For the working baseline use
+[ARCHITECTURE.md](ARCHITECTURE.md) and [SETUP.md](SETUP.md).
 
 > **Skip the Nerves. Ace the Interview.**
 

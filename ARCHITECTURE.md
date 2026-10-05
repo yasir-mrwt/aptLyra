@@ -1,9 +1,39 @@
 # TechVera architecture
 
+## CURRENTLY IMPLEMENTED: Phase 1 baseline
+
 The Phase 1 baseline preserves React 19/Vite/TypeScript, Express 5/TypeScript,
 FastAPI/Pydantic, PostgreSQL, and Redis/BullMQ. Ava remains the existing SVG
 interviewer with cloud TTS and browser voice fallback. There is no local GPU,
 RAG, pgvector, research agent, or new scoring engine.
+
+## PLANNED FOR LATER PHASE: frozen FYP architecture
+
+TechVera targets evidence-grounded preparation for final-year students and junior
+software engineers (0–2 years). Oral, coding and mixed interviews are core;
+company/resume focus and design-lite are optional. Eight junior competencies replace
+unbounded role coverage in the target design. Technical performance, candidate
+delivery feedback and evaluator confidence are separate outputs.
+
+Express remains the owner of authentication, orchestration and PostgreSQL writes.
+FastAPI computes validated AI results; later pgvector retrieval stays in PostgreSQL,
+with Redis/BullMQ for jobs/caches. Versioned questions, rubrics, plans and evidence
+will supplement compatible legacy session JSONB. Durable operations/outbox recovery
+are planned; they do not exist in the baseline described below.
+
+| Design document | Purpose |
+|---|---|
+| [Final scope](docs/final-scope.md) | Users, modes, domain, exclusions and acceptance boundary |
+| [Target architecture](docs/target-architecture.md) | Lifecycle, REST/Socket.IO, questions, data ownership, ingestion, retrieval, planner and Ava |
+| [Competency taxonomy](docs/competency-taxonomy.md) | Eight roots, junior difficulty and observable evidence |
+| [Evaluation design](docs/evaluation-design.md) | Reviewed/provisional rubrics, scoring, confidence, abstention and FYP research protocol |
+| [Data and privacy](docs/data-and-privacy.md) | Current limits, required controls, retention/deletion and provider exposure |
+| [Implementation roadmap](docs/implementation-roadmap.md) | Phases 3–12 and functional frontend work in each phase |
+| [Decisions](docs/decisions.md) | Baseline and scope-freeze rationale |
+
+Phase 2 is documentation only: no schema, embeddings, ingestion, planner, scoring
+engine, endpoint or UI implementation. The remaining sections describe
+**CURRENTLY IMPLEMENTED** baseline behavior, not the planned contracts above.
 
 ## Services and storage
 
