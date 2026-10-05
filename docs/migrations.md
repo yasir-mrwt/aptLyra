@@ -103,7 +103,17 @@ reviewed runner/policy extension; do not silently place them in these files.
 
 ## PLANNED FOR LATER PHASE
 
-Phase 4 adds permitted ingestion. Model choice/embedding values/pgvector extension
+Phase 4 now provides permitted local ingestion (see the addition below). Model choice/embedding values/pgvector extension
 and vector indexes belong to Phase 5. Planner/scoring execution and durable job/
 outbox dispatch remain later work. These tables are prerequisites only. See
 [database schema](database-schema.md) and [the roadmap](implementation-roadmap.md).
+
+## Phase 4 migration — CURRENTLY IMPLEMENTED
+
+`004_controlled_ingestion.sql` adds six import/review/experience/audit tables and
+publication/audit gates. Earlier SQL files remain checksum-identical. It inserts
+no corpus/questions/rubrics: reviewed data enters through the explicit CLI pipeline,
+not startup or migrations. Clean/adopted/repeat/concurrent/rollback/immutability
+regressions now test all four files. Test-only failure migration is numbered 005.
+Run `test:ingestion` and `test:seed` alongside `test:schema` and baseline checks.
+See [ingestion](ingestion.md). No production migration was performed in Phase 4.

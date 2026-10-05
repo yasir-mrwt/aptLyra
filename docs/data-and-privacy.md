@@ -84,3 +84,25 @@ forged citations, malformed uploads, replay/stale jobs, provider failures and
 deletion/retention across SQL, Redis, local files, browser drafts and external-media
 adapters. Record provider/backup limitations explicitly. Full threat testing and
 deployment credential policy are later work in [the roadmap](implementation-roadmap.md).
+
+## Phase 4 knowledge controls — CURRENTLY IMPLEMENTED
+
+[Local ingestion](ingestion.md) now enforces source permission/hash scope, human
+review, bounded files/text, pre-normalization PII/confidential/injection screening,
+quarantine, immutable publication and source/document/question withdrawal. Flagged
+payloads are discarded immediately; logs/inspect use only identifiers/hashes/codes.
+Deterministic detectors are incomplete and do not establish perfect de-identification.
+
+Permitted experience imports require explicit publication consent/permission; unknown
+occurrence stays null and company claims are unverified selection evidence. No public
+submission UI/API or actual external company report is seeded. Candidate answers,
+resumes and audio are not accessed or indexed by ingestion. There is no provider
+exposure from Phase 4 extraction because no provider is called.
+
+Seven-day pending expiry blocks publication/extraction; the CLI `expire` action
+purges normalized pending text/specifications and voluntary metadata. **Operators
+must run/schedule it**; physical cleanup without that command and full account/media/
+provider/backup erasure remain unimplemented. Withdrawal clears source/chunk content,
+retires imported questions and preserves minimal audit; immutable historical question
+versions remain retired. Later selection must check availability throughout the chain.
+No cache/embedding exists yet to invalidate. See [source policy](source-policy.md).

@@ -221,3 +221,17 @@ See [SETUP.md](SETUP.md#phase-1-verification) for mandatory local checks and
 [docs/decisions.md](docs/decisions.md) for baseline decisions. Tests use deterministic
 provider fixtures; PostgreSQL/Redis integration uses real disposable datastores.
 They do not establish AI quality, live provider availability, or production readiness.
+
+## Phase 4 — CURRENTLY IMPLEMENTED editorial imports
+
+OS/database-authorized backend CLI → exact permitted local bytes → deterministic
+quarantine/normalization/screening/dedupe/mapping → human review → Phase 3
+versioned document/chunk/question publication. Migration 004 adds six import/review/
+experience tables and append-only audit. The backend owns all writes; FastAPI and
+candidate interview execution remain unchanged. No model extraction, HTTP ingestion,
+public submissions, retrieval, embeddings, planner or scoring engine is introduced.
+
+No candidate-facing Phase 4 behavior; reviewed corpus is preparatory for Phase 5/6.
+
+See [ingestion](docs/ingestion.md), [source policy](docs/source-policy.md),
+[reviewed corpus](docs/corpus-manifest.md) and [schema](docs/database-schema.md).

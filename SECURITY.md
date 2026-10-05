@@ -100,3 +100,26 @@ cannot award completion XP again. The schema did not gain new tables/columns.
 - Fixtures verify contracts/state/errors, not provider quality, live quota,
   microphone hardware, production deployments or full accessibility. Keep those
   checks distinct from automated baseline verification.
+
+## Phase 4 local ingestion boundary — CURRENTLY IMPLEMENTED
+
+Internal CLI authorization rests on restricted OS/database operator access, with
+registered actual human reviewer IDs and hash-bound approval; no public admin route.
+Only canonical allowlisted regular local files and exact approved byte hashes may
+import. No network adapter exists. Review identity/license/source/chunk fields cannot
+be chosen by source text. Screen before markup stripping, quarantine PII/confidential/
+injection signals without retaining sensitive text, and fail closed on limits or
+invalid mappings. Safe CLI summaries omit raw data and driver error payloads.
+
+Deterministic PII/injection checks are conservative and incomplete, not proof of
+anonymity or confidentiality. Operators inspect source material and control allowed
+directories; local filesystem elapsed checks cannot cancel a stalled OS call.
+Seven-day expiry prevents publication immediately; physical quarantine purge requires
+running/scheduling `expire`, not an implemented daemon. SQL admins can bypass access
+conventions. Immutable retired question history remains, so later retrieval must
+check every source/document/chunk/question state. No cache/vector invalidation claim.
+Permission evidence is a human assertion; fixtures never prove external rights.
+
+See [ingestion limitations](docs/ingestion.md), [policy](docs/source-policy.md) and
+[data/privacy](docs/data-and-privacy.md). Existing baseline/TLS/dependency limitations
+above remain. No dependency changes, provider calls or deployment are part of Phase 4.

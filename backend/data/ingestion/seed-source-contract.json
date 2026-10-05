@@ -1,0 +1,25 @@
+{
+  "adapterId": "local-file",
+  "version": "1",
+  "sourceType": "authored",
+  "allowedInputs": [
+    "/Users/yasir/Developer/Shahab-fyp/techvera/backend/data/ingestion/junior-se-seed.json"
+  ],
+  "permissionEvidence": "Muhammad Yasir, developer, personally reviewed and approved only the exact seed-review.md SHA256 be9d40c94f1941374a7332fd4b15cbe940ab6cc4e58495b4a0877c40cfb7b7cd on 2026-10-05. That packet pins JSON corpus SHA256 b85d0e09bb94eaf6751a0ae3a86ffb1f76169ee4faf6e314b60f579cee69e995. Rights, correctness, junior scope, mapping, duplicates, privacy and confidentiality attested; no external/company bank claimed.",
+  "licenseId": "TechVera-owner-permission-exact-review-packet",
+  "termsRevision": "local-authored-v1",
+  "attribution": "TechVera original AI-assisted draft, subject to human editorial review",
+  "authentication": "operator-filesystem",
+  "refresh": "manual",
+  "maxBytes": 262144,
+  "timeoutMs": 5000,
+  "maxDocuments": 80,
+  "minIntervalMs": 0,
+  "timestampSemantics": "occurrence-explicit-fetch-observed",
+  "withdrawal": "retire-and-redact",
+  "retainRaw": false,
+  "fixture": false,
+  "approvedInputHashes": [
+    "b85d0e09bb94eaf6751a0ae3a86ffb1f76169ee4faf6e314b60f579cee69e995"
+  ]
+}

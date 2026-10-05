@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "editorial-attestation-v1",
+  "reviewArtifact": "docs/seed-review.md",
+  "approvedArtifactHash": "be9d40c94f1941374a7332fd4b15cbe940ab6cc4e58495b4a0877c40cfb7b7cd",
+  "linkedCorpusFile": "backend/data/ingestion/junior-se-seed.json",
+  "linkedCorpusInputHash": "b85d0e09bb94eaf6751a0ae3a86ffb1f76169ee4faf6e314b60f579cee69e995",
+  "reviewer": {
+    "id": "muhammad-yasir",
+    "name": "Muhammad Yasir",
+    "role": "developer",
+    "reviewDate": "2026-10-05",
+    "dateAsProvided": "5/10/26"
+  },
+  "scope": "Only the exact reviewed packet and its explicitly pinned matching 48-question corpus; no other sources, future revisions, concepts/rubrics or company claims.",
+  "bindingValidation": "All 48 question texts, editorial context, category, difficulty and primary competency match the exact packet; empty secondary tags and three supported role coverage match its stated scope.",
+  "attestation": "I personally reviewed all 48 questions in techvera/docs/seed-review.md for technical correctness, junior-level scope, taxonomy mapping, duplicates, privacy/confidentiality, and publication suitability. I confirm these are locally authored/AI-assisted TechVera drafts and, to the best of my knowledge, are not copied from proprietary, confidential, restricted, or company-specific interview banks. No PII or confidential employer information is present. I approve publication of the exact corpus with SHA-256: be9d40c94f1941374a7332fd4b15cbe940ab6cc4e58495b4a0877c40cfb7b7cd.",
+  "authority": "Explicit user statement in this Phase 4 session; developer review, not independent research adjudication."
+}

@@ -2,7 +2,7 @@
 
 ## CURRENTLY IMPLEMENTED
 
-Three explicit SQL migrations and a checksum-verified TypeScript runner adopt the
+Four explicit SQL migrations and a checksum-verified TypeScript runner adopt the
 five existing tables, add 27 preparatory knowledge/evidence/durability tables and
 seed `junior-se-v1` (8 roots, 24 children). `schema_migrations` is an additional
 runner-owned history table. Express/backend repositories own all durable writes;
@@ -13,7 +13,7 @@ No Phase 3 user-facing behavior change; schema is preparatory.
 
 The executable schema is [002_knowledge_foundation.sql](../backend/migrations/002_knowledge_foundation.sql);
 the unchanged baseline is [001_legacy_baseline.sql](../backend/migrations/001_legacy_baseline.sql),
-and the only seed is [003_junior_taxonomy.sql](../backend/migrations/003_junior_taxonomy.sql).
+and the migration-only taxonomy seed is [003_junior_taxonomy.sql](../backend/migrations/003_junior_taxonomy.sql).
 Migration history is created by [the runner](../backend/database/migrations.ts).
 See [migration operations](migrations.md) before applying anything.
 
@@ -50,8 +50,8 @@ See [migration operations](migrations.md) before applying anything.
 | `transactional_outbox` | Owned session event/revision/bounded payload/publication attempts; no dispatcher |
 | `reward_ledger` | Owned session/reward-key uniqueness and amount; no changes to existing XP delivery |
 
-Global knowledge writes are internal editorial primitives; a future authenticated
-admin/ingestion boundary must enforce who may review sources. Private writes take
+Global knowledge writes are internal editorial primitives; the internal Phase 4 CLI
+uses OS/database-authorized operators and registered reviewers. Private writes take
 an explicit caller owner. Composite foreign keys enforce ownership independently
 of repository checks: plan→owned session, item→plan/session/user, answer→item and
 question, evaluation→answer/rubric/question/policy, evidence→evaluation/concept/rubric.
@@ -140,7 +140,7 @@ tombstones need the later privacy workflow; cascade tests do not claim full eras
 
 ## PLANNED FOR LATER PHASE
 
-No source corpus, questions or rubrics are seeded. No ingestion, vector search,
+The explicit reviewed local corpus import is described below; no rubrics are seeded. No vector search,
 planner, scorer, evaluator-confidence computation, queue executor/dispatcher,
 crash-safe XP migration or retention jobs exist. `embedding_metadata` stores metadata
 only: stock disposable PostgreSQL 16.15 has no available `vector` extension. Actual
@@ -155,3 +155,33 @@ remain governed by [the frozen design](target-architecture.md) and
 capabilities. SQL administrators can disable triggers; use least-privilege application
 and migration roles in the final deployment rather than treat schema checks as admin
 security isolation.
+
+## Phase 4 additions — CURRENTLY IMPLEMENTED
+
+Migration [004_controlled_ingestion.sql](../backend/migrations/004_controlled_ingestion.sql)
+adds six tables without editing earlier migrations or legacy session DTOs:
+
+| Table | Purpose |
+|---|---|
+| ingestion_reviewers | Actual enabled human editorial identity; marked fictional test reviewers |
+| ingestion_adapters | Common versioned permission/input/limit/withdrawal contract for each source |
+| ingestion_records | Quarantine/review/publication state, input hash, screened codes, normalized-document link, candidate drafts, duplicate links and seven-day expiry |
+| ingestion_candidates | Structured proposal, exact source chunk/span, hash/method, duplicate links, human review and pinned published question version |
+| interview_experience_records | Version-pinned unverified company/role/nullable occurrence/track/submitter/consent/permission metadata; content and review live in the document |
+| ingestion_review_events | Append-only hash/identity/action/reviewer/time/reason audit |
+
+CHECKs bound states/shapes/identities and require review metadata on approved/published
+records/candidates. Three named access indexes cover expiry, candidate record/state
+and record audit times. Audit update/delete triggers reject mutations. An additional
+question-publication trigger requires reviewer/time and available linked source/
+document/chunk status. Existing published-version/rubric immutability remains.
+Application trusted-operator boundaries validate actual review IDs and exact hashes;
+SQL administrators are not isolated by these checks.
+
+Clean pending versions/chunks remain quarantined/staged until explicit review;
+flagged data keeps only hashes/codes. Withdrawal retires imported questions/chunks,
+redacts source text/specifications/voluntary prose, and preserves identity/audit.
+No table is coupled to legacy session JSONB, no vector extension is added, and no
+candidate resume/answer becomes shared knowledge. See [ingestion](ingestion.md).
+The reviewed corpus is an explicit CLI import, not a migration seed or automatic
+startup action. No expected concepts or rubric seeds were added.

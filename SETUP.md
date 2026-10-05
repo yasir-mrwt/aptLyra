@@ -331,3 +331,28 @@ The CLI subtest uses a temporary directory and explicit fixture configuration.
 Run the Phase 1 lint/type/build/fixture and persistence/smoke checks as well.
 Stop the disposable stores afterward with `docker compose -f compose.test.yml down`
 from the product root. See [migration operations](docs/migrations.md) for full policy.
+
+## Phase 4 ingestion verification — CURRENTLY IMPLEMENTED
+
+Use Node 20.x and the same disposable PostgreSQL 16 / Redis fixtures. External
+store variables must be unset. With stores running:
+
+```bash
+npm --prefix backend run build
+npm --prefix backend run test:schema
+npm --prefix backend run test:ingestion
+npm --prefix backend run test:seed
+npm --prefix backend run corpus:seed-manifest
+```
+
+The schema/ingestion/seed scripts drop their own random databases afterward. The
+seed script validates the actual approved review-packet and JSON hashes, exercises
+real CLI publication with Muhammad Yasir's exact-scope review, verifies the manifest,
+and drops the database; it is not a production import. Fixture editors are separate.
+Run baseline `test:persistence` and `test:smoke`, then stop Compose. No keys or live
+provider are needed. For deliberate private database imports, migrate explicitly
+and follow [internal commands](docs/ingestion.md); register real reviewers and
+review exact source contract/content hashes. Never run approval blindly. Production/
+staging ingestion operations additionally require a final `--apply`.
+
+No candidate-facing Phase 4 behavior; reviewed corpus is preparatory for Phase 5/6.

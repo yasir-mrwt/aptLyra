@@ -1,0 +1,965 @@
+{
+  "schemaVersion": "local-v1",
+  "documents": [
+    {
+      "key": "dsa.structures-1",
+      "title": "dsa.structures-1",
+      "text": "Compare a stack and a queue using undo history and a waiting line as examples. Which operation order does each preserve?\n\nEditorial context (draft, not a reviewed rubric): A stack removes the most recently added item; a queue removes the earliest. The examples illustrate LIFO and FIFO without assuming a particular implementation.",
+      "questions": [
+        {
+          "text": "Compare a stack and a queue using undo history and a waiting line as examples. Which operation order does each preserve?",
+          "category": "conceptual-oral",
+          "difficulty": "easy",
+          "primary": "dsa.structures",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "dsa.structures-2",
+      "title": "dsa.structures-2",
+      "text": "In Python or JavaScript, return the first repeated value in an array of integers, scanning from left to right. Return no result when all values are unique. Explain the time and extra space costs.\n\nEditorial context (draft, not a reviewed rubric): A set of seen values detects the first repeated occurrence during the scan. Average linear time assumes expected constant-time set membership; auxiliary space is linear in distinct values.",
+      "questions": [
+        {
+          "text": "In Python or JavaScript, return the first repeated value in an array of integers, scanning from left to right. Return no result when all values are unique. Explain the time and extra space costs.",
+          "category": "coding",
+          "difficulty": "standard",
+          "primary": "dsa.structures",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "dsa.complexity-1",
+      "title": "dsa.complexity-1",
+      "text": "An algorithm scans n values once and then scans them once again. Explain its time complexity and why two consecutive scans differ from two nested scans.\n\nEditorial context (draft, not a reviewed rubric): Sequential linear scans total linear time. Fully nested independent scans total quadratic time; constants do not change the asymptotic order.",
+      "questions": [
+        {
+          "text": "An algorithm scans n values once and then scans them once again. Explain its time complexity and why two consecutive scans differ from two nested scans.",
+          "category": "conceptual-oral",
+          "difficulty": "easy",
+          "primary": "dsa.complexity",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "dsa.complexity-2",
+      "title": "dsa.complexity-2",
+      "text": "A service can sort a list once and use binary search for many lookups, or scan the unsorted list for every lookup. Explain how n items and m lookups affect the choice, including preprocessing and space.\n\nEditorial context (draft, not a reviewed rubric): Compare sorting plus m logarithmic searches against m linear scans. Include update frequency and whether a sorted copy is needed; no fixed winner exists for all n and m.",
+      "questions": [
+        {
+          "text": "A service can sort a list once and use binary search for many lookups, or scan the unsorted list for every lookup. Explain how n items and m lookups affect the choice, including preprocessing and space.",
+          "category": "scenario",
+          "difficulty": "stretch",
+          "primary": "dsa.complexity",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "dsa.search-sort-1",
+      "title": "dsa.search-sort-1",
+      "text": "Implement binary search in Python or JavaScript for a sorted ascending array of distinct integers. Return the matching index or -1. Include empty-array and missing-value cases.\n\nEditorial context (draft, not a reviewed rubric): Maintain a shrinking interval and avoid repeating the midpoint. Binary search is logarithmic time; iteration can use constant auxiliary space.",
+      "questions": [
+        {
+          "text": "Implement binary search in Python or JavaScript for a sorted ascending array of distinct integers. Return the matching index or -1. Include empty-array and missing-value cases.",
+          "category": "coding",
+          "difficulty": "standard",
+          "primary": "dsa.search-sort",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "dsa.search-sort-2",
+      "title": "dsa.search-sort-2",
+      "text": "A binary search loop updates low to mid when the target exceeds the middle value, while its condition is low less than or equal to high. Show an input that fails to make progress and explain a repair.\n\nEditorial context (draft, not a reviewed rubric): The middle element has already been ruled out. Advancing low to mid plus one prevents a one-element or two-element interval from remaining unchanged.",
+      "questions": [
+        {
+          "text": "A binary search loop updates low to mid when the target exceeds the middle value, while its condition is low less than or equal to high. Show an input that fails to make progress and explain a repair.",
+          "category": "debugging",
+          "difficulty": "stretch",
+          "primary": "dsa.search-sort",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "oop.encapsulation-1",
+      "title": "oop.encapsulation-1",
+      "text": "Why might a BankBalance object expose deposit and withdraw methods rather than a freely writable balance field? Describe an invariant and a limitation of this approach.\n\nEditorial context (draft, not a reviewed rubric): Controlled methods can preserve a nonnegative balance invariant, but encapsulation alone does not solve concurrent updates, validation of every input or persistence failures.",
+      "questions": [
+        {
+          "text": "Why might a BankBalance object expose deposit and withdraw methods rather than a freely writable balance field? Describe an invariant and a limitation of this approach.",
+          "category": "conceptual-oral",
+          "difficulty": "easy",
+          "primary": "oop.encapsulation",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "oop.encapsulation-2",
+      "title": "oop.encapsulation-2",
+      "text": "A shopping cart exposes its internal mutable items array. A caller removes entries without updating the total. Propose an interface that protects consistency and explain how callers can inspect items.\n\nEditorial context (draft, not a reviewed rubric): Hide mutation behind cart operations and return a copy or read-only view. Ensure totals are computed from authoritative items or updated atomically with every supported mutation.",
+      "questions": [
+        {
+          "text": "A shopping cart exposes its internal mutable items array. A caller removes entries without updating the total. Propose an interface that protects consistency and explain how callers can inspect items.",
+          "category": "scenario",
+          "difficulty": "standard",
+          "primary": "oop.encapsulation",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "oop.polymorphism-1",
+      "title": "oop.polymorphism-1",
+      "text": "Two payment processors implement the same charge interface. Explain how a checkout function can use either processor without checking its concrete class.\n\nEditorial context (draft, not a reviewed rubric): The function depends on the interface contract. Implementations may differ internally but must preserve expected inputs, outputs and failure semantics.",
+      "questions": [
+        {
+          "text": "Two payment processors implement the same charge interface. Explain how a checkout function can use either processor without checking its concrete class.",
+          "category": "conceptual-oral",
+          "difficulty": "easy",
+          "primary": "oop.polymorphism",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "oop.polymorphism-2",
+      "title": "oop.polymorphism-2",
+      "text": "A subclass replaces a method that returns a result with one that silently returns no result on valid input. Why can code written for the base class break, and how would you repair the contract?\n\nEditorial context (draft, not a reviewed rubric): Substitution requires preserving the promised behavior, not just matching a method name. Restore compatible results or use a separate interface for materially different behavior.",
+      "questions": [
+        {
+          "text": "A subclass replaces a method that returns a result with one that silently returns no result on valid input. Why can code written for the base class break, and how would you repair the contract?",
+          "category": "debugging",
+          "difficulty": "standard",
+          "primary": "oop.polymorphism",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "oop.composition-1",
+      "title": "oop.composition-1",
+      "text": "Explain composition using a report generator that receives a formatter object. How does this differ from making every report type inherit a formatter class?\n\nEditorial context (draft, not a reviewed rubric): Composition delegates formatting to a collaborator and can make behavior replaceable. Inheritance couples the subtype to the base implementation and should reflect a valid behavioral relationship.",
+      "questions": [
+        {
+          "text": "Explain composition using a report generator that receives a formatter object. How does this differ from making every report type inherit a formatter class?",
+          "category": "conceptual-oral",
+          "difficulty": "easy",
+          "primary": "oop.composition",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "oop.composition-2",
+      "title": "oop.composition-2",
+      "text": "A notification class hierarchy has EmailWithLogging, EmailWithRetry, SmsWithLogging and SmsWithRetry subclasses. Propose a simpler composition-based design and name one trade-off.\n\nEditorial context (draft, not a reviewed rubric): Compose channel delivery with logging and retry collaborators or wrappers. This reduces combinations of subclasses but introduces explicit wiring and requires clear wrapper ordering.",
+      "questions": [
+        {
+          "text": "A notification class hierarchy has EmailWithLogging, EmailWithRetry, SmsWithLogging and SmsWithRetry subclasses. Propose a simpler composition-based design and name one trade-off.",
+          "category": "scenario",
+          "difficulty": "stretch",
+          "primary": "oop.composition",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "dbms-sql.queries-1",
+      "title": "dbms-sql.queries-1",
+      "text": "Given customers(id) and orders(id, customer_id, total), write a PostgreSQL query returning every customer ID and its order count, including customers with zero orders. Explain which column you count.\n\nEditorial context (draft, not a reviewed rubric): Use a left join grouped by customer ID and COUNT of the non-null order ID. COUNT(*) would count the placeholder row for customers without orders.",
+      "questions": [
+        {
+          "text": "Given customers(id) and orders(id, customer_id, total), write a PostgreSQL query returning every customer ID and its order count, including customers with zero orders. Explain which column you count.",
+          "category": "sql",
+          "difficulty": "standard",
+          "primary": "dbms-sql.queries",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "dbms-sql.queries-2",
+      "title": "dbms-sql.queries-2",
+      "text": "Given purchases(id, customer_id, amount, paid_at), write a PostgreSQL query for customers with at least two paid purchases and a paid total above 100. Ignore unpaid purchases whose paid_at is NULL. Explain WHERE versus HAVING.\n\nEditorial context (draft, not a reviewed rubric): WHERE filters paid rows using IS NOT NULL before grouping. HAVING applies count and sum conditions to each customer group; ordinary equality to NULL is unsuitable.",
+      "questions": [
+        {
+          "text": "Given purchases(id, customer_id, amount, paid_at), write a PostgreSQL query for customers with at least two paid purchases and a paid total above 100. Ignore unpaid purchases whose paid_at is NULL. Explain WHERE versus HAVING.",
+          "category": "sql",
+          "difficulty": "stretch",
+          "primary": "dbms-sql.queries",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "dbms-sql.modeling-1",
+      "title": "dbms-sql.modeling-1",
+      "text": "Explain primary and foreign keys using students, courses and course enrollments. How can the schema prevent the same student enrolling in the same course twice?\n\nEditorial context (draft, not a reviewed rubric): Keys identify rows and foreign keys preserve references. A unique pair of student and course IDs or a composite primary key prevents duplicate enrollments.",
+      "questions": [
+        {
+          "text": "Explain primary and foreign keys using students, courses and course enrollments. How can the schema prevent the same student enrolling in the same course twice?",
+          "category": "conceptual-oral",
+          "difficulty": "easy",
+          "primary": "dbms-sql.modeling",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "dbms-sql.modeling-2",
+      "title": "dbms-sql.modeling-2",
+      "text": "An orders table repeats customer name and current contact details in every row. Explain one update anomaly and distinguish a deliberate historical shipping snapshot from accidental duplication.\n\nEditorial context (draft, not a reviewed rubric): Repeated current data can diverge across rows. A normalized customer relation avoids this; an explicit immutable order-time shipping snapshot has different semantics and may be appropriate.",
+      "questions": [
+        {
+          "text": "An orders table repeats customer name and current contact details in every row. Explain one update anomaly and distinguish a deliberate historical shipping snapshot from accidental duplication.",
+          "category": "scenario",
+          "difficulty": "standard",
+          "primary": "dbms-sql.modeling",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "dbms-sql.transactions-indexes-1",
+      "title": "dbms-sql.transactions-indexes-1",
+      "text": "A transfer debits one account and credits another in separate database commits. What happens if the second operation fails, and how does a transaction help? Name another control needed for concurrent transfers.\n\nEditorial context (draft, not a reviewed rubric): A single transaction can commit both operations or roll both back. Concurrent balance changes still require suitable locking, isolation or conditional updates to preserve invariants.",
+      "questions": [
+        {
+          "text": "A transfer debits one account and credits another in separate database commits. What happens if the second operation fails, and how does a transaction help? Name another control needed for concurrent transfers.",
+          "category": "scenario",
+          "difficulty": "standard",
+          "primary": "dbms-sql.transactions-indexes",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "dbms-sql.transactions-indexes-2",
+      "title": "dbms-sql.transactions-indexes-2",
+      "text": "Why can an index speed up a selective lookup but slow down inserts? Explain why an index is not guaranteed to improve every query.\n\nEditorial context (draft, not a reviewed rubric): An index reduces some search work but must be maintained on writes and uses storage. Selectivity, query shape and the optimizer affect whether scanning is cheaper.",
+      "questions": [
+        {
+          "text": "Why can an index speed up a selective lookup but slow down inserts? Explain why an index is not guaranteed to improve every query.",
+          "category": "conceptual-oral",
+          "difficulty": "easy",
+          "primary": "dbms-sql.transactions-indexes",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "os.process-thread-1",
+      "title": "os.process-thread-1",
+      "text": "Compare a process and a thread in terms of address space and shared resources. Why does an error in one thread sometimes affect the whole process?\n\nEditorial context (draft, not a reviewed rubric): Threads in one process share its address space while processes normally have separate address spaces. Shared memory corruption or process termination can affect all threads.",
+      "questions": [
+        {
+          "text": "Compare a process and a thread in terms of address space and shared resources. Why does an error in one thread sometimes affect the whole process?",
+          "category": "conceptual-oral",
+          "difficulty": "easy",
+          "primary": "os.process-thread",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "os.process-thread-2",
+      "title": "os.process-thread-2",
+      "text": "A program performs CPU-heavy work while another task waits for network input. Explain how concurrency can help responsiveness and why adding threads does not guarantee faster CPU computation.\n\nEditorial context (draft, not a reviewed rubric): Scheduling can overlap waiting with other work. CPU capacity, runtime constraints, synchronization and thread overhead limit computation speedups.",
+      "questions": [
+        {
+          "text": "A program performs CPU-heavy work while another task waits for network input. Explain how concurrency can help responsiveness and why adding threads does not guarantee faster CPU computation.",
+          "category": "scenario",
+          "difficulty": "standard",
+          "primary": "os.process-thread",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "os.memory-1",
+      "title": "os.memory-1",
+      "text": "Explain the difference between a local variable with stack-like lifetime and an object allocated on the heap. Why should a language runtime affect your explanation?\n\nEditorial context (draft, not a reviewed rubric): Stack frames have call-related lifetime; heap objects may outlive a call. Allocation details and garbage collection depend on the language and implementation, so universal claims are unsafe.",
+      "questions": [
+        {
+          "text": "Explain the difference between a local variable with stack-like lifetime and an object allocated on the heap. Why should a language runtime affect your explanation?",
+          "category": "conceptual-oral",
+          "difficulty": "easy",
+          "primary": "os.memory",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "os.memory-2",
+      "title": "os.memory-2",
+      "text": "A long-running service keeps every request result in an in-memory map and never removes entries. Memory usage grows despite garbage collection. Explain the cause and propose a bounded policy.\n\nEditorial context (draft, not a reviewed rubric): Reachable map entries are not collectible. Limit size or use expiry with eviction and account for key growth; garbage collection does not define the application retention policy.",
+      "questions": [
+        {
+          "text": "A long-running service keeps every request result in an in-memory map and never removes entries. Memory usage grows despite garbage collection. Explain the cause and propose a bounded policy.",
+          "category": "debugging",
+          "difficulty": "standard",
+          "primary": "os.memory",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "os.synchronization-1",
+      "title": "os.synchronization-1",
+      "text": "Two threads read a shared counter, add one and write it back. Show an interleaving that loses an increment and explain a synchronization option.\n\nEditorial context (draft, not a reviewed rubric): Both can read the same old value before either writes. A suitable mutex or atomic increment makes the read-modify-write operation indivisible at the required scope.",
+      "questions": [
+        {
+          "text": "Two threads read a shared counter, add one and write it back. Show an interleaving that loses an increment and explain a synchronization option.",
+          "category": "scenario",
+          "difficulty": "standard",
+          "primary": "os.synchronization",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "os.synchronization-2",
+      "title": "os.synchronization-2",
+      "text": "Task A locks resource X then waits for Y; task B locks Y then waits for X. Explain the deadlock and propose a consistent lock-order policy.\n\nEditorial context (draft, not a reviewed rubric): Each task waits for a resource held by the other. A common global ordering prevents this cycle when every participant follows it; timeout handling must still release acquired resources.",
+      "questions": [
+        {
+          "text": "Task A locks resource X then waits for Y; task B locks Y then waits for X. Explain the deadlock and propose a consistent lock-order policy.",
+          "category": "debugging",
+          "difficulty": "stretch",
+          "primary": "os.synchronization",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "networks.transport-1",
+      "title": "networks.transport-1",
+      "text": "Compare TCP and UDP for ordered delivery, reliability and message boundaries. Why might an application still need its own acknowledgements over TCP?\n\nEditorial context (draft, not a reviewed rubric): TCP supplies an ordered reliable byte stream, while UDP preserves datagrams without delivery guarantees. Transport delivery alone does not confirm application processing or durable commit.",
+      "questions": [
+        {
+          "text": "Compare TCP and UDP for ordered delivery, reliability and message boundaries. Why might an application still need its own acknowledgements over TCP?",
+          "category": "conceptual-oral",
+          "difficulty": "easy",
+          "primary": "networks.transport",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "networks.transport-2",
+      "title": "networks.transport-2",
+      "text": "A client loses its connection after sending a purchase request and before receiving a response. Why is retrying not proof that the first request failed, and what application mechanism can prevent duplicate purchases?\n\nEditorial context (draft, not a reviewed rubric): The server may have committed before the response was lost. A persisted idempotency key can make retries return the original outcome rather than duplicate the business effect.",
+      "questions": [
+        {
+          "text": "A client loses its connection after sending a purchase request and before receiving a response. Why is retrying not proof that the first request failed, and what application mechanism can prevent duplicate purchases?",
+          "category": "scenario",
+          "difficulty": "standard",
+          "primary": "networks.transport",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "networks.http-dns-1",
+      "title": "networks.http-dns-1",
+      "text": "Describe the main steps from entering an HTTPS URL to receiving an HTTP response. Include DNS, the transport connection and TLS, and mention where caching may skip a step.\n\nEditorial context (draft, not a reviewed rubric): Resolve the host if needed, establish or reuse a transport connection, negotiate or reuse secure transport and exchange HTTP data. Caches and connection reuse can avoid fresh work.",
+      "questions": [
+        {
+          "text": "Describe the main steps from entering an HTTPS URL to receiving an HTTP response. Include DNS, the transport connection and TLS, and mention where caching may skip a step.",
+          "category": "conceptual-oral",
+          "difficulty": "easy",
+          "primary": "networks.http-dns",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "networks.http-dns-2",
+      "title": "networks.http-dns-2",
+      "text": "A browser receives HTTP 404 for one API path while the same host serves its health endpoint. Distinguish this from a DNS failure and propose two checks.\n\nEditorial context (draft, not a reviewed rubric): An HTTP response means the request reached an HTTP responder. Check the registered route and method plus proxy base paths; DNS resolution failures occur before such a response.",
+      "questions": [
+        {
+          "text": "A browser receives HTTP 404 for one API path while the same host serves its health endpoint. Distinguish this from a DNS failure and propose two checks.",
+          "category": "debugging",
+          "difficulty": "standard",
+          "primary": "networks.http-dns",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "networks.tls-basics-1",
+      "title": "networks.tls-basics-1",
+      "text": "What does HTTPS protect in transit, and what does a valid server certificate help establish? Name something HTTPS does not guarantee about application data.\n\nEditorial context (draft, not a reviewed rubric): TLS protects transport confidentiality and integrity and authenticates a server identity under a trust model. It does not guarantee truthful content, authorization or safe storage at endpoints.",
+      "questions": [
+        {
+          "text": "What does HTTPS protect in transit, and what does a valid server certificate help establish? Name something HTTPS does not guarantee about application data.",
+          "category": "conceptual-oral",
+          "difficulty": "easy",
+          "primary": "networks.tls-basics",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "networks.tls-basics-2",
+      "title": "networks.tls-basics-2",
+      "text": "An API client works only when certificate verification is disabled. Explain why keeping that setting is risky and describe a safer diagnosis.\n\nEditorial context (draft, not a reviewed rubric): Disabling verification can admit impersonation. Inspect hostname, chain, expiry, system time and trusted roots rather than bypassing identity checks permanently.",
+      "questions": [
+        {
+          "text": "An API client works only when certificate verification is disabled. Explain why keeping that setting is risky and describe a safer diagnosis.",
+          "category": "scenario",
+          "difficulty": "stretch",
+          "primary": "networks.tls-basics",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "backend-web.api-contracts-1",
+      "title": "backend-web.api-contracts-1",
+      "text": "Design a paginated GET endpoint for a user’s notes. Specify request parameters, a response shape, validation and a stable ordering that avoids ambiguous page boundaries.\n\nEditorial context (draft, not a reviewed rubric): Bound page size and define an ordering with a unique tie-breaker. Cursor or offset semantics should be explicit, with owned-resource filtering enforced server-side.",
+      "questions": [
+        {
+          "text": "Design a paginated GET endpoint for a user’s notes. Specify request parameters, a response shape, validation and a stable ordering that avoids ambiguous page boundaries.",
+          "category": "scenario",
+          "difficulty": "standard",
+          "primary": "backend-web.api-contracts",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "backend-web.api-contracts-2",
+      "title": "backend-web.api-contracts-2",
+      "text": "Explain the usual purpose of HTTP 201, 400, 401, 403 and 409 in an API. Give a case where a resource-ownership check changes the response.\n\nEditorial context (draft, not a reviewed rubric): 201 indicates creation, 400 invalid input, 401 missing or invalid authentication, 403 denied access and 409 conflict. Some APIs deliberately return 404 to conceal unowned resource existence.",
+      "questions": [
+        {
+          "text": "Explain the usual purpose of HTTP 201, 400, 401, 403 and 409 in an API. Give a case where a resource-ownership check changes the response.",
+          "category": "conceptual-oral",
+          "difficulty": "easy",
+          "primary": "backend-web.api-contracts",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "backend-web.auth-validation-1",
+      "title": "backend-web.auth-validation-1",
+      "text": "An authenticated endpoint updates a note selected only by note ID from the request. Explain how one user could modify another user’s note and show the missing authorization condition.\n\nEditorial context (draft, not a reviewed rubric): Authentication establishes identity, not permission over every record. Scope the update by both note ID and authenticated owner; do not trust an owner ID supplied by the client.",
+      "questions": [
+        {
+          "text": "An authenticated endpoint updates a note selected only by note ID from the request. Explain how one user could modify another user’s note and show the missing authorization condition.",
+          "category": "debugging",
+          "difficulty": "standard",
+          "primary": "backend-web.auth-validation",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "backend-web.auth-validation-2",
+      "title": "backend-web.auth-validation-2",
+      "text": "A profile update accepts every field in the request body, including isAdmin. Propose input validation and an update strategy that prevents privilege changes.\n\nEditorial context (draft, not a reviewed rubric): Allowlist editable fields, validate their types and bounds, and construct the update from those fields. Privileged fields need a separate authorized administrative boundary.",
+      "questions": [
+        {
+          "text": "A profile update accepts every field in the request body, including isAdmin. Propose input validation and an update strategy that prevents privilege changes.",
+          "category": "scenario",
+          "difficulty": "standard",
+          "primary": "backend-web.auth-validation",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "backend-web.persistence-jobs-1",
+      "title": "backend-web.persistence-jobs-1",
+      "text": "A job worker sends a notification and crashes before recording completion. Explain why a retry may send twice and describe a practical idempotency strategy and its limits.\n\nEditorial context (draft, not a reviewed rubric): Persist a stable operation identity and use provider idempotency when available. SQL and an external side effect are not automatically atomic; explicitly describe possible duplicate delivery or recovery limits.",
+      "questions": [
+        {
+          "text": "A job worker sends a notification and crashes before recording completion. Explain why a retry may send twice and describe a practical idempotency strategy and its limits.",
+          "category": "scenario",
+          "difficulty": "stretch",
+          "primary": "backend-web.persistence-jobs",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "backend-web.persistence-jobs-2",
+      "title": "backend-web.persistence-jobs-2",
+      "text": "A product price is updated in PostgreSQL, but an API keeps serving an old cached value. Propose an invalidation strategy and explain how a cache failure should affect correctness.\n\nEditorial context (draft, not a reviewed rubric): Invalidate or version cached entries after authoritative commits and use bounded TTLs. The database remains authoritative; cache failures should not replace a successful durable update with stale truth.",
+      "questions": [
+        {
+          "text": "A product price is updated in PostgreSQL, but an API keeps serving an old cached value. Propose an invalidation strategy and explain how a cache failure should affect correctness.",
+          "category": "debugging",
+          "difficulty": "standard",
+          "primary": "backend-web.persistence-jobs",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "design-lite.requirements-1",
+      "title": "design-lite.requirements-1",
+      "text": "Sketch a small library borrowing service. First state assumptions about borrowers, available copies and returning a book, then identify the client, API and datastore.\n\nEditorial context (draft, not a reviewed rubric): Clarify the product before choosing components. Model individual copies or inventory counts and a loan lifecycle; the sketch should show the authoritative source of availability.",
+      "questions": [
+        {
+          "text": "Sketch a small library borrowing service. First state assumptions about borrowers, available copies and returning a book, then identify the client, API and datastore.",
+          "category": "system-design-lite",
+          "difficulty": "easy",
+          "primary": "design-lite.requirements",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "design-lite.requirements-2",
+      "title": "design-lite.requirements-2",
+      "text": "A request says build a fast booking service. Ask for concrete requirements before choosing a cache or database, including capacity, latency, booking rules and failure behavior.\n\nEditorial context (draft, not a reviewed rubric): Translate vague speed requirements into measurable workload and response expectations. Clarify uniqueness, cancellation and consistency requirements before optimizing an assumed bottleneck.",
+      "questions": [
+        {
+          "text": "A request says build a fast booking service. Ask for concrete requirements before choosing a cache or database, including capacity, latency, booking rules and failure behavior.",
+          "category": "scenario",
+          "difficulty": "standard",
+          "primary": "design-lite.requirements",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "design-lite.service-data-1",
+      "title": "design-lite.service-data-1",
+      "text": "Design the API and data relationships for a small event registration service. Prevent duplicate registration by the same user and show how event capacity is enforced under simultaneous requests.\n\nEditorial context (draft, not a reviewed rubric): Use a unique user-event relationship and enforce capacity atomically through a transaction or conditional update. A client-side capacity check alone is insufficient.",
+      "questions": [
+        {
+          "text": "Design the API and data relationships for a small event registration service. Prevent duplicate registration by the same user and show how event capacity is enforced under simultaneous requests.",
+          "category": "system-design-lite",
+          "difficulty": "standard",
+          "primary": "design-lite.service-data",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "design-lite.service-data-2",
+      "title": "design-lite.service-data-2",
+      "text": "Draw a simple task-list service with users, lists and tasks. Explain ownership checks, the create-task data flow and one way to query unfinished tasks efficiently.\n\nEditorial context (draft, not a reviewed rubric): Represent list membership or ownership explicitly and check it on mutations. Use an appropriate indexed filter if justified by the workload, without inventing a distributed architecture.",
+      "questions": [
+        {
+          "text": "Draw a simple task-list service with users, lists and tasks. Explain ownership checks, the create-task data flow and one way to query unfinished tasks efficiently.",
+          "category": "system-design-lite",
+          "difficulty": "standard",
+          "primary": "design-lite.service-data",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "design-lite.reliability-1",
+      "title": "design-lite.reliability-1",
+      "text": "A small order service stores orders and queues emails. Explain how it can preserve an order if the email provider is unavailable and how retries can avoid duplicate work.\n\nEditorial context (draft, not a reviewed rubric): Commit order state independently of provider availability and persist dispatch intent, for example with an outbox. Workers use stable identities and bounded retries; delivery guarantees depend on the provider.",
+      "questions": [
+        {
+          "text": "A small order service stores orders and queues emails. Explain how it can preserve an order if the email provider is unavailable and how retries can avoid duplicate work.",
+          "category": "system-design-lite",
+          "difficulty": "stretch",
+          "primary": "design-lite.reliability",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "design-lite.reliability-2",
+      "title": "design-lite.reliability-2",
+      "text": "A nonessential recommendation service becomes slow. Explain how request timeouts and a fallback can protect a core checkout flow, and name an observability signal.\n\nEditorial context (draft, not a reviewed rubric): Bound the dependency deadline and return a safe fallback without blocking essential checkout state. Track timeout rates and latency; a fallback must not hide failed business writes.",
+      "questions": [
+        {
+          "text": "A nonessential recommendation service becomes slow. Explain how request timeouts and a fallback can protect a core checkout flow, and name an observability signal.",
+          "category": "scenario",
+          "difficulty": "standard",
+          "primary": "design-lite.reliability",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "programming.control-data-1",
+      "title": "programming.control-data-1",
+      "text": "In Python or JavaScript, write a function returning the sum of positive integers in a list. Do not mutate the input. Include an empty-list case.\n\nEditorial context (draft, not a reviewed rubric): Initialize an accumulator to zero and add only values greater than zero. An empty list produces zero and input mutation is unnecessary.",
+      "questions": [
+        {
+          "text": "In Python or JavaScript, write a function returning the sum of positive integers in a list. Do not mutate the input. Include an empty-list case.",
+          "category": "coding",
+          "difficulty": "easy",
+          "primary": "programming.control-data",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "programming.control-data-2",
+      "title": "programming.control-data-2",
+      "text": "In Python or JavaScript, group a list of words by their length and return a map from length to the words in their original relative order. Explain behavior for empty input.\n\nEditorial context (draft, not a reviewed rubric): Append each word to its length bucket while scanning. Preserve insertion order inside each bucket; an empty input produces an empty map.",
+      "questions": [
+        {
+          "text": "In Python or JavaScript, group a list of words by their length and return a map from length to the words in their original relative order. Explain behavior for empty input.",
+          "category": "coding",
+          "difficulty": "standard",
+          "primary": "programming.control-data",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "programming.debug-test-1",
+      "title": "programming.debug-test-1",
+      "text": "A function should return the largest integer in a nonempty list but initializes its maximum to zero. Explain a failing input, fix the initialization and propose regression tests.\n\nEditorial context (draft, not a reviewed rubric): An all-negative list exposes the error. Initialize from the first element or a valid negative-infinity sentinel, and define behavior for empty input rather than assuming zero is valid.",
+      "questions": [
+        {
+          "text": "A function should return the largest integer in a nonempty list but initializes its maximum to zero. Explain a failing input, fix the initialization and propose regression tests.",
+          "category": "debugging",
+          "difficulty": "standard",
+          "primary": "programming.debug-test",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "programming.debug-test-2",
+      "title": "programming.debug-test-2",
+      "text": "In Python or JavaScript, implement a function that removes consecutive repeated characters from a string, so aaabbcca becomes abca. Give tests for empty input, one character and separated repeats.\n\nEditorial context (draft, not a reviewed rubric): Compare each character to the last emitted character. Only consecutive repeats collapse; later repeated characters separated by other characters must remain.",
+      "questions": [
+        {
+          "text": "In Python or JavaScript, implement a function that removes consecutive repeated characters from a string, so aaabbcca becomes abca. Give tests for empty input, one character and separated repeats.",
+          "category": "coding",
+          "difficulty": "standard",
+          "primary": "programming.debug-test",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "programming.error-handling-1",
+      "title": "programming.error-handling-1",
+      "text": "Explain why catching every exception and returning an empty list can hide a failed data fetch. How can a caller distinguish a valid empty result from unavailable data?\n\nEditorial context (draft, not a reviewed rubric): Use an explicit error result or propagate a typed failure. A successful empty collection and a failed operation are different states and should not share indistinguishable outputs.",
+      "questions": [
+        {
+          "text": "Explain why catching every exception and returning an empty list can hide a failed data fetch. How can a caller distinguish a valid empty result from unavailable data?",
+          "category": "conceptual-oral",
+          "difficulty": "easy",
+          "primary": "programming.error-handling",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    },
+    {
+      "key": "programming.error-handling-2",
+      "title": "programming.error-handling-2",
+      "text": "An asynchronous function starts a write without awaiting it and immediately reports success. Explain a possible failure and show how to report completion or failure accurately in Python or JavaScript.\n\nEditorial context (draft, not a reviewed rubric): Await the asynchronous operation and handle or propagate its failure. If work is intentionally queued, report accepted or pending rather than falsely claiming the durable write completed.",
+      "questions": [
+        {
+          "text": "An asynchronous function starts a write without awaiting it and immediately reports success. Explain a possible failure and show how to report completion or failure accurately in Python or JavaScript.",
+          "category": "debugging",
+          "difficulty": "standard",
+          "primary": "programming.error-handling",
+          "secondary": [],
+          "roles": [
+            "Software Engineer",
+            "Backend Developer",
+            "Full Stack Developer"
+          ]
+        }
+      ],
+      "experience": null
+    }
+  ]
+}

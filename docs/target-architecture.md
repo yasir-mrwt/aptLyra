@@ -381,3 +381,19 @@ ambiguity with explicit reasons, filesystem/FAISS storage with PostgreSQL, and
 reference-native state with Express-owned REST/Socket.IO/SQL. No source files,
 assets, eight-metric rubric, SQLite/ORM, or 3D/voice stack were copied. Existing
 licenses/attribution remain; any later code/asset adaptation needs its own review.
+
+## Phase 4 ingestion implementation boundary
+
+CURRENTLY IMPLEMENTED: backend-owned local-file adapter/CLI, exact permission
+hashes, deterministic normalization/screening/structured extraction, explicit human
+review, versioned publication/withdrawal, consented experience-record path and a
+48-question original corpus with actual review. [Ingestion](ingestion.md) documents
+limits, audit/expiry and deferred HTTP/public submissions. [Corpus manifest](corpus-manifest.md)
+distinguishes real reviewed artifacts/disposable imports from fictional test data.
+
+No candidate-facing Phase 4 behavior; reviewed corpus is preparatory for Phase 5/6.
+
+The target retrieval/planner/scoring contracts above remain PLANNED FOR LATER PHASE.
+No model extraction, vector generation/index, live question selection or concept/
+rubric engine is activated. Backend owns every durable ingestion write; FastAPI has
+no new database access. Phase 2 remains the architecture source of truth.

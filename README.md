@@ -393,3 +393,15 @@ MIT — see [LICENSE](./LICENSE).
 <p align="center">
   <b>TechVera</b> — because reading interview questions is not the same as answering them out loud. 🎙️
 </p>
+
+## Phase 4 controlled ingestion — CURRENTLY IMPLEMENTED
+
+The backend now provides a local permission-aware import CLI, quarantine/screening,
+exact and near-duplicate review, immutable publication, consented experience-record
+imports and withdrawal. The 48 original AI-assisted seed questions have actual human
+review bound to an exact review packet and were imported/verified in disposable
+PostgreSQL. No production import is claimed. See [ingestion](docs/ingestion.md),
+[source policy](docs/source-policy.md) and [corpus manifest](docs/corpus-manifest.md).
+
+No candidate-facing Phase 4 behavior; reviewed corpus is preparatory for Phase 5/6.
+Embedding/RAG/planner/scoring behavior remains PLANNED FOR LATER PHASE.

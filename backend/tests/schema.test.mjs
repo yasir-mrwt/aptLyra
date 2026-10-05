@@ -46,7 +46,7 @@ async function buildFixture() {
   const chunk = await repo.createChunk({documentVersionId:documentVersion,index:0,excerpt:'NULL requires IS NULL',contentHash:hash,chunkerVersion:'fixture-v1'});
   const question = await repo.createQuestion({familyKey:'null-check',taxonomyVersion:'junior-se-v1',primaryCompetency:'dbms-sql.queries'});
   const version = await repo.createQuestionVersion({questionId:question,version:1,text:'Explain NULL checks',category:'conceptual-oral',
-    difficulty:'easy',origin:'retrieved',evidenceStatus:'available',contentHash:hash,publish:true,
+    difficulty:'easy',origin:'retrieved',evidenceStatus:'available',contentHash:hash,reviewedBy:'Fixture reviewer',reviewedAt:now,publish:true,
     provenance:[{documentVersionId:documentVersion,chunkId:chunk,relation:'editorial'}],secondaryCompetencies:['programming.control-data']});
   const rubric = await repo.createRubric(question);
   const rubricInput = {rubricId:rubric,questionVersionId:version,version:1,kind:'known',scoringPolicyVersion:'technical-v1',
@@ -93,10 +93,10 @@ after(async () => {
 });
 
 test('clean database, history, repeated and concurrent migration no-ops', async () => {
-  assert.equal(initialMigrations.applied.length,3);
+  assert.equal(initialMigrations.applied.length,4);
   assert.deepEqual(secondMigrations.applied,[]);
   const history = (await query('SELECT * FROM schema_migrations ORDER BY name')).rows;
-  assert.equal(history.length,3); assert.ok(history.every(r => /^[a-f0-9]{64}$/.test(r.checksum) && r.applied_at));
+  assert.equal(history.length,4); assert.ok(history.every(r => /^[a-f0-9]{64}$/.test(r.checksum) && r.applied_at));
   const runs = await Promise.all([runMigrations(pool),runMigrations(pool)]);
   assert.ok(runs.every(r => !r.applied.length));
 });
@@ -108,7 +108,7 @@ test('compiled migration CLI runs twice and requires explicit production apply',
   try {
     for (let n=0;n<2;n++) {
       const result=await execute(process.execPath,[cli],{cwd:directory,env});
-      assert.match(result.stdout,/Migrations current: 3; applied: none/);
+      assert.match(result.stdout,/Migrations current: 4; applied: none/);
     }
     await assert.rejects(()=>execute(process.execPath,[cli],{cwd:directory,env:{...env,NODE_ENV:'production'}}),
       e=>e.code===1 && e.stderr.includes('require explicit --apply') && !e.stderr.includes(fixtureUrl));
@@ -137,17 +137,17 @@ test('migration failure rolls back DDL/history and a corrected unapplied file ca
   const directory=await mkdtemp(join(tmpdir(),'techvera-migrations-'));
   try {
     for (const name of initialMigrations.current) await cp(join(migrationDirectory,name),join(directory,name));
-    await writeFile(join(directory,'004_failure.sql'),'CREATE TABLE rollback_marker(id integer); SELECT deliberately_missing_function();');
-    await assert.rejects(() => runMigrations(adoption,directory),/004_failure.sql rolled back/);
+    await writeFile(join(directory,'005_failure.sql'),'CREATE TABLE rollback_marker(id integer); SELECT deliberately_missing_function();');
+    await assert.rejects(() => runMigrations(adoption,directory),/005_failure.sql rolled back/);
     assert.equal((await adoption.query("SELECT to_regclass('rollback_marker') AS name")).rows[0].name,null);
-    assert.equal((await adoption.query('SELECT count(*)::int AS n FROM schema_migrations')).rows[0].n,3);
-    await writeFile(join(directory,'004_failure.sql'),'CREATE TABLE rollback_marker(id integer);');
-    assert.deepEqual((await runMigrations(adoption,directory)).applied,['004_failure.sql']);
+    assert.equal((await adoption.query('SELECT count(*)::int AS n FROM schema_migrations')).rows[0].n,4);
+    await writeFile(join(directory,'005_failure.sql'),'CREATE TABLE rollback_marker(id integer);');
+    assert.deepEqual((await runMigrations(adoption,directory)).applied,['005_failure.sql']);
     assert.deepEqual((await runMigrations(adoption,directory)).applied,[]);
     await writeFile(join(directory,'001_legacy_baseline.sql'),'SELECT 1;');
     await assert.rejects(() => runMigrations(adoption,directory),/history mismatch/);
     await assert.rejects(() => runMigrations(adoption),/history mismatch/);
-    await writeFile(join(directory,'004_duplicate.sql'),'SELECT 1;');
+    await writeFile(join(directory,'005_duplicate.sql'),'SELECT 1;');
     await assert.rejects(() => runMigrations(adoption,directory),/Duplicate migration/);
   } finally { await rm(directory,{recursive:true,force:true}); }
 });
@@ -189,11 +189,11 @@ test('question category/difficulty/origin and taxonomy constraints; explicit una
     await assert.rejects(()=>repo.createQuestionVersion(input),e=>e.code==='23514');
   }
   await assert.rejects(()=>repo.createQuestion({familyKey:'invalid',taxonomyVersion:'junior-se-v1',primaryCompetency:'dbms-sql'}),e=>e.code==='23503');
-  await assert.rejects(()=>repo.createQuestionVersion({questionId:fixture.question,version:2,text:'Q',category:'scenario',difficulty:'easy',origin:'retrieved',evidenceStatus:'available',contentHash:hash,publish:true}),e=>e.code==='23514');
-  const generated=await repo.createQuestionVersion({questionId:fixture.question,version:2,text:'Generated fixture',category:'scenario',difficulty:'standard',origin:'generated',evidenceStatus:'unavailable',contentHash:hash,publish:true});
+  await assert.rejects(()=>repo.createQuestionVersion({questionId:fixture.question,version:2,text:'Q',category:'scenario',difficulty:'easy',origin:'retrieved',evidenceStatus:'available',contentHash:hash,reviewedBy:'Fixture reviewer',reviewedAt:now,publish:true}),e=>e.code==='23514');
+  const generated=await repo.createQuestionVersion({questionId:fixture.question,version:2,text:'Generated fixture',category:'scenario',difficulty:'standard',origin:'generated',evidenceStatus:'unavailable',contentHash:hash,reviewedBy:'Fixture reviewer',reviewedAt:now,publish:true});
   assert.equal((await repo.findQuestionVersion(generated)).origin,'generated');
   await assert.rejects(()=>repo.createQuestionVersion({questionId:fixture.question,version:3,text:'Adapted',category:'scenario',difficulty:'easy',origin:'adapted',evidenceStatus:'unavailable',contentHash:hash}),e=>e.code==='23514');
-  await assert.rejects(()=>repo.createQuestionVersion({questionId:fixture.question,version:3,text:'Bad ref',category:'scenario',difficulty:'easy',origin:'retrieved',evidenceStatus:'available',contentHash:hash,provenance:[{documentVersionId:randomUUID(),relation:'origin'}],publish:true}),e=>e.code==='23503');
+  await assert.rejects(()=>repo.createQuestionVersion({questionId:fixture.question,version:3,text:'Bad ref',category:'scenario',difficulty:'easy',origin:'retrieved',evidenceStatus:'available',contentHash:hash,reviewedBy:'Fixture reviewer',reviewedAt:now,provenance:[{documentVersionId:randomUUID(),relation:'origin'}],publish:true}),e=>e.code==='23503');
 });
 test('published question content, secondary tags and provenance are immutable; changes get new versions', async () => {
   await rejected('UPDATE question_versions SET question_text=$2 WHERE id=$1',[fixture.version,'Changed']);
@@ -235,7 +235,7 @@ test('owned plans/items, ordering, exact question/rubric and retrieval context',
   await assert.rejects(()=>repo.addPlanItem(owner,{planId:fixture.plan,position:1,questionVersionId:secondVersion,rubricVersionId:fixture.rubricVersion,selectionReason:'Mismatched rubric',estimatedMinutes:3}),e=>e.code==='23503');
 });
 test('follow-up parents are stable, same-plan, unique and nonrecursive', async () => {
-  const probeVersion=await repo.createQuestionVersion({questionId:fixture.question,version:3,text:'Probe fixture',category:'conceptual-oral',difficulty:'easy',origin:'follow-up',evidenceStatus:'available',baseVersionId:fixture.version,contentHash:hash,publish:true,provenance:[{documentVersionId:fixture.documentVersion,chunkId:fixture.chunk,relation:'technical-grounding'}]});
+  const probeVersion=await repo.createQuestionVersion({questionId:fixture.question,version:3,text:'Probe fixture',category:'conceptual-oral',difficulty:'easy',origin:'follow-up',evidenceStatus:'available',baseVersionId:fixture.version,contentHash:hash,reviewedBy:'Fixture reviewer',reviewedAt:now,publish:true,provenance:[{documentVersionId:fixture.documentVersion,chunkId:fixture.chunk,relation:'technical-grounding'}]});
   const probe=await repo.addPlanItem(owner,{planId:fixture.plan,position:1,questionVersionId:probeVersion,parentItemId:fixture.item,selectionReason:'Probe fixture',estimatedMinutes:2});
   await assert.rejects(()=>repo.addPlanItem(owner,{planId:fixture.plan,position:2,questionVersionId:probeVersion,parentItemId:probe,selectionReason:'Recursive',estimatedMinutes:2}),e=>e.code==='23514');
   await assert.rejects(()=>repo.addPlanItem(owner,{planId:fixture.plan,position:2,questionVersionId:probeVersion,parentItemId:fixture.item,selectionReason:'Duplicate probe',estimatedMinutes:2}),e=>e.code==='23505');

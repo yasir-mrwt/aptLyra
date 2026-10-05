@@ -22,7 +22,13 @@
     "test:smoke": "node tests/server-smoke.mjs",
     "db:migrate": "node dist/database/migrate-cli.js",
     "pretest:schema": "npm run build",
-    "test:schema": "node --test tests/schema.test.mjs"
+    "test:schema": "node --test tests/schema.test.mjs",
+    "ingestion": "node dist/ingestion/cli.js",
+    "pretest:ingestion": "npm run build",
+    "test:ingestion": "node --test tests/ingestion.test.mjs",
+    "pretest:seed": "npm run build",
+    "test:seed": "node tests/seed-publication.mjs",
+    "corpus:seed-manifest": "node dist/ingestion/seedManifest.js"
   },
   "dependencies": {
     "@types/bcrypt": "^6.0.0",

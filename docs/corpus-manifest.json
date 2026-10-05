@@ -1,0 +1,89 @@
+{
+  "reviewArtifactHash": "be9d40c94f1941374a7332fd4b15cbe940ab6cc4e58495b4a0877c40cfb7b7cd",
+  "inputHash": "b85d0e09bb94eaf6751a0ae3a86ffb1f76169ee4faf6e314b60f579cee69e995",
+  "reviewer": {
+    "id": "muhammad-yasir",
+    "name": "Muhammad Yasir",
+    "role": "developer",
+    "reviewDate": "2026-10-05",
+    "dateAsProvided": "5/10/26"
+  },
+  "validation": "Real CLI, fresh disposable PostgreSQL; no production import",
+  "manifest": {
+    "schemaVersion": "corpus-manifest-v1",
+    "reviewed": {
+      "total": 48,
+      "roots": {
+        "backend-web": 6,
+        "dbms-sql": 6,
+        "design-lite": 6,
+        "dsa": 6,
+        "networks": 6,
+        "oop": 6,
+        "os": 6,
+        "programming": 6
+      },
+      "children": {
+        "backend-web.api-contracts": 2,
+        "backend-web.auth-validation": 2,
+        "backend-web.persistence-jobs": 2,
+        "dbms-sql.modeling": 2,
+        "dbms-sql.queries": 2,
+        "dbms-sql.transactions-indexes": 2,
+        "design-lite.reliability": 2,
+        "design-lite.requirements": 2,
+        "design-lite.service-data": 2,
+        "dsa.complexity": 2,
+        "dsa.search-sort": 2,
+        "dsa.structures": 2,
+        "networks.http-dns": 2,
+        "networks.tls-basics": 2,
+        "networks.transport": 2,
+        "oop.composition": 2,
+        "oop.encapsulation": 2,
+        "oop.polymorphism": 2,
+        "os.memory": 2,
+        "os.process-thread": 2,
+        "os.synchronization": 2,
+        "programming.control-data": 2,
+        "programming.debug-test": 2,
+        "programming.error-handling": 2
+      },
+      "categories": {
+        "coding": 5,
+        "conceptual-oral": 14,
+        "debugging": 9,
+        "scenario": 14,
+        "sql": 2,
+        "system-design-lite": 4
+      },
+      "difficulties": {
+        "easy": 16,
+        "standard": 24,
+        "stretch": 8
+      },
+      "sourceClasses": {
+        "authored": 48
+      },
+      "roles": {
+        "Backend Developer": 48,
+        "Full Stack Developer": 48,
+        "Software Engineer": 48
+      }
+    },
+    "pending": {
+      "total": 0,
+      "roots": {},
+      "children": {},
+      "categories": {},
+      "difficulties": {},
+      "sourceClasses": {},
+      "roles": {}
+    },
+    "reviewStatus": {
+      "published": 48
+    },
+    "fixtureCandidates": 0,
+    "corpusHash": "3879eff45a6ee10618b5ce4ec20c50100da42f0bc8934265f8502783264b31ea"
+  }
+}

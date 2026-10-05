@@ -21,7 +21,7 @@ does not authorize starting the next phase or adding dependencies now.
 | Phase | Deliverable and boundary | Functional frontend / Ava work in that phase | Required verification |
 |---|---|---|---|
 | 3 — Interview knowledge schema (implemented) | Versioned migrations, taxonomy and knowledge/rubric/plan/evidence/answer/embedding-metadata/operation/outbox/reward primitives; legacy JSONB preserved; vector/model deferred | No public contract or user-facing change; internal types/repositories only | Clean/adopted DB, repeat/concurrent migrations, rollback/checksum/CLI, ownership/version and legacy tests verified locally |
-| 4 — Interview-data ingestion | Permitted adapters, PII/terms quarantine, review and source/question versions; approved seed corpus; no unrestricted scraping | Source quality/availability and submission consent/status when exposed | Permission, PII, dedupe, timestamp, review, withdrawal and injection fixtures |
+| 4 — Interview-data ingestion (implemented; completion checks required) | Permitted adapters, PII/terms quarantine, review and source/question versions; approved seed corpus; no unrestricted scraping | Source quality/availability and submission consent/status when exposed | Permission, PII, dedupe, timestamp, review, withdrawal and injection fixtures |
 | 5 — Embeddings + pgvector retrieval | Versioned embeddings, filtered retrieval/provenance and bounded caches; choose model/index from measurements | Honest evidence/no-evidence status and source attribution where applicable | Model/version mismatch, filters, relevance fixtures, withdrawal invalidation, latency |
 | 6 — Interview planner | Persisted deterministic coverage/count/time plan, constraints, source/fallback reasons, stable item IDs | Scoped setup choices, preview/shortage confirmation, planned progress and Ava preparing/transition states | Plan invariants, core-mode budgets, shortages and legacy transport compatibility |
 | 7 — Rubric evaluation + confidence | Reviewed/provisional concepts/weights, answer/test evidence, scoring/abstention and distinct confidence semantics | Provisional labels, retry/abstention, question/competency report and delivery separation | Bounded/evidence-linked scores, withheld failures, reviewed aggregation, development-set agreement |
@@ -41,6 +41,21 @@ practice; missing optional evidence cannot block a valid core interview. Deferre
 scope (3D avatar, advanced role banks, multilingual scoring, barge-in, hints) is not
 quietly inserted into these phases.
 
-Phase 3 ends with schema/repository verification. The sole recommended next step is
-**Phase 4 — Interview-data ingestion**, after explicit authorization. Phase 4 is not
-started by this roadmap.
+Phase 3 ended with schema/repository verification. Phase 4 was subsequently
+authorized and its implementation evidence is recorded below. This roadmap starts
+no subsequent phase.
+
+## Phase 4 implementation evidence
+
+CURRENTLY IMPLEMENTED: controlled local import/review CLI, rights and exact-byte
+permissions, bounded normalization/PII/injection screening, duplicate review,
+versioned publication/withdrawal and consented experience-record storage. The 48
+original seed questions have Muhammad Yasir's exact-scope approval and a verified
+real-CLI disposable import across eight roots/24 children. See [ingestion](ingestion.md)
+and [manifest](corpus-manifest.md). HTTP adapters, public submissions and automated
+purge scheduling are deferred explicitly.
+
+No candidate-facing Phase 4 behavior; reviewed corpus is preparatory for Phase 5/6.
+Phase 4 status/verification gaps are recorded privately; finish its required checks
+before declaring completion. Recommend only **Phase 5 — Embeddings + pgvector
+retrieval**, on explicit authorization. This document starts no Phase 5 work.

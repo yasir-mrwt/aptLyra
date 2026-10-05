@@ -86,3 +86,29 @@ LATER PHASE**. Phase 2 remains the scope/design history above.
 
 Details: [database schema](database-schema.md) and [migration operations](migrations.md).
 Stop after Phase 3; recommend only Phase 4.
+
+## Phase 4: controlled local ingestion
+
+Status: CURRENTLY IMPLEMENTED, independent of legacy interview execution.
+
+- Extend backend/Phase 3 repositories with an OS/database-authorized internal CLI;
+  no duplicate Python datastore, HTTP admin API or inline interview ingestion.
+- Use exact canonical local paths plus approved input SHA-256 scopes; source config
+  is trusted operator data, content cannot approve rights or assign reviewer IDs.
+- Deterministic structured extraction avoids model/tool/injection privileges;
+  Markdown is document-only. Read frozen taxonomy children from PostgreSQL.
+- Screen before markup removal; discard flagged payloads and retain codes/hash;
+  clean pending content expires after seven days and requires operator purge.
+- Preserve exact/near duplicate links and explicit editorial decisions; bounded
+  shingle comparison fails closed after 1,000 records rather than skipping checks.
+- Keep occurrence separate from fetch/review; experiences always unverified selection
+  evidence, explicit consent required, never technical-reference truth.
+- Publish original 48-question seed only under Muhammad Yasir's exact review-packet
+  approval and verified JSON binding. Separate actual human review from fixture tests.
+- Add migration 004 without editing 001–003; no concepts/rubrics or scoring runtime.
+- Defer HTTP/public submissions because their network/consent/moderation surfaces
+  are not necessary for a safe reviewed local corpus.
+
+No candidate-facing Phase 4 behavior; reviewed corpus is preparatory for Phase 5/6.
+See [ingestion](ingestion.md), [policy](source-policy.md) and [manifest](corpus-manifest.md).
+Stop after Phase 4. Recommend Phase 5 only once Phase 4 verification is complete.
