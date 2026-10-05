@@ -7,7 +7,8 @@
  * BullMQ job queues, response caches and the XP buffer.
  *
  * The schema is bootstrapped idempotently on boot (CREATE TABLE IF NOT
- * EXISTS) — no separate migration tooling needed for this project.
+ * EXISTS) for baseline compatibility. Knowledge migrations are an explicit
+ * release/local step; startup does not apply them automatically.
  */
 
 import pg from "pg";

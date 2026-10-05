@@ -7,6 +7,34 @@ on:
     branches: [ "main" ]
 
 jobs:
+  schema-checks:
+    name: PostgreSQL migration and repository checks
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: techvera_test
+          POSTGRES_USER: techvera_test
+          POSTGRES_PASSWORD: techvera_local_fixture
+        ports:
+          - 15432:5432
+        options: >-
+          --health-cmd "pg_isready -U techvera_test -d techvera_test"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    defaults:
+      run:
+        working-directory: ./backend
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+        cache: npm
+        cache-dependency-path: ./backend/package-lock.json
+    - run: npm ci
+    - run: npm run test:schema
+
   backend-checks:
     name: Backend Node.js Checks
     runs-on: windows-latest

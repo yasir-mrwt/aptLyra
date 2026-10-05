@@ -2,13 +2,16 @@
 
 ## CURRENTLY IMPLEMENTED
 
-Questions currently carry a broad role, level, and oral/coding/system-design kind.
-There is no persisted competency hierarchy or competency-level rubric/report.
+Current interviews carry a broad role, level, and oral/coding/system-design kind.
+Phase 3 seeds this frozen hierarchy in PostgreSQL: 8 roots and 24 children. Current
+interview execution does not use it yet; competency evaluation/report behavior
+remains future work. See [database schema](database-schema.md).
 
 ## PLANNED FOR LATER PHASE
 
 Taxonomy version: `junior-se-v1`. The eight root IDs below are stable identifiers,
-not database tables created in Phase 2. Child IDs use `<root>.<slug>`. **Easy** means
+not database tables created in Phase 2; Phase 3 adds persistence. Child IDs use
+`<root>.<slug>`. **Easy** means
 explain or trace one familiar concept; **standard** means apply it to a small problem;
 **stretch** means justify an edge case or trade-off within junior knowledge. Each
 question has one primary child and optional secondary tags. Secondary tags aid

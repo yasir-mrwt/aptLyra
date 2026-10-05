@@ -24,6 +24,7 @@ RUN npm install --omit=dev
 
 # Copy built files from the builder stage
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/migrations ./migrations
 
 # Create uploads directory (used by the application)
 RUN mkdir -p uploads/resumes

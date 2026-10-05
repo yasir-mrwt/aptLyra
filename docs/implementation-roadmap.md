@@ -5,7 +5,10 @@
 Phase 0 audited/rebranded the product. Phase 1 stabilized existing contracts,
 concurrency, speech failures, callback/fetch boundaries and functional Ava states,
 with deterministic and real-datastore verification. Phase 2 freezes scope and
-documents the target; it implements no intelligence pipeline or schema.
+documents the target; it implemented no intelligence pipeline or schema. Phase 3
+now provides migrations, taxonomy, relational prerequisites, internal repositories
+and real PostgreSQL verification, without intelligence execution or new user-facing
+behavior. See [database schema](database-schema.md) and [migrations](migrations.md).
 
 ## PLANNED FOR LATER PHASE
 
@@ -17,7 +20,7 @@ does not authorize starting the next phase or adding dependencies now.
 
 | Phase | Deliverable and boundary | Functional frontend / Ava work in that phase | Required verification |
 |---|---|---|---|
-| 3 — Interview knowledge schema | Versioned migrations/constraints for conceptual knowledge, rubric, plan and evidence records; review supporting answer/job/outbox/reward concepts and legacy JSONB compatibility; no ingestion/retrieval engine | Types/read compatibility for any changed public contract; no new controls without functioning APIs | Migration/idempotency/rollback or documented forward-recovery, ownership/version constraints, legacy read tests |
+| 3 — Interview knowledge schema (implemented) | Versioned migrations, taxonomy and knowledge/rubric/plan/evidence/answer/embedding-metadata/operation/outbox/reward primitives; legacy JSONB preserved; vector/model deferred | No public contract or user-facing change; internal types/repositories only | Clean/adopted DB, repeat/concurrent migrations, rollback/checksum/CLI, ownership/version and legacy tests verified locally |
 | 4 — Interview-data ingestion | Permitted adapters, PII/terms quarantine, review and source/question versions; approved seed corpus; no unrestricted scraping | Source quality/availability and submission consent/status when exposed | Permission, PII, dedupe, timestamp, review, withdrawal and injection fixtures |
 | 5 — Embeddings + pgvector retrieval | Versioned embeddings, filtered retrieval/provenance and bounded caches; choose model/index from measurements | Honest evidence/no-evidence status and source attribution where applicable | Model/version mismatch, filters, relevance fixtures, withdrawal invalidation, latency |
 | 6 — Interview planner | Persisted deterministic coverage/count/time plan, constraints, source/fallback reasons, stable item IDs | Scoped setup choices, preview/shortage confirmation, planned progress and Ava preparing/transition states | Plan invariants, core-mode budgets, shortages and legacy transport compatibility |
@@ -38,5 +41,6 @@ practice; missing optional evidence cannot block a valid core interview. Deferre
 scope (3D avatar, advanced role banks, multilingual scoring, barge-in, hints) is not
 quietly inserted into these phases.
 
-Phase 2 ends with documentation and review. The sole recommended next step is
-**Phase 3 — Interview knowledge schema**, after explicit user authorization.
+Phase 3 ends with schema/repository verification. The sole recommended next step is
+**Phase 4 — Interview-data ingestion**, after explicit authorization. Phase 4 is not
+started by this roadmap.

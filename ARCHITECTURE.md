@@ -7,6 +7,18 @@ FastAPI/Pydantic, PostgreSQL, and Redis/BullMQ. Ava remains the existing SVG
 interviewer with cloud TTS and browser voice fallback. There is no local GPU,
 RAG, pgvector, research agent, or new scoring engine.
 
+## CURRENTLY IMPLEMENTED: Phase 3 storage foundation
+
+Phase 3 adds ordered/checksummed SQL migrations, the frozen taxonomy seed, and
+preparatory relational knowledge/evidence/embedding-metadata/durability structures.
+Internal typed repositories and PostgreSQL constraints protect ownership/version
+integrity. Express owns writes; FastAPI has no database access. Current interviews
+still use Phase 1 JSONB/scoring/background work. Startup verifies the old bootstrap;
+knowledge migrations are explicit. No Phase 3 user-facing behavior change; schema
+is preparatory. See [database schema](docs/database-schema.md) and
+[migration operations](docs/migrations.md). No pgvector/model, ingestion, planner,
+evaluator or durable executor is enabled.
+
 ## PLANNED FOR LATER PHASE: frozen FYP architecture
 
 TechVera targets evidence-grounded preparation for final-year students and junior
@@ -18,8 +30,8 @@ delivery feedback and evaluator confidence are separate outputs.
 Express remains the owner of authentication, orchestration and PostgreSQL writes.
 FastAPI computes validated AI results; later pgvector retrieval stays in PostgreSQL,
 with Redis/BullMQ for jobs/caches. Versioned questions, rubrics, plans and evidence
-will supplement compatible legacy session JSONB. Durable operations/outbox recovery
-are planned; they do not exist in the baseline described below.
+supplement compatible legacy session JSONB at the schema level. Their runtime use
+and durable operations/outbox recovery remain planned; current interviews do not use them.
 
 | Design document | Purpose |
 |---|---|
@@ -31,8 +43,8 @@ are planned; they do not exist in the baseline described below.
 | [Implementation roadmap](docs/implementation-roadmap.md) | Phases 3–12 and functional frontend work in each phase |
 | [Decisions](docs/decisions.md) | Baseline and scope-freeze rationale |
 
-Phase 2 is documentation only: no schema, embeddings, ingestion, planner, scoring
-engine, endpoint or UI implementation. The remaining sections describe
+Phase 2 was documentation only; Phase 3 implements the storage foundation above.
+The remaining sections describe
 **CURRENTLY IMPLEMENTED** baseline behavior, not the planned contracts above.
 
 ## Services and storage
@@ -48,11 +60,14 @@ engine, endpoint or UI implementation. The remaining sections describe
 Cloud deployment uses Neon PostgreSQL and Upstash Redis. Local verification uses
 localhost-only PostgreSQL 16 and Redis 7 via `compose.test.yml`.
 
-`config/db.ts` bootstraps five tables using idempotent DDL and an existing additive
-avatar-column update. There is no versioned migration history, rollback tooling,
-or new Phase 1 table/column. `sessions.questions` remains JSONB. New optional
+`config/db.ts` still bootstraps five tables using idempotent DDL and an existing
+additive avatar-column update. The explicit migration runner adopts that identical
+DDL with a forward-only policy. No new Phase 1 table/column was added.
+`sessions.questions` remains JSONB. Optional
 question fields are `processingError`, `speechMetricsStatus`, and `followUpPending`.
 Older rows remain readable. Leaderboard queries use PostgreSQL's opted-in XP index.
+Phase 3 adds only a redundant `(sessions.id,user_id)` unique key to support composite
+owner foreign keys. No session column, historical JSONB or public DTO changes.
 
 ## Interview creation contract
 

@@ -19,7 +19,10 @@
     "test:persistence": "node --test tests/persistence.test.mjs",
     "typecheck": "tsc --noEmit",
     "pretest:smoke": "npm run build",
-    "test:smoke": "node tests/server-smoke.mjs"
+    "test:smoke": "node tests/server-smoke.mjs",
+    "db:migrate": "node dist/database/migrate-cli.js",
+    "pretest:schema": "npm run build",
+    "test:schema": "node --test tests/schema.test.mjs"
   },
   "dependencies": {
     "@types/bcrypt": "^6.0.0",

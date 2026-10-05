@@ -2,6 +2,14 @@
 
 Run the existing three-service stack on Node 20 and Python 3.11. No local GPU or model download is required.
 
+Phase 3 adds an explicit migration step for the knowledge schema; it does not
+change current interviews or run those migrations on web-server startup. See
+[migrations](docs/migrations.md) and [database schema](docs/database-schema.md).
+After privately configuring the intended backend database, run `npm run build`
+then `npm run db:migrate` from `backend/`; a second invocation should apply nothing.
+Production/staging requires a reviewed `npm run db:migrate -- --apply` release step.
+No production migration was performed by Phase 3.
+
 ```
 ┌─────────────┐     ┌──────────────┐     ┌────────────────┐
 │  Frontend   │ ──▶ │   Backend    │ ──▶ │   AI Service   │
@@ -299,7 +307,8 @@ You may use the disposable local endpoints for development only if you understan
 that stopping Compose destroys their contents. Set backend `DATABASE_SSL=false`
 only for local PostgreSQL; production/staging always retain TLS. Clear the Upstash
 URL when using `REDIS_URL` because Upstash takes precedence. Backend schema bootstrap
-is additive DDL, not a migration framework; review production schema changes separately.
+remains additive baseline DDL. The separate Phase 3 runner provides versioned
+knowledge migrations; review production adoption/releases separately.
 
 Large frontend chunk warnings and the existing dependency audit backlog are recorded
 in [SECURITY.md](SECURITY.md). Do not treat mocked scoring tests as evidence of scoring
@@ -310,3 +319,15 @@ The smoke runner also rejects external datastore variables, boots the real Node 
 server on port 15001 with fixture integration settings, uses Redis DB 14, checks
 SQL/Redis health plus user/callback authentication, and removes its temporary
 upload directory. It makes no provider requests.
+
+## Phase 3 schema verification
+
+With the disposable Compose PostgreSQL running and external datastore variables
+unset, run `npm run test:schema` from `backend/`. It builds automatically, creates
+randomly named fixture-only databases, installs all migrations, repeats them,
+checks history/rollback/CLI/version/ownership constraints and legacy compatibility,
+then removes those databases. It does not load backend `.env` or contact providers.
+The CLI subtest uses a temporary directory and explicit fixture configuration.
+Run the Phase 1 lint/type/build/fixture and persistence/smoke checks as well.
+Stop the disposable stores afterward with `docker compose -f compose.test.yml down`
+from the product root. See [migration operations](docs/migrations.md) for full policy.

@@ -53,3 +53,36 @@ Canonical details: [scope](final-scope.md), [taxonomy](competency-taxonomy.md),
 [target contracts and ownership](target-architecture.md), [scoring/research](evaluation-design.md),
 [privacy](data-and-privacy.md), and [phase boundaries](implementation-roadmap.md).
 The recommended next step is Phase 3 knowledge schema, only on explicit authorization.
+
+## Phase 3: migration and relational foundation
+
+Status: **CURRENTLY IMPLEMENTED** storage; runtime intelligence is **PLANNED FOR
+LATER PHASE**. Phase 2 remains the scope/design history above.
+
+- Use ordered SQL and a compiled TypeScript runner with SHA-256 history, advisory
+  locking, bounded SQL waits and one transaction per file. Forward-only release
+  policy; a failed file/history rolls back and applied files cannot drift.
+- Adopt identical baseline DDL as migration 001; preserve startup bootstrap.
+  Knowledge migrations are an explicit local/release step; Docker ships SQL.
+- Seed only the frozen 8 roots/24 children. No sources/questions/rubrics or invented
+  legacy provenance. Normalize immutable document/question/rubric versions and links.
+- Composite FKs enforce owned session and exact version relationships; the only
+  baseline-table change is a session owner unique key. JSONB/public DTOs stay intact.
+- Rubric children are built atomically in their creation transaction, then sealed.
+  Require six anchored dimensions, valid technical weights and reviewed technical
+  references; retirement cannot unlock mutations. No scoring algorithm is added.
+- Store bounded evaluation dimensions/evidence and separate confidence/delivery,
+  checking status/shape/range without computing scores or confidence gates.
+- Add model-neutral embedding metadata only. Test PostgreSQL has no available
+  vector extension; extension/dimension/index/model remain Phase 5 review work.
+- Add owned operation/outbox/reward primitives without migrating dispatch, recovery
+  or XP. Deletion tombstones and full privacy workflows remain future integration.
+- Internal parameterized repositories only: no full admin APIs, FastAPI DB access,
+  fake frontend controls or Ava redesign. No Phase 3 user-facing behavior change;
+  schema is preparatory.
+- Verify disposable PostgreSQL, adoption/history/failures, version/owner constraints
+  and baseline regressions. CI adds a Linux PostgreSQL job; remote CI/production
+  deployment is not claimed as locally verified.
+
+Details: [database schema](database-schema.md) and [migration operations](migrations.md).
+Stop after Phase 3; recommend only Phase 4.

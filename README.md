@@ -1,6 +1,12 @@
 # TechVera — Evidence-Grounded AI Technical Interview Coach
 
-> The Phase 1 stable baseline of the upstream PrepTalk application is implemented; Phase 2 freezes the FYP scope and architecture. Evidence grounding remains planned: retrieval, provenance, reviewed rubrics, and evaluator confidence are not implemented. Upstream licensing and contributor attribution are preserved.
+> The Phase 1 stable baseline of the upstream PrepTalk application is implemented; Phase 2 froze the FYP scope and architecture. Evidence-grounded interview behavior remains planned: retrieval-backed selection, provenance in user reports, reviewed-rubric evaluation and evaluator-confidence computation are not implemented. Upstream licensing and contributor attribution are preserved.
+
+**Phase 3 storage foundation is implemented:** versioned SQL migrations, the 8-root/
+24-child taxonomy, relational knowledge/evidence and durability prerequisites, and
+internal typed repositories. No Phase 3 user-facing behavior change; schema is
+preparatory. Current interviews still use legacy generation/scoring. See
+[database schema](docs/database-schema.md) and [migration commands](docs/migrations.md).
 
 **CURRENTLY IMPLEMENTED:** voice interviews with SVG Ava, prompt-generated questions,
 coding/diagram tools, resume context, bounded score-triggered follow-ups and legacy
@@ -12,7 +18,8 @@ candidates with 0–2 years' experience. Oral, coding and mixed modes are core;
 company focus, resume context and design-lite are optional. The target adds reviewed
 knowledge, PostgreSQL/pgvector retrieval, persisted plans, known/provisional rubrics,
 distinct evaluator confidence, source trace and competency reports. It does not make
-hiring or personality judgments. Phase 2 changes documentation only.
+hiring or personality judgments. Phase 2 changed documentation only; Phase 3 adds
+schema without turning on these features.
 
 Read the [final scope](docs/final-scope.md), [target architecture](docs/target-architecture.md),
 [competencies](docs/competency-taxonomy.md), [evaluation/research design](docs/evaluation-design.md),
@@ -108,7 +115,11 @@ graph TD
 
 ### 🗄️ Data Tier — Neon Postgres (primary) + Upstash Redis (secondary)
 
-**Neon PostgreSQL** holds all durable data. Flexible AI output lives in JSONB columns, relational things get real constraints and indexes. The schema bootstraps itself on first boot (`CREATE TABLE IF NOT EXISTS`) — schema changes still require a reviewed migration strategy.
+**Neon PostgreSQL** holds all durable data. Current interview output stays in JSONB;
+the five baseline tables still bootstrap on startup. Phase 3 adds explicit versioned
+knowledge migrations and relational constraints/indexes; apply them using the
+[reviewed migration process](docs/migrations.md). The table below describes current
+runtime storage, not every preparatory knowledge table.
 
 | Table | Highlights |
 |---|---|

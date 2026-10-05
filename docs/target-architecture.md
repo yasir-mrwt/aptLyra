@@ -5,10 +5,14 @@
 [ARCHITECTURE.md](../ARCHITECTURE.md) describes the committed Phase 1 runtime:
 React/Vite/Redux → Express/TypeScript → FastAPI, PostgreSQL JSONB sessions, Redis
 caches/XP and BullMQ resume jobs, REST and authenticated Socket.IO updates. Questions
-and scores are generated through prompts. Interview work runs in the API process;
-there are no durable interview jobs, knowledge tables, embeddings, plan records,
-rubric records, evidence links, or evaluator-confidence fields. Reload reads an
+and scores are generated through prompts. Interview work runs in the API process.
+Phase 3 supplies versioned migrations, taxonomy and preparatory knowledge, rubric,
+plan, evidence, embedding-metadata and operation/outbox tables. These are not used
+by current interview execution: no durable interview jobs, embeddings/retrieval,
+generated plans or new rubric/confidence computation exists. Reload reads an
 owned session over REST; current events have no durable revision/replay protocol.
+See [database schema](database-schema.md) and [migration policy](migrations.md).
+No Phase 3 user-facing behavior change; schema is preparatory.
 
 ## PLANNED FOR LATER PHASE: service ownership
 
@@ -39,7 +43,8 @@ flowchart LR
     Worker -->|Committed state notification| UI
 ```
 
-No schema, worker, pgvector extension, or new endpoint is implemented by this design.
+Phase 2 supplied this design without implementation. Phase 3 implements its schema
+foundation; no new worker, pgvector extension or endpoint is enabled.
 
 ## Target lifecycle and recovery
 
@@ -138,9 +143,10 @@ only retrieved IDs supplied to that operation may be returned as citations.
 
 ## Conceptual persistence model
 
-All rows below are **future entities**, with Express/backend repositories owning
-durable writes. FastAPI proposes computed content; human/admin review is explicit.
-No DDL or migration is supplied in Phase 2.
+The concepts below were frozen in Phase 2, which supplied no DDL. Phase 3 implements
+their relational foundation (including separate document/rubric versions and links)
+with backend-owned writes. Computation and human/admin ingestion/review workflows
+remain future behavior. See [the concrete model](database-schema.md).
 
 | Entity | Purpose / relationships | Lifecycle / versioning |
 |---|---|---|
