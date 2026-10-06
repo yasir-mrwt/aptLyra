@@ -27,6 +27,26 @@ GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
 DEFAULT_TEXT_MODEL = "llama-3.3-70b-versatile"
 DEFAULT_VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
+
+def _raise_provider_error(response, capability: str) -> None:
+    """Classify capability failures without returning/logging provider request text."""
+    try:
+        error = response.json().get("error", {})
+        provider_code = error.get("code") if isinstance(error, dict) else None
+    except (ValueError, TypeError, AttributeError):
+        provider_code = None
+    status, code, retryable = 502, "provider_unavailable", True
+    if provider_code == "model_terms_required" and capability == "tts":
+        status, code, retryable = 503, "tts_terms_required", False
+    elif provider_code == "model_not_found" or response.status_code == 404:
+        status, code = 503, "provider_model_unavailable"
+    elif response.status_code in (401, 403):
+        status, code = 503, "provider_authentication"
+    elif response.status_code == 429:
+        status, code = 429, "provider_rate_limited"
+    logging.warning("Groq capability=%s status=%s code=%s", capability, response.status_code, code)
+    raise HTTPException(status, {"code": code, "message": "AI capability unavailable. Please retry or use the available fallback.", "retryable": retryable})
+
 # ============================================================================
 # Global Rate Limiter
 # ============================================================================
@@ -217,6 +237,8 @@ def call_groq(
 
         # Resolve the key per attempt — it may have rotated after a 429
         actual_api_key = api_key or get_current_api_key()
+        if not actual_api_key:
+            raise HTTPException(503, {"code": "provider_authentication", "message": "AI capability unavailable. Please retry later.", "retryable": True})
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {actual_api_key}",
@@ -266,36 +288,13 @@ def call_groq(
                 continue
         except requests.exceptions.RequestException as e:
             if attempt < max_retries:
-                print(f"[RETRY] Network error: {str(e)}. Retrying in 5s...")
+                print("[RETRY] Provider network request failed. Retrying in 5s...")
                 time.sleep(5)
                 continue
-            raise HTTPException(status_code=504, detail=f"AI Service Timeout: {str(e)}")
+            raise HTTPException(504, {"code": "provider_timeout", "message": "AI request timed out. Please retry.", "retryable": True}) from None
 
         if not resp.ok:
-            try:
-                error_data = resp.json()
-                if "error" in error_data:
-                    err_info = error_data["error"]
-                    error_msg = f"{err_info.get('type', 'ERROR')}: {err_info.get('message', 'No message')}"
-                else:
-                    error_msg = resp.text
-            except Exception as e:
-                logging.warning(f"Failed to parse error response JSON: {e}")
-                error_msg = resp.text
-
-            print(f"!!! [CRITICAL] Groq API Failure {resp.status_code} !!!")
-            print(f"!!! Error Message: {error_msg} !!!")
-
-            detail = "The AI Evaluation Service encountered an upstream error. Please try again later."
-            if resp.status_code == 429:
-                detail = "AI Service rate limit exceeded. Please wait a moment and try again."
-            elif resp.status_code == 503:
-                detail = "AI Service is currently overloaded or undergoing maintenance. Please try a smaller question count or wait a minute."
-
-            raise HTTPException(
-                status_code=resp.status_code if resp.status_code != 500 else 500,
-                detail=detail,
-            )
+            _raise_provider_error(resp, "chat")
         break
 
     if resp is None:
@@ -460,6 +459,8 @@ def call_groq_tts(text: str, voice: str = None, api_key: str = None) -> bytes:
             "Content-Type": "application/json",
             "Authorization": f"Bearer {actual_api_key}",
         }
+        if not actual_api_key:
+            raise HTTPException(503, {"code": "provider_authentication", "message": "Server voice unavailable. Use browser voice.", "retryable": False})
         resp = requests.post(GROQ_TTS_URL, json=body, headers=headers, timeout=timeout)
 
         # Rate limited → fail over once and retry with the next key
@@ -468,21 +469,17 @@ def call_groq_tts(text: str, voice: str = None, api_key: str = None) -> bytes:
             if rotated != actual_api_key and key_cooldown_remaining(rotated) <= 0:
                 headers["Authorization"] = f"Bearer {rotated}"
                 resp = requests.post(GROQ_TTS_URL, json=body, headers=headers, timeout=timeout)
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=504, detail=f"TTS request failed: {str(e)}")
+    except requests.exceptions.RequestException:
+        raise HTTPException(504, {"code": "provider_timeout", "message": "Server voice unavailable. Use browser voice.", "retryable": False}) from None
 
     if not resp.ok:
-        try:
-            err = resp.json().get("error", {}).get("message", resp.text)
-        except Exception:
-            err = resp.text
-        print(f"!!! [TTS] Groq TTS failure {resp.status_code}: {err} !!!")
-        raise HTTPException(
-            status_code=resp.status_code,
-            detail="TTS synthesis failed. The client should fall back to browser speech.",
-        )
+        _raise_provider_error(resp, "tts")
 
-    return resp.content
+    audio = resp.content
+    if len(audio) < 44 or len(audio) > 10 * 1024 * 1024 or audio[:4] != b"RIFF" or audio[8:12] != b"WAVE":
+        raise HTTPException(502, {"code": "invalid_provider_audio", "message": "Server voice unavailable. Use browser voice.", "retryable": False})
+
+    return audio
 
 
 # ============================================================================

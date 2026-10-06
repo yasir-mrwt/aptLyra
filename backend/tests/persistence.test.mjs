@@ -152,3 +152,35 @@ test('Node 20 file-type detects the PNG used by whiteboard uploads', async () =>
   const png = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489', 'hex');
   assert.equal((await fileTypeFromBuffer(png)).mime, 'image/png');
 });
+
+test('typed oral provider failure saves no score and retry persists once with no transcription or duplicate XP', async () => {
+  const s = await active(2); s.questions[0].questionType = 'oral'; await withSessionLock(s._id, () => repo.save(s));
+  const answer = 'A stack is last in first out; a queue is first in first out.';
+  const originalEval = ai.evaluateAnswer, originalXP = game.addXP;
+  const firstEvent = events.length; let calls = 0, rewards = 0;
+  ai.evaluateAnswer = async params => {
+    assert.equal(params.user_answer, answer); assert.equal(params.user_code, ''); calls++;
+    if(calls === 1)throw new Error('Provider unavailable');
+    return result;
+  };
+  game.addXP = async (...args) => { rewards++; return originalXP.apply(game,args); };
+  try {
+    await assert.rejects(() => service.submitSessionAnswer(s._id,other,'0',null,null,null,null,io,answer), /Session not found/);
+    for(const text of [' ', 'x'.repeat(50001), { nested: 'bad' }])
+      await assert.rejects(() => service.submitSessionAnswer(s._id,owner,'0',null,null,null,null,io,text));
+    await service.submitSessionAnswer(s._id,owner,'0',null,null,null,null,io,answer);
+    await until(async () => !!(await repo.findById(s._id)).questions[0].processingError);
+    let q = (await repo.findById(s._id)).questions[0];
+    assert.equal(q.isSubmitted,false);assert.equal(q.isEvaluated,false);assert.equal(q.technicalScore,undefined);assert.equal(rewards,0);
+    await assert.rejects(() => service.submitSessionAnswer(s._id,owner,'0',null,null,'unused.wav',null,io,answer), /Choose a recorded or typed/);
+    const submissions=await Promise.allSettled([1,2,3].map(() => service.submitSessionAnswer(s._id,owner,'0',null,null,null,null,io,answer)));
+    assert.equal(submissions.filter(x=>x.status==='fulfilled').length,1);
+    await until(async () => events.slice(firstEvent).some(e=>e.sessionId===s._id && e.status==='evaluation completed'));
+    q=(await repo.findById(s._id)).questions[0];
+    assert.equal(calls,2);assert.equal(rewards,1);assert.equal(q.userAnswerText,answer);assert.equal(q.technicalScore,85);
+    assert.equal(q.processingError,undefined);assert.equal(q.speechMetrics,undefined);assert.equal(q.speechMetricsStatus,undefined);
+    const statuses=events.slice(firstEvent).filter(e=>e.sessionId===s._id).map(e=>e.status);
+    assert.deepEqual(statuses,['AI_EVALUATING','error','AI_EVALUATING','evaluation completed']);
+    await assert.rejects(() => service.submitSessionAnswer(s._id,owner,'0',null,null,null,null,io,answer), /already submitted/);
+  } finally { ai.evaluateAnswer=originalEval;game.addXP=originalXP; }
+});

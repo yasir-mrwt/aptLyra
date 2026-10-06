@@ -1,6 +1,6 @@
 import { jest, test, expect, beforeEach } from "@jest/globals";
 import fetch from "node-fetch";
-import { aiService } from "./services/aiService.js";
+import { aiService, AIServiceError } from "./services/aiService.js";
 jest.mock("node-fetch", () => ({ __esModule: true, default: jest.fn() }));
 const mockedFetch = fetch as jest.MockedFunction<typeof fetch>;
 function fixture(data: unknown) { mockedFetch.mockResolvedValue({ ok: true, json: async () => data } as any); }
@@ -39,4 +39,22 @@ test("active speech path preserves MP4 audio metadata", async () => {
 test("malformed follow-up is rejected instead of appending an empty question", async () => {
   fixture({ question_type: "oral" });
   await expect(aiService.generateFollowUp({ question: "Q", userAnswer: "A", aiFeedback: "F", role: "Backend", level: "Junior" })).rejects.toThrow("Invalid follow-up");
+});
+
+test("TTS provider failure is categorized once without leaking the upstream body", async () => {
+  mockedFetch.mockResolvedValue({ ok: false, status: 503, json: async () => ({ detail: { code: "tts_terms_required", message: "private provider body" } }) } as any);
+  await expect(aiService.synthesizeSpeech("Question")).rejects.toMatchObject({ code: "tts_terms_required", upstreamStatus: 503, message: "AI operation unavailable. Please retry." });
+  expect(mockedFetch).toHaveBeenCalledTimes(1);
+});
+test("TTS accepts WAV bytes and rejects malformed successful responses", async () => {
+  const wav = Buffer.alloc(44); wav.write("RIFF"); wav.write("WAVE", 8);
+  mockedFetch.mockResolvedValue({ ok: true, arrayBuffer: async () => wav } as any);
+  expect(await aiService.synthesizeSpeech("Question")).toEqual(wav);
+  mockedFetch.mockResolvedValue({ ok: true, arrayBuffer: async () => Buffer.from("private provider body") } as any);
+  await expect(aiService.synthesizeSpeech("Question")).rejects.toBeInstanceOf(AIServiceError);
+});
+test("non-retryable model error never exposes upstream response text", async () => {
+  mockedFetch.mockResolvedValue({ ok: false, status: 404, json: async () => ({ detail: "private provider body" }) } as any);
+  await expect(aiService.evaluateAnswer({ question: "Q", question_type: "oral", user_answer: "A", user_code: "", selected_language: "js", role: "Backend", level: "Junior", interview_type: "oral-only" })).rejects.toMatchObject({ code: "provider_unavailable", message: "AI operation unavailable. Please retry." });
+  expect(mockedFetch).toHaveBeenCalledTimes(1);
 });

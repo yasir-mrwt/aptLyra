@@ -195,10 +195,15 @@ export const sessionService = {
     language: string | null,
     audioFilePath: string | null,
     diagramImageUrl: string | null,
-    io: any
+    io: any,
+    answerText?: string | null
   ) {
     if (!/^\d+$/.test(String(questionIndex))) throw new SessionStateError("Invalid question index", 400);
     const qIdx = Number(questionIndex);
+    if (answerText != null && (typeof answerText !== "string" || answerText.length > 50000))
+      throw new SessionStateError("Typed answer must be text of at most 50000 characters", 400);
+    const typedAnswer = answerText?.trim() || "";
+    if (audioFilePath && typedAnswer) throw new SessionStateError("Choose a recorded or typed answer", 400);
 
     await withSessionLock(sessionId, async () => {
       const session = await sessionRepository.findByIdForUser(sessionId, userId.toString());
@@ -216,9 +221,9 @@ export const sessionService = {
         throw new SessionStateError("This planned question is unavailable. Create a fresh plan.",409);
       if(session.planId && q.questionType==="coding" && language!==q.language)throw new SessionStateError("Use the planned coding language",400);
       if (q.isSubmitted || q.isEvaluated) throw new SessionStateError("Answer already submitted");
-      if (q.questionType === "oral" && !audioFilePath) throw new SessionStateError("Record an answer before submitting", 400);
+      if (q.questionType === "oral" && !audioFilePath && !typedAnswer) throw new SessionStateError("Record or type an answer before submitting", 400);
       if (q.questionType === "coding" && !code?.trim()) throw new SessionStateError("Code is required", 400);
-      if (q.questionType === "system-design" && !audioFilePath && !diagramImageUrl) throw new SessionStateError("Provide audio or a diagram", 400);
+      if (q.questionType === "system-design" && !audioFilePath && !diagramImageUrl && !typedAnswer) throw new SessionStateError("Provide an answer or a diagram", 400);
       delete q.processingError;
       // Mark as submitted immediately to prevent duplicate submissions
       session.questions[qIdx].isSubmitted = true;
@@ -233,7 +238,8 @@ export const sessionService = {
       code,
       language,
       audioFilePath,
-      diagramImageUrl
+      diagramImageUrl,
+      typedAnswer
     );
   },
 
@@ -245,7 +251,8 @@ export const sessionService = {
     codeSubmission: string | null,
     language: string | null,
     audioFilePath: string | null,
-    diagramImageUrl: string | null
+    diagramImageUrl: string | null,
+    answerText = ""
   ) {
     try {
       const session = await sessionRepository.findById(sessionId);
@@ -255,7 +262,7 @@ export const sessionService = {
       if (!question) throw new Error("Question not found");
 
       let speechMetrics: any = null;
-      let transcription = "";
+      let transcription = answerText;
       let speechMetricsStatus: "available" | "unavailable" | undefined;
 
       // Stage 1: Transcription & Speech Analysis (if audio exists)
@@ -418,7 +425,8 @@ export const sessionService = {
         finalSession.status === "completed" ? "session completed" : "evaluation completed",
         `Feedback for Q${questionIdx + 1} ready`, finalSession);
     } catch (error: any) {
-      console.error("Evaluation Async Task Error:", error.message);
+      // Provider/network bodies may contain private request details. Log only a safe category.
+      console.error("Evaluation Async Task Error:", error instanceof SessionStateError ? "session_state" : "ai_or_persistence_unavailable");
 
       // Revert isSubmitted flag on error so the user can try again
       const errSession = await withSessionLock(sessionId, async () => {

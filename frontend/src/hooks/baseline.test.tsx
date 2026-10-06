@@ -72,6 +72,72 @@ class UtteranceFixture {
 }
 
 describe("Ava voice baseline", () => {
+    it("autoplay suspension cannot block the server request or browser fallback", async () => {
+        const resume = vi.fn(() => new Promise<void>(() => {}));
+        class SuspendedContext { state = "suspended"; resume = resume; close() { return Promise.resolve(); } }
+        vi.stubGlobal("AudioContext", SuspendedContext);
+        vi.stubGlobal("SpeechSynthesisUtterance", UtteranceFixture);
+        const speech = { getVoices: () => [], cancel: vi.fn(), speak: vi.fn() };
+        vi.stubGlobal("speechSynthesis", speech);
+        vi.mocked(apiClient.post).mockRejectedValue({ isAxiosError: true, response: { status: 503 } });
+        const { result } = renderHook(() => useInterviewerVoice("session", 0, "Question"));
+        await waitFor(() => expect(speech.speak).toHaveBeenCalledTimes(1));
+        expect(apiClient.post).toHaveBeenCalledTimes(1);expect(resume).not.toHaveBeenCalled();
+        expect(result.current.isPreparing).toBe(false);
+    });
+    it("plays valid server audio and replays the cached question without another request", async () => {
+        const start = vi.fn(), stop = vi.fn(), decode = vi.fn().mockResolvedValue({ duration: 1 });
+        class WorkingContext {
+            state = "running"; destination = {};
+            decodeAudioData = decode;
+            createBufferSource() { return { connect: vi.fn(), start, stop, buffer: null, onended: null }; }
+            createAnalyser() { return { connect: vi.fn(), fftSize: 0, frequencyBinCount: 2, getByteTimeDomainData: vi.fn() }; }
+            close() { return Promise.resolve(); }
+        }
+        vi.stubGlobal("AudioContext", WorkingContext);
+        vi.stubGlobal("requestAnimationFrame", vi.fn().mockReturnValue(1));
+        vi.stubGlobal("cancelAnimationFrame", vi.fn());
+        vi.mocked(apiClient.post).mockResolvedValue({ data: new ArrayBuffer(44) });
+        const { result, rerender } = renderHook(({ enabled }) => useInterviewerVoice("session", 0, "Question", enabled), { initialProps: { enabled: true } });
+        await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+        expect(result.current.usingBrowserVoice).toBe(false);
+        await act(async () => result.current.speak());
+        expect(start).toHaveBeenCalledTimes(2);expect(apiClient.post).toHaveBeenCalledTimes(1);expect(decode).toHaveBeenCalledTimes(1);
+        rerender({ enabled: false });
+        await waitFor(() => expect(result.current.isSpeaking).toBe(false));
+        expect(stop).toHaveBeenCalled();
+    });
+    it("shares pending server requests, falls back once, and uses browser voice for later automatic questions", async () => {
+        vi.stubGlobal("AudioContext", AudioContextFixture);
+        vi.stubGlobal("SpeechSynthesisUtterance", UtteranceFixture);
+        const speech = { getVoices: () => [], cancel: vi.fn(), speak: vi.fn((u: UtteranceFixture) => u.onstart?.()) };
+        vi.stubGlobal("speechSynthesis", speech);
+        let reject: (error: unknown) => void = () => {};
+        vi.mocked(apiClient.post).mockImplementation(() => new Promise((_resolve, fail) => { reject = fail; }));
+        const { result, rerender } = renderHook(({ index }) => useInterviewerVoice("session", index, "Question"), { initialProps: { index: 0 } });
+        await waitFor(() => expect(apiClient.post).toHaveBeenCalledTimes(1));
+        act(() => { result.current.speak(); result.current.speak(); });
+        expect(apiClient.post).toHaveBeenCalledTimes(1);
+        await act(async () => { reject({ isAxiosError: true, response: { status: 503 } }); });
+        await waitFor(() => expect(result.current.usingBrowserVoice).toBe(true));
+        expect(speech.speak).toHaveBeenCalledTimes(1);
+        rerender({ index: 1 });
+        await waitFor(() => expect(speech.speak).toHaveBeenCalledTimes(2));
+        expect(apiClient.post).toHaveBeenCalledTimes(1);
+        act(() => result.current.speak()); // One explicit server retry is allowed.
+        expect(apiClient.post).toHaveBeenCalledTimes(2);
+        await act(async () => { reject({ isAxiosError: true, response: { status: 503 } }); });
+    });
+    it("does not use stale private question text as browser fallback after a state/ownership denial", async () => {
+        vi.stubGlobal("AudioContext", AudioContextFixture);
+        vi.stubGlobal("SpeechSynthesisUtterance", UtteranceFixture);
+        const speech = { getVoices: () => [], cancel: vi.fn(), speak: vi.fn() };
+        vi.stubGlobal("speechSynthesis", speech);
+        vi.mocked(apiClient.post).mockRejectedValue({ isAxiosError: true, response: { status: 409 } });
+        const { result } = renderHook(() => useInterviewerVoice("session", 0, "Question"));
+        await waitFor(() => expect(result.current.voiceError).toContain("Refresh"));
+        expect(speech.speak).not.toHaveBeenCalled();
+    });
     it("falls back to browser voice, persists mute, and stops while disabled", async () => {
         vi.stubGlobal("AudioContext", AudioContextFixture);
         vi.stubGlobal("SpeechSynthesisUtterance", UtteranceFixture);
@@ -126,6 +192,28 @@ function interviewFixture() {
 }
 
 describe("answer controls", () => {
+    it("submits a typed oral draft without audio, preserves it for retry, and navigates after evaluation", async () => {
+        const { session: initial, store, wrapper } = interviewFixture();
+        const session = { ...initial, questions: [...initial.questions, { ...initial.questions[0], questionText: "Next question" }] };
+        vi.mocked(api.get).mockResolvedValue({ data: { session } });
+        store.dispatch(setActiveSession(session));
+        vi.mocked(api.post).mockResolvedValue({ data: { message: "accepted" } });
+        const stop = vi.fn().mockResolvedValue(null);
+        const { result } = renderHook(() => useInterviewSession(stop, vi.fn()), { wrapper });
+        await waitFor(() => expect(api.get).toHaveBeenCalled());
+        act(() => result.current.updateDraftAnswer("A typed answer"));
+        await act(() => result.current.handleSubmitAnswer());
+        const form = vi.mocked(api.post).mock.calls[0][1] as FormData;
+        expect(form.get("answerText")).toBe("A typed answer");expect(form.has("audio")).toBe(false);
+        act(() => store.dispatch(setActiveSession({ ...session, questions: [{ ...session.questions[0], processingError: "Provider unavailable. Retry." }, session.questions[1]] })));
+        await waitFor(() => expect(result.current.isQuestionLocked).toBe(false));
+        expect(result.current.drafts[0].answerText).toBe("A typed answer");
+        await act(() => result.current.handleSubmitAnswer());
+        expect(api.post).toHaveBeenCalledTimes(2);
+        act(() => store.dispatch(setActiveSession({ ...session, questions: [{ ...session.questions[0], isSubmitted: true, isEvaluated: true }, session.questions[1]] })));
+        await act(() => result.current.handleNavigation(1));
+        expect(result.current.currentQuestionIndex).toBe(1);
+    });
     it("uploads final recorded audio once, unlocks failed processing for retry, and locks completed sessions", async () => {
         const { session, store, wrapper } = interviewFixture();
         let finishUpload: (value: { data: { message: string } }) => void = () => {};

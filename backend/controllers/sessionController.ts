@@ -119,7 +119,7 @@ export const deleteSession = asyncHandler(async (req: AuthenticatedRequest, res:
  */
 export const submitAnswer = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const sessionId = req.params.sessionId as string;
-  const { questionIndex, code, language, diagramImageUrl } = req.body;
+  const { questionIndex, code, language, diagramImageUrl, answerText } = req.body;
   const userId = req.user?.id || req.user?._id;
   if (!userId) {
     res.status(401);
@@ -133,11 +133,12 @@ export const submitAnswer = asyncHandler(async (req: AuthenticatedRequest, res: 
       sessionId,
       userId,
       questionIndex,
-      code,
-      language,
+      code ?? null,
+      language ?? null,
       audioFilePath,
       diagramImageUrl || null,
-      req.app.get("io")
+      req.app.get("io"),
+      answerText
     );
 
     res.status(200).json({ message: "Answer received" });
@@ -163,8 +164,21 @@ export const speakQuestion = asyncHandler(async (req: AuthenticatedRequest, res:
     throw new Error("Unauthorized");
   }
 
-  const session = await sessionService.getSessionDetails(sessionId, userId);
-  const qIdx = parseInt(questionIndex, 10);
+  if (!/^\d+$/.test(String(questionIndex))) {
+    res.status(400).json({ message: "Invalid question index" });
+    return;
+  }
+  let session;
+  try { session = await sessionService.getSessionDetails(sessionId, userId); }
+  catch (error) {
+    if (!(error instanceof Error) || error.message !== "Session not found") throw error;
+    res.status(404).json({ message: "Session not found" }); return;
+  }
+  if (session.status !== "in-progress") {
+    res.status(409).json({ message: "This interview is not active" });
+    return;
+  }
+  const qIdx = Number(questionIndex);
   const question = session.questions?.[qIdx];
 
   if (!question) {
@@ -179,9 +193,10 @@ export const speakQuestion = asyncHandler(async (req: AuthenticatedRequest, res:
     res.setHeader("Content-Type", "audio/wav");
     res.setHeader("Cache-Control", "private, max-age=3600");
     res.send(audio);
-  } catch (error: any) {
+  } catch {
     // 503 tells the client to fall back to browser speechSynthesis
-    res.status(503).json({ message: "TTS unavailable", detail: error.message });
+    res.setHeader("Cache-Control", "no-store");
+    res.status(503).json({ code: "tts_unavailable", message: "Server voice unavailable. Use browser voice or read the question.", retryable: false });
   }
 });
 

@@ -47,6 +47,7 @@ const InterviewRunner = () => {
         submittedLocal,
         handleNavigation,
         updateDraftCode,
+        updateDraftAnswer,
         updateDraftAudio,
         updateDraftDiagram,
         deleteDraftAudio,
@@ -165,11 +166,25 @@ const InterviewRunner = () => {
                         isRecording={isRecording}
                         recordingTime={recordingTime}
                         hasAudio={!!currentDraft.audio}
-                        isQuestionLocked={isQuestionLocked || isStarting}
+                        isQuestionLocked={isQuestionLocked || isStarting || !!currentDraft.answerText?.trim()}
                         startRecording={() => startRecording(updateDraftAudio)}
                         stopRecording={stopRecording}
                         deleteDraftAudio={deleteDraftAudio}
                     />
+                    <div className="glass-card p-6 rounded-2xl">
+                        <label htmlFor="typed-answer" className="block mb-2 font-semibold">Type an answer instead</label>
+                        <textarea
+                            id="typed-answer"
+                            value={currentDraft.answerText || ""}
+                            onChange={event => updateDraftAnswer(event.target.value)}
+                            disabled={isQuestionLocked || isRecording || isStarting || !!currentDraft.audio?.size}
+                            maxLength={50000}
+                            rows={5}
+                            className="w-full p-3 rounded-xl bg-surface-800 text-white disabled:opacity-50"
+                            aria-describedby="typed-answer-help"
+                        />
+                        <p id="typed-answer-help" className="mt-2 text-sm text-surface-300">Use a recording or a typed answer. Clear your text to record, or remove the recording to type.</p>
+                    </div>
                     {currentQuestion?.questionType === 'system-design' && (
                         <div className="flex justify-center mt-2">
                             <button

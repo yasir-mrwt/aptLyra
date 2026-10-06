@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import apiClient from "../services/apiClient";
+import { isAxiosError } from "axios";
 
 /**
  * Voice of the AI interviewer.
@@ -47,6 +48,8 @@ export const useInterviewerVoice = (
     const rafRef = useRef<number>(0);
     const fallbackTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const audioCacheRef = useRef<Map<number, AudioBuffer>>(new Map());
+    const pendingAudioRef = useRef<Map<number, Promise<ArrayBuffer>>>(new Map());
+    const serverUnavailableRef = useRef(false);
     const lastSpokenRef = useRef<number>(-1);
     const generationRef = useRef(0); // invalidates stale async playback
 
@@ -116,9 +119,21 @@ export const useInterviewerVoice = (
         window.speechSynthesis.speak(utterance);
     }, []);
 
-    const playBuffer = useCallback((buffer: AudioBuffer, generation: number) => {
+    const playBuffer = useCallback(async (buffer: AudioBuffer, generation: number) => {
         const ctx = audioCtxRef.current;
         if (!ctx || generationRef.current !== generation) return;
+        if (ctx.state === "suspended") {
+            // Autoplay permission must not hold the provider request/fallback or
+            // disable Replay indefinitely. Cached Replay resumes in a user gesture.
+            setVoiceError("Press Replay to enable question audio.");
+            try { await ctx.resume(); }
+            catch {
+                if (generationRef.current === generation) setVoiceError("Voice playback unavailable. Read the question or retry Replay.");
+                return;
+            }
+        }
+        if (generationRef.current !== generation || ctx.state !== "running") return;
+        setVoiceError(null);
 
         const source = ctx.createBufferSource();
         source.buffer = buffer;
@@ -161,7 +176,7 @@ export const useInterviewerVoice = (
         rafRef.current = requestAnimationFrame(tick);
     }, []);
 
-    const speakQuestion = useCallback(async (qIndex: number, text: string) => {
+    const speakQuestion = useCallback(async (qIndex: number, text: string, retryServer = false) => {
         if (!enabled || isMuted || !sessionId || !text) return;
         stopSpeaking();
         const generation = generationRef.current;
@@ -169,44 +184,62 @@ export const useInterviewerVoice = (
         setVoiceError(null);
         setUsingBrowserVoice(false);
 
+        // An intentional server 503 applies to this session until explicit Replay.
+        // New questions and mute toggles use browser voice without hammering /speak.
+        if (serverUnavailableRef.current && !retryServer) {
+            speakWithBrowser(text, generation);
+            return;
+        }
+
         try {
             if (!audioCtxRef.current) {
                 audioCtxRef.current = new AudioContext();
             }
-            if (audioCtxRef.current.state === "suspended") {
-                await audioCtxRef.current.resume();
-            }
-
             const cached = audioCacheRef.current.get(qIndex);
             if (cached) {
                 setIsPreparing(false);
-                playBuffer(cached, generation);
+                await playBuffer(cached, generation);
                 return;
             }
 
-            const res = await apiClient.post(
-                `/sessions/${sessionId}/speak`,
-                { questionIndex: qIndex },
-                { responseType: "arraybuffer" }
-            );
+            const pending = pendingAudioRef.current;
+            let request = pending.get(qIndex);
+            if (!request) {
+                request = apiClient.post(
+                    `/sessions/${sessionId}/speak`,
+                    { questionIndex: qIndex },
+                    { responseType: "arraybuffer" }
+                ).then(res => res.data as ArrayBuffer);
+                pending.set(qIndex, request);
+                void request.then(() => pending.delete(qIndex), () => pending.delete(qIndex));
+            }
+            const audio = await request;
             if (generationRef.current !== generation) return;
 
-            const buffer = await audioCtxRef.current.decodeAudioData(res.data);
+            const buffer = await audioCtxRef.current.decodeAudioData(audio);
             if (generationRef.current !== generation) return;
+            serverUnavailableRef.current = false;
             audioCacheRef.current.set(qIndex, buffer);
             setIsPreparing(false);
 
-            playBuffer(buffer, generation);
-        } catch {
+            await playBuffer(buffer, generation);
+        } catch (error) {
             // Server TTS unavailable → browser voice
             if (generationRef.current === generation) {
+                const status = isAxiosError(error) ? error.response?.status : undefined;
+                if ([401, 403, 404, 409].includes(status || 0)) {
+                    setIsPreparing(false);
+                    setVoiceError("Question voice unavailable. Refresh the interview.");
+                    return;
+                }
+                if (status === 503) serverUnavailableRef.current = true;
                 speakWithBrowser(text, generation);
             }
         }
     }, [sessionId, enabled, isMuted, stopSpeaking, playBuffer, speakWithBrowser]);
 
     const speak = useCallback(() => {
-        if (questionText) speakQuestion(questionIndex, questionText);
+        if (questionText) void speakQuestion(questionIndex, questionText, true);
     }, [questionIndex, questionText, speakQuestion]);
 
     const toggleMute = useCallback(() => {
@@ -221,6 +254,8 @@ export const useInterviewerVoice = (
     useEffect(() => {
         lastSpokenRef.current = -1;
         audioCacheRef.current = new Map();
+        pendingAudioRef.current = new Map();
+        serverUnavailableRef.current = false;
         return () => {
             stopSpeaking();
             audioCtxRef.current?.close().catch(() => undefined);

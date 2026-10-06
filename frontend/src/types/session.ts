@@ -127,4 +127,4 @@ export interface SocketUpdatePayload {
 /**
  * Structure for locally persisted interview drafts in IndexedDB.
  */
-export type DraftRecord = Record<number, { code?: string; audio?: Blob }>;
+export type DraftRecord = Record<number, { code?: string; answerText?: string; audio?: Blob; diagram?: Blob; diagramElements?: readonly unknown[] }>;

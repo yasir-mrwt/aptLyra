@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import type { AppDispatch, RootState } from "../app/store";
+import type { DraftRecord } from "../types/session";
 import { getSessionById, submitAnswer, endSession } from "../features/session/sessionSlice";
 import { ROLE_LANGUAGE_MAP } from "../constants/interview";
 import { saveDrafts, getDrafts, deleteDrafts } from "../utils/idb";
@@ -36,7 +37,7 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
     const [submittedLocal, setSubmittedLocal] = useState<Record<number, boolean>>({});
 
     // Initial drafts state from IDB with empty fallback
-    const [drafts, setDrafts] = useState<Record<number, { code?: string; audio?: Blob; diagram?: Blob; diagramElements?: readonly unknown[] }>>({});
+    const [drafts, setDrafts] = useState<DraftRecord>({});
 
     useEffect(() => {
         if (!sessionId) return;
@@ -123,6 +124,11 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
         }));
     };
 
+    const updateDraftAnswer = (answerText: string) => {
+        if (isQuestionLocked) return;
+        setDrafts(prev => ({ ...prev, [currentQuestionIndex]: { ...prev[currentQuestionIndex], answerText } }));
+    };
+
     const updateDraftDiagram = (diagramBlob: Blob, elements: readonly unknown[]) => {
         setDrafts(prev => ({
             ...prev,
@@ -146,12 +152,17 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
             const recordedAudio = await stopRecording();
             const draft = drafts[index] || {};
             const code = draft.code || "";
+            const answerText = draft.answerText?.trim() || "";
             const audio = recordedAudio || draft.audio;
             const diagram = draft.diagram;
-            if ((currentQuestion?.questionType === "oral" && !audio?.size) ||
+            if ((currentQuestion?.questionType === "oral" && !audio?.size && !answerText) ||
                 (currentQuestion?.questionType === "coding" && !code.trim()) ||
-                (!code.trim() && !audio?.size && !diagram?.size)) {
+                (!code.trim() && !answerText && !audio?.size && !diagram?.size)) {
                 toast.error("Please provide an answer before submitting.");
+                return;
+            }
+            if (answerText && audio?.size) {
+                toast.error("Choose a recorded or typed answer before submitting.");
                 return;
             }
             let diagramImageUrl = "";
@@ -165,6 +176,7 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
             const formData = new FormData();
             formData.append("questionIndex", index.toString());
             if (code) formData.append("code", code);
+            if (answerText) formData.append("answerText", answerText);
             if (selectedLanguage) formData.append("language", selectedLanguage);
             if (audio) formData.append("audio", audio, audio.type.includes("mp4") ? "audio.m4a" : "audio.webm");
             if (diagramImageUrl) formData.append("diagramImageUrl", diagramImageUrl);
@@ -209,6 +221,7 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
         submittedLocal,
         handleNavigation,
         updateDraftCode,
+        updateDraftAnswer,
         updateDraftAudio,
         updateDraftDiagram,
         deleteDraftAudio,

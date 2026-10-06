@@ -2,6 +2,8 @@
 
 Run the existing three-service stack on Node 20 and Python 3.11. No local GPU is required. Phase 5/6 CPU retrieval requires externally provisioned pinned model files, as described below.
 
+For chat-model availability, TTS terms/browser fallback and retryable typed/recorded answers, see [Phase 6 runtime guidance](docs/runtime-repair.md). Historical example model selections may require account-specific access; verify them against Groq's active models before use. Embedding health alone does not establish evaluation or voice readiness.
+
 Phase 3 adds an explicit migration step for the knowledge schema; it does not
 change current interviews or run those migrations on web-server startup. See
 [migrations](docs/migrations.md) and [database schema](docs/database-schema.md).

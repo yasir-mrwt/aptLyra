@@ -13,6 +13,19 @@ if (process.env.NODE_ENV !== "test") dotenv.config();
 
 const API_SERVICE_URL = process.env.AI_SERVICE_URL || "http://localhost:8000";
 
+const providerCodes = new Set(["provider_model_unavailable", "provider_authentication", "provider_rate_limited", "provider_timeout", "provider_unavailable", "tts_terms_required", "invalid_provider_audio"]);
+export class AIServiceError extends Error {
+  constructor(public code: string, public upstreamStatus: number) { super("AI operation unavailable. Please retry."); }
+}
+async function providerError(response: any) {
+  let code = "provider_unavailable";
+  try {
+    const detail = (await response.json()).detail;
+    if (detail && typeof detail === "object" && providerCodes.has(detail.code)) code = detail.code;
+  } catch { /* Do not expose untrusted upstream text. */ }
+  return new AIServiceError(code, response.status);
+}
+
 /**
  * Utility for asynchronous delayed execution.
  */
@@ -32,15 +45,15 @@ const fetchWithRetry = async (
     try {
       const response = await fetch(url, { ...options, signal: AbortSignal.timeout(90_000), size: 10 * 1024 * 1024, redirect: "error" });
       // Retry on 429 (Rate Limit) and 50x (Server Errors)
-      if (response.ok || (response.status >= 400 && ![429, 502, 503, 504].includes(response.status))) {
+      if (response.ok || (response.status >= 400 && ![429, 502, 503, 504].includes(response.status)) || i === retries - 1) {
         return response;
       }
-      const errBody = await response.text();
-      throw new Error(`Server returned status ${response.status}: ${errBody}`);
+      await response.arrayBuffer(); // Discard the bounded error body before retrying.
+      throw new AIServiceError("provider_unavailable", response.status);
     } catch (error) {
-      lastError = error;
+      lastError = error instanceof AIServiceError ? error : new AIServiceError("provider_timeout", 504);
       if (i < retries - 1) {
-        console.warn(`Fetch attempt ${i + 1} failed for ${url}. Retrying in ${backoff}ms...`);
+        console.warn(`AI request attempt ${i + 1} failed. Retrying in ${backoff}ms...`);
         await wait(backoff);
         backoff *= 2; // Exponential backoff
       }
@@ -84,8 +97,7 @@ export const aiService = {
     });
 
     if (!response.ok) {
-      const errorData = (await response.json()) as any;
-      throw new Error(errorData.detail || errorData.error || "Generation failed");
+      throw await providerError(response);
     }
 
     const data = await response.json() as GenerateQuestionsResponse;
@@ -115,8 +127,7 @@ export const aiService = {
     }, 1);
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Transcription failed: ${error}`);
+      throw await providerError(response);
     }
 
     const data = (await response.json()) as { transcription?: string };
@@ -138,14 +149,7 @@ export const aiService = {
     });
 
     if (!response.ok) {
-      let errorMsg = await response.text();
-      try {
-        const parsed = JSON.parse(errorMsg);
-        errorMsg = parsed.detail || parsed.message || errorMsg;
-      } catch (e) {
-        /* ignored */
-      }
-      throw new Error(errorMsg);
+      throw await providerError(response);
     }
 
     const data = await response.json() as EvaluateAnswerResponse;
@@ -182,8 +186,7 @@ export const aiService = {
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Follow-up generation failed: ${error}`);
+      throw await providerError(response);
     }
 
     const data = await response.json() as { question: string; ideal_answer: string; question_type: string };
@@ -208,11 +211,13 @@ export const aiService = {
     }, 1); // no retry spam for TTS — client falls back to browser speech
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`TTS failed: ${error}`);
+      throw await providerError(response);
     }
 
-    return Buffer.from(await response.arrayBuffer());
+    const audio = Buffer.from(await response.arrayBuffer());
+    if (audio.length < 44 || audio.length > 10 * 1024 * 1024 || audio.toString("ascii", 0, 4) !== "RIFF" || audio.toString("ascii", 8, 12) !== "WAVE")
+      throw new AIServiceError("invalid_provider_audio", 502);
+    return audio;
   },
 
   /**
@@ -239,8 +244,7 @@ export const aiService = {
     }, 1);
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Speech analysis failed: ${error}`);
+      throw await providerError(response);
     }
 
     const data = await response.json() as SpeechAnalysisResult;
