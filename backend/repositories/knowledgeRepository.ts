@@ -179,9 +179,16 @@ export const knowledgeRepository = {
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
       [id,input.operationKey,nullable(input.sessionId),userId,nullable(input.planId),nullable(input.redactedQuery),input.queryHash,
         json(input.filters || {}),json(input.embeddingMetadata || {}),input.corpusVersion,input.sourcePolicyRevision,input.outcome,input.cacheHit || false]);
-      for (const hit of input.results) await query(
-        "INSERT INTO retrieval_results(id,retrieval_id,question_version_id,chunk_id,rank,similarity,selected,reason,provenance_snapshot) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)",
-        [randomUUID(),id,nullable(hit.questionVersionId),nullable(hit.chunkId),hit.rank,nullable(hit.similarity),hit.selected || false,hit.reason,json(hit.provenanceSnapshot || [])]);
+      // The retrieval pool is bounded at 100 rows. Preserve every candidate and
+      // per-row DB lineage guard, without a remote database round trip per rank.
+      if(input.results.length>100)throw new Error("Retrieval result budget exceeded");
+      if(input.results.length) {
+        const params=input.results.flatMap(hit=>[randomUUID(),id,nullable(hit.questionVersionId),nullable(hit.chunkId),hit.rank,
+          nullable(hit.similarity),hit.selected || false,hit.reason,json(hit.provenanceSnapshot || [])]);
+        const values=input.results.map((_,index)=>"("+Array.from({length:9},(_,column)=>`$${index*9+column+1}`).join(",")+")");
+        await query(`INSERT INTO retrieval_results(id,retrieval_id,question_version_id,chunk_id,rank,similarity,selected,reason,provenance_snapshot)
+          VALUES ${values.join(",")}`,params);
+      }
       return id;
     });
   },

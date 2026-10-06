@@ -4,14 +4,14 @@ import { query, withDatabaseLock } from "../config/db.js";
 import { knowledgeRepository } from "../repositories/knowledgeRepository.js";
 import { digest } from "./corpus.js";
 import { EmbeddingClient } from "./embeddingClient.js";
-import { MODEL, RetrievalFailure, validateBatch, type Embedder, type Entity, type Filters, type Outcome,
+import { MODEL, REVIEWED_SEED_INPUT_HASH, RetrievalFailure, validateBatch, type Embedder, type Entity, type Filters, type Outcome,
   type Purpose, type Reason, type RetrievalRequest, type RetrievalResponse } from "./contracts.js";
 import type { RetrievalInput } from "../types/knowledge.js";
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const normalize=(s:string)=>s.normalize("NFKC").trim().replace(/\s+/g," ").toLowerCase();
 const keys=new Set(["taxonomyVersion","competencies","role","difficulties","categories","origins","qualities",
-  "sourceStates","reviewStates","company","occurredAfter","occurredBefore","excludedFamilies","excludedVersions","alreadySelectedIds","sourceKeys","documentKeys"]);
+  "sourceStates","reviewStates","company","occurredAfter","occurredBefore","excludedFamilies","excludedVersions","alreadySelectedIds","sourceKeys","documentKeys","reviewedSeed"]);
 function validDate(value:unknown) {
   return typeof value==="string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
     && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0,10)===value;
@@ -27,7 +27,8 @@ function validate(request:RetrievalRequest): Filters {
     || (request.expectedCorpusGeneration!==undefined && !/^corpus-[0-9a-f]{64}$/.test(request.expectedCorpusGeneration))
     || (request.expectedModelRevision!==undefined && (typeof request.expectedModelRevision!=="string" || request.expectedModelRevision.length>100))
     || (request.strategy!==undefined && !["semantic","structured-seed"].includes(request.strategy))
-    || (request.strategy==="structured-seed" && (!f.sourceKeys?.length || f.sourceKeys.some(k=>k!=="techvera-junior-se-seed-v1"))))
+    || (f.reviewedSeed!==undefined && f.reviewedSeed!==true)
+    || (request.strategy==="structured-seed" && f.reviewedSeed!==true))
     throw new RetrievalFailure("invalid_filters");
   const choices:Record<string,string[]|null>={competencies:null,excludedFamilies:null,excludedVersions:null,alreadySelectedIds:null,sourceKeys:null,documentKeys:null,
     difficulties:["easy","standard","stretch"],categories:["conceptual-oral","scenario","coding","debugging","sql","system-design-lite"],
@@ -92,6 +93,12 @@ export function filterSql(f:Filters,purpose:Purpose) {
     if(ids.length)clauses.push(`NOT e.entity_id=ANY(${add(ids)}::uuid[])`);
   }
   const lineage:string[]=[];
+  if(f.reviewedSeed)clauses.push(`EXISTS(SELECT 1 FROM jsonb_array_elements(e.provenance) p
+    JOIN ingestion_records r ON r.document_version_id=(p->>'documentVersionId')::uuid
+    JOIN sources s ON s.id=r.source_id JOIN ingestion_adapters a ON a.source_id=s.id
+    WHERE r.state='published' AND r.input_hash=${add(REVIEWED_SEED_INPUT_HASH)} AND s.source_type='authored'
+      AND a.adapter_id='local-file' AND a.contract->>'fixture'='false'
+      AND a.contract->'approvedInputHashes' ? ${add(REVIEWED_SEED_INPUT_HASH)})`);
   if(f.sourceKeys?.length)clauses.push(`EXISTS(SELECT 1 FROM jsonb_array_elements(e.provenance) p JOIN sources s ON s.id=(p->>'sourceId')::uuid WHERE s.stable_key=ANY(${add(f.sourceKeys)}::text[]))`);
   if(f.documentKeys?.length)lineage.push(`p->>'externalKey'=ANY(${add(f.documentKeys)}::text[])`);
   if(f.qualities?.length)lineage.push(`p->>'quality'=ANY(${add(f.qualities)}::text[])`);
@@ -120,19 +127,22 @@ export class RetrievalService {
       filters=validate(request);
       const taxonomy=(await query("SELECT id FROM competencies WHERE taxonomy_version=$1 AND status='active'",[filters.taxonomyVersion])).rows;
       if(!taxonomy.length || filters.competencies?.some(id=>!taxonomy.some(c=>c.id===id)))throw new RetrievalFailure("invalid_filters");
-      const active=(await query("SELECT * FROM embedding_generations WHERE status='active'")).rows[0];
+      // One snapshot/round trip for generation and completeness; rechecked under the
+      // editorial lock after embedding below, just as before.
+      const active=(await query(`SELECT g.*,
+        (SELECT count(*)::int FROM retrieval_entities WHERE purpose=$1) AS available,
+        EXISTS(SELECT 1 FROM retrieval_entities e WHERE e.purpose=$1 AND NOT EXISTS
+          (SELECT 1 FROM embedding_metadata m JOIN embedding_vectors ev ON ev.metadata_id=m.id
+            WHERE coalesce(m.question_version_id,m.chunk_id)=e.entity_id AND m.purpose=e.purpose
+              AND m.content_hash=e.content_hash AND m.status='active' AND m.corpus_generation=g.id)) AS incomplete
+        FROM embedding_generations g WHERE g.status='active'`,[purpose])).rows[0];
       if(!active)throw new RetrievalFailure("corpus_unavailable");
       generation=active.id;
       if(Object.entries(MODEL).some(([k,v])=>active[{modelId:"model_id",modelRevision:"model_revision",embeddingVersion:"embedding_version",dimension:"dimension",normalization:"normalization"}[k]!]!==v)
         || (request.expectedModelRevision && request.expectedModelRevision!==MODEL.modelRevision))throw new RetrievalFailure("model_mismatch");
       if(request.expectedCorpusGeneration && request.expectedCorpusGeneration!==generation)throw new RetrievalFailure("corpus_unavailable");
-      const available=(await query("SELECT count(*)::int AS n FROM retrieval_entities WHERE purpose=$1",[purpose])).rows[0].n;
-      if(available) {
-        const missing=(await query(`SELECT count(*)::int AS n FROM retrieval_entities e WHERE e.purpose=$1 AND NOT EXISTS
-          (SELECT 1 FROM embedding_metadata m JOIN embedding_vectors ev ON ev.metadata_id=m.id
-            WHERE coalesce(m.question_version_id,m.chunk_id)=e.entity_id AND m.purpose=e.purpose AND m.content_hash=e.content_hash
-              AND m.status='active' AND m.corpus_generation=$2)`,[purpose,generation])).rows[0].n;
-        if(missing)throw new RetrievalFailure("corpus_unavailable");
+      if(active.available) {
+        if(active.incomplete)throw new RetrievalFailure("corpus_unavailable");
         if(request.strategy==="structured-seed")structured=true;
         else {
           const start=performance.now();const batch=validateBatch(await this.embedder.embed([request.query],"query"),1);

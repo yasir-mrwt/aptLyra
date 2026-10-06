@@ -58,17 +58,19 @@ export class PlannerService {
             filters:{taxonomyVersion:setup.taxonomyVersion,competencies:[root],role:setup.role,categories:categories(setup),
               difficulties:stage.difficulties,alreadySelectedIds:candidates.map(c=>c.hit.questionVersionId!),
               company:setup.modifiers.company,occurredAfter:setup.modifiers.occurredAfter,occurredBefore:setup.modifiers.occurredBefore,
-              sourceKeys:stage.seed?["techvera-junior-se-seed-v1"]:undefined,documentKeys:stage.template?templates[root]:undefined}});
+              reviewedSeed:stage.seed?true:undefined,documentKeys:stage.template?templates[root]:undefined}});
           operations.push(response.operationId);
           if(response.corpusGeneration!==corpus || ["corpus_unavailable","model_mismatch","invalid_filters"].includes(response.outcome))
             throw new PlannerError("stale_retrieval",409);
           if(response.outcome==="unavailable")failures.push("retrieval_unavailable:"+stage.reason);
-          for(const hit of response.hits) {
-            if(!hit.questionVersionId || hit.competency?.split('.')[0]!==root || !hit.provenanceAvailable || !hit.provenance.length)continue;
-            const row=(await query(`SELECT v.duplicate_group FROM embedding_metadata m JOIN embedding_vectors v ON v.metadata_id=m.id
-              WHERE m.question_version_id=$1 AND m.status='active' AND m.corpus_generation=$2`,[hit.questionVersionId,corpus])).rows[0];
-            if(!row)throw new PlannerError("stale_retrieval",409);
-            if(!candidates.some(c=>c.hit.questionVersionId===hit.questionVersionId))candidates.push({hit,root,group:row.duplicate_group,reason:stage.reason,minutes:estimateMinutes(hit.category!)});
+          const hits=response.hits.filter(hit=>hit.questionVersionId && hit.competency?.split('.')[0]===root && hit.provenanceAvailable && hit.provenance.length);
+          const rows=hits.length?(await query(`SELECT m.question_version_id,v.duplicate_group FROM embedding_metadata m JOIN embedding_vectors v ON v.metadata_id=m.id
+            WHERE m.question_version_id=ANY($1::uuid[]) AND m.purpose='question-selection' AND m.status='active' AND m.corpus_generation=$2`,[hits.map(h=>h.questionVersionId),corpus])).rows:[];
+          const groups=new Map<string,string>(rows.map(row=>[row.question_version_id,row.duplicate_group]));
+          for(const hit of hits) {
+            const group=groups.get(hit.questionVersionId!);
+            if(!group)throw new PlannerError("stale_retrieval",409);
+            if(!candidates.some(c=>c.hit.questionVersionId===hit.questionVersionId))candidates.push({hit,root,group,reason:stage.reason,minutes:estimateMinutes(hit.category!)});
           }
         }
       }

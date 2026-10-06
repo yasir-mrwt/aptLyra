@@ -87,6 +87,33 @@ test('company/known occurrence constraints never relax; absent technical referen
   }
   const r=await service.retrieveTechnicalEvidence({query:'authoritative correct answer'});assert.equal(r.outcome,'no_match');assert.equal(r.reason,'no_permitted_source');
 });
+test('structured fallback identifies the exact approved input hash, never just a source label',async()=>{
+ const result=await service.retrieveQuestions({query:'seed fallback',strategy:'structured-seed',filters:{reviewedSeed:true,competencies:['dsa'],role:'Software Engineer'}});
+ assert.equal(result.outcome,'success');assert.ok(result.hits.length>0);assert.ok(result.hits.every(h=>h.similarity===null));
+ const labelOnly=await service.retrieveQuestions({query:'seed fallback',strategy:'structured-seed',filters:{sourceKeys:['techvera-junior-se-seed-v1']}});
+ assert.equal(labelOnly.outcome,'invalid_filters');assert.equal(labelOnly.hits.length,0);
+ await assert.rejects(()=>f.withDatabaseLock('ingestion:editorial:v1',async()=>{
+  // Disposable rollback: unchanged source label and eligibility cannot authorize another input hash.
+  await f.query("UPDATE ingestion_records SET input_hash=$2 WHERE source_id=$1",[f.sourceId,'0'.repeat(64)]);
+  const missing=await service.retrieveQuestions({query:'seed fallback',strategy:'structured-seed',filters:{reviewedSeed:true}});
+  assert.equal(missing.outcome,'no_match');assert.equal(missing.hits.length,0);
+  throw new Error('rollback seed identity simulation');
+ }),/rollback seed identity simulation/);
+});
+test('candidate evidence is written in one bounded SQL round trip with all lineage/rank rows intact',async()=>{
+ const clients=new Map();let inserts=0;
+ const observe=client=>{
+  if(clients.has(client))return;const original=client.query;clients.set(client,original);
+  client.query=function(...args){if(typeof args[0]==='string' && /INSERT INTO retrieval_results/.test(args[0]))inserts++;return original.apply(this,args);};
+ };
+ f.pool.on('acquire',observe);
+ let result;
+ try {result=await service.retrieveQuestions({query:'different words',filters:{competencies:['dsa']}});}
+ finally {f.pool.off('acquire',observe);for(const [client,original] of clients)client.query=original;}
+ const rows=(await f.query('SELECT rank,provenance_snapshot FROM retrieval_results WHERE retrieval_id=$1 ORDER BY rank',[result.operationId])).rows;
+ assert.ok(rows.length>1);assert.equal(inserts,1);assert.deepEqual(rows.map(r=>r.rank),rows.map((_,i)=>i+1));
+ assert.ok(rows.every(r=>r.provenance_snapshot.length>0));
+});
 test('date/company SQL on synthetic values uses only a known permitted occurrence and the same reported role',async()=>{
   // Pure SQL filter fixtures: not corpus rows, citations, human approvals or relevance measurements.
   const {filterSql}=await import('../dist/retrieval/service.js');

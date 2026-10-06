@@ -5,7 +5,7 @@ import {readFile,realpath} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import pg from 'pg';
 
-export async function fixture() {
+export async function fixture({sourceKey='techvera-junior-se-seed-v1'}={}) {
   for(const key of ['DATABASE_URL','NEON_DATABASE_URL','REDIS_URL','UPSTASH_REDIS_URL'])
     if(process.env[key])throw new Error(`Unset ${key}: retrieval verification uses disposable localhost only`);
   const connection='postgresql://techvera_test:techvera_local_fixture@127.0.0.1:15432/';
@@ -30,7 +30,7 @@ export async function fixture() {
     const contract=JSON.parse(await readFile(new URL('../data/ingestion/seed-source-contract.json',import.meta.url)));
     contract.allowedInputs=[seedPath];assert.equal(contract.fixture,false);
     assert.deepEqual(contract.approvedInputHashes,[hash(corpus)]);
-    const sourceId=await r.registerSource('techvera-junior-se-seed-v1','TechVera original reviewed seed',contract);
+    const sourceId=await r.registerSource(sourceKey,'TechVera original reviewed seed',contract);
     await r.approveSource(sourceId,attestation.reviewer.id,(await r.inspectSource(sourceId)).contractHash);
     await r.ingestFile(sourceId,seedPath);
     assert.deepEqual(await r.approveBatch(sourceId,hash(corpus),attestation.reviewer.id),{documents:48,questions:48});

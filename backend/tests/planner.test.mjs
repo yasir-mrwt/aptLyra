@@ -13,7 +13,7 @@ function candidate(root,i,difficulty='standard',category='conceptual-oral',reaso
  return {root,group:`${root}-${i}`,reason,minutes:estimateMinutes(category),hit:{questionVersionId:`${root}-${i}`,familyKey:`${root}-${i}`,difficulty,category,similarity:1}};
 }
 before(async()=>{
- f=await fixture();process.env.JWT_SECRET='phase6-auth-fixture-only';process.env.REDIS_URL='redis://127.0.0.1:16379/15';
+ f=await fixture({sourceKey:'techvera-junior-se-v1'});process.env.JWT_SECRET='phase6-auth-fixture-only';process.env.REDIS_URL='redis://127.0.0.1:16379/15';
  for(const id of [owner,other])await f.query('INSERT INTO users(id,name,email) VALUES($1,$2,$3)',[id,'Planner fixture',id+'@example.invalid']);
  const {embedCorpus}=await import('../dist/retrieval/corpus.js');await embedCorpus(fake);
  const {RetrievalService}=await import('../dist/retrieval/service.js'),{PlannerService,plannerService}=await import('../dist/planner/service.js');
@@ -66,6 +66,24 @@ test('owned preview persists complete plan/items/evidence; GET hides all questio
 test('same setup and corpus select identical question versions/order/reasons across previews',async()=>{
  const p=await service.preview(owner,setup());assert.deepEqual(p.items.map(i=>[i.questionVersionId,i.selectionReason]),saved.items.map(i=>[i.questionVersionId,i.selectionReason]));
  assert.ok(p.items.every((i,n)=>i.id!==saved.items[n].id)); // IDs belong to each immutable owned plan.
+});
+test('complete 48-question preflight accepts supported three-question setup; absent/incomplete/model-mismatched corpus fails before session writes',async()=>{
+ const counts=(await f.query(`SELECT (SELECT count(*)::int FROM retrieval_entities WHERE purpose='question-selection') AS entities,
+   (SELECT count(*)::int FROM embedding_metadata WHERE status='active' AND purpose='question-selection') AS indexed`)).rows[0];
+ assert.deepEqual(counts,{entities:48,indexed:48});
+ const p=await service.preview(owner,setup({count:3,minutes:45}));
+ assert.equal(p.canConfirm,true);assert.equal(p.effectiveCount,3);assert.ok(p.coverage.dsa>0 && p.coverage.programming>0);
+ for(const [sql,code] of [
+  ["UPDATE embedding_generations SET status='retired' WHERE status='active'",'corpus_unavailable'],
+  ["UPDATE embedding_metadata SET status='staged' WHERE id=(SELECT id FROM embedding_metadata WHERE status='active' LIMIT 1)",'corpus_unavailable'],
+  ["UPDATE embedding_generations SET model_revision='incompatible-fixture' WHERE status='active'",'model_mismatch']
+ ])await assert.rejects(()=>f.withDatabaseLock('ingestion:editorial:v1',async()=>{
+  const before=(await f.query('SELECT count(*)::int AS n FROM sessions')).rows[0].n;
+  await f.query(sql);
+  await assert.rejects(()=>service.preview(owner,setup({count:3})),e=>e.code===code && e.status===503);
+  assert.equal((await f.query('SELECT count(*)::int AS n FROM sessions')).rows[0].n,before);
+  throw new Error('rollback preflight simulation');
+ }),/rollback preflight simulation/);
 });
 test('confirm is owned, revision-checked, idempotent and atomically projects server-selected stable items to existing runner',async()=>{
  await assert.rejects(()=>service.confirm(other,{planId:saved.id,revision:1}),e=>e.status===404);
