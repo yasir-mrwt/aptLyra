@@ -28,6 +28,7 @@ export interface SpeechMetrics {
 }
 
 export interface Question {
+    evaluation?: RubricEvaluation;
     planItemId?: string;
     questionVersionId?: string;
     category?: string;
@@ -52,6 +53,8 @@ export interface Question {
 }
 
 export interface Session {
+    scoringVersion?: "legacy"|"rubric-v1";
+    reviewedSummary?: ReviewedSummary;
     planId?: string;
     _id: string;
     user: string;
@@ -64,10 +67,10 @@ export interface Session {
     status: "pending" | "in-progress" | "completed" | "failed" | "cancelled";
     startTime?: Date | string;
     endTime?: Date | string | number;
-    overallScore?: number;
+    overallScore?: number | null;
     metrics?: {
-        avgTechnical?: number;
-        avgConfidence?: number;
+        avgTechnical?: number | null;
+        avgConfidence?: number | null;
     };
     createdAt?: string;
     updatedAt?: string;
@@ -128,3 +131,11 @@ export interface SocketUpdatePayload {
  * Structure for locally persisted interview drafts in IndexedDB.
  */
 export type DraftRecord = Record<number, { code?: string; answerText?: string; audio?: Blob; diagram?: Blob; diagramElements?: readonly unknown[] }>;
+export interface RubricEvaluation {
+    id?:string; rubricStatus:"reviewed"|"provisional"|"unavailable"; status:"scored"|"abstained";
+    technicalScore:number|null; evaluatorConfidence:"high"|"medium"|"low"; reasons:string[];
+    dimensions:Partial<Record<"correctness"|"concept-coverage"|"reasoning"|"practical-application"|"trade-off-awareness",number>>;
+    concepts:{id:string;label:string;judgment:string;explanation:string;sourceIds:string[]}[];
+    feedback:string;communication:string;objective:{status:string;kind:string;summary:string};scoringVersion:string;
+}
+export interface ReviewedSummary {technicalScore:number|null;eligible:number;planned:number;provisional:number;abstained:number;reason:string|null;scoringVersion:string;byRoot:Record<string,number|null>}

@@ -52,6 +52,10 @@ describe("supported planner setup",()=>{
  });
 });
 describe("owned plan preview and confirmation",()=>{
+ it("explains new rubric practice without claiming reviewed grading readiness",()=>{
+  render(<PlanPreview plan={{...plan,evaluationMode:"rubric-v1"}} confirming={false} error={null} onConfirm={vi.fn()} onEdit={vi.fn()}/>);
+  expect(screen.getByText(/separate evaluator confidence/)).toBeTruthy();expect(screen.getByText(/provisional or withheld/)).toBeTruthy();expect(screen.queryByText(/uses legacy evaluation/)).toBeNull();
+ });
  it("renders actual coverage/distribution/shortages/time and no hidden answers",()=>{
   render(<PlanPreview plan={plan} confirming={false} error={null} onConfirm={vi.fn()} onEdit={vi.fn()}/>);
   expect(screen.getByText(/3 of 5 requested/)).toBeTruthy();expect(screen.getByText(/Data Structures & Algorithms: 2/)).toBeTruthy();expect(screen.getByText(/Easy: 1/)).toBeTruthy();expect(screen.getByRole("alert").textContent).toContain("reduced");expect(screen.getByText(/legacy evaluation/)).toBeTruthy();

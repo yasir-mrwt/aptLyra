@@ -237,6 +237,13 @@ export const ingestionRepository = {
     const s=await source(id,false); return {id:s.id,state:s.state,reviewStatus:s.review_status,contractHash:sha256(JSON.stringify(s.contract))};
   },
   approveDocument: (id: string, reviewerId: string, hash: string, duplicateDecision?: string)=>editorial(()=>approveRecord(id,reviewerId,hash,duplicateDecision)),
+  // A separate explicit technical review; question-content approval cannot imply this.
+  approveTechnicalReference: (id:string,reviewerId:string,hash:string,duplicateDecision?:string)=>editorial(async()=>{
+    const r=await record(id),s=await source(r.source_id);
+    if(s.source_type==="voluntary-experience")fail("experience-not-technical-reference");
+    await approveRecord(id,reviewerId,hash,duplicateDecision);
+    await query("UPDATE source_document_versions SET quality='technical-reference' WHERE id=$1 AND status='quarantined'",[r.document_version_id]);
+  }),
   publishDocument: (id: string)=>editorial(()=>publishRecord(id)),
   extract: (id: string)=>editorial(()=>extract(id)),
   approveQuestion: (id: string, reviewerId: string, hash: string, duplicateDecision?: string)=>editorial(()=>approveCandidate(id,reviewerId,hash,duplicateDecision)),

@@ -52,7 +52,7 @@ const SessionReview = () => {
         labels: (questions || []).map((_: unknown, i: number) => `Q${i + 1}`),
         datasets: [{
             label: 'Technical Mastery',
-            data: (questions || []).map((q: Question) => q.technicalScore || 0),
+            data: (questions || []).map((q: Question) => q.evaluation ? q.evaluation.technicalScore : q.technicalScore ?? null),
             backgroundColor: (questions || []).map((q: Question) => (q.technicalScore || 0) > 70 ? '#8b5cf6' : '#6366f1'),
             borderRadius: 4,
             hoverBackgroundColor: '#a78bfa',
@@ -97,6 +97,7 @@ const SessionReview = () => {
             </div>
 
             <SessionReviewStats
+                reviewedSummary={activeSession.reviewedSummary}
                 overallScore={overallScore || 0}
                 avgTechnical={finalMetrics.avgTechnical || 0}
                 avgConfidence={finalMetrics.avgConfidence || 0}

@@ -11,7 +11,7 @@ export interface PlanPreviewData {
   effectiveCount:number;requestedCount:number;effectiveMinutes:number;requestedMinutes:number;
   coverage:Record<string,number>;difficultyDistribution:Record<string,number>;
   timeBudget:{setupWrapMinutes:number;probeReserveMinutes:number;questionMinutes:number;slackMinutes:number};
-  shortages:string[];canConfirm:boolean;confirmedAt:string|null;evaluationMode:"legacy";
+  shortages:string[];canConfirm:boolean;confirmedAt:string|null;evaluationMode:"legacy"|"rubric-v1";
   items:{id:string;position:number;competency:string;category:string;difficulty:string;selectionReason:string;estimatedMinutes:number;available:boolean}[];
 }
 export function setupError(s:PlannerSetup):string|null {

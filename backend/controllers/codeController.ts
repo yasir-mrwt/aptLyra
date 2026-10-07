@@ -3,6 +3,9 @@ import asyncHandler from "express-async-handler";
 import { AppError } from "../types/errors.js";
 import logger from "../utils/logger.js";
 import { AuthenticatedRequest } from "../types/express.js";
+import {sessionRepository} from "../models/Session.js";
+import {evaluationService} from "../evaluation/service.js";
+import {query} from "../config/db.js";
 
 // JDoodle API language mapping
 // Maps our standard language strings to JDoodle's language identifiers
@@ -38,9 +41,20 @@ const languageMap: Record<string, string> = {
  * @access  Private
  */
 export const executeCode = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const { language, code, stdin } = req.body;
+  const { language, code, stdin, sessionId, questionIndex } = req.body;
+  const userId=(req.user?.id || req.user?._id)?.toString();
+  let capture=false;
+  if(sessionId!==undefined){
+    if(typeof sessionId!=="string" || !/^[0-9a-f-]{36}$/i.test(sessionId) || !Number.isInteger(questionIndex) || questionIndex<0)throw new AppError("VALIDATION_ERROR","Invalid session question",undefined,400);
+    const session=userId?await sessionRepository.findByIdForUser(sessionId,userId):null;
+    if(!session)throw new AppError("VALIDATION_ERROR","Session not found",undefined,404);
+    const q=session.questions[questionIndex];
+    if(session.status!=="in-progress" || !q || q.questionType!=="coding" || q.isSubmitted || (session.planId && q.language!==language))throw new AppError("VALIDATION_ERROR","Question is not available for execution",undefined,409);
+    if(q.questionVersionId && !(await query("SELECT entity_id FROM retrieval_entities WHERE purpose='question-selection' AND entity_id=$1",[q.questionVersionId])).rows.length)throw new AppError("VALIDATION_ERROR","Planned question unavailable",undefined,409);
+    capture=session.scoringVersion==="rubric-v1";
+  }
 
-  if (!language || !code) {
+  if (typeof language!=="string" || typeof code!=="string" || !language || !code || code.length>50000 || (stdin!==undefined && (typeof stdin!=="string" || stdin.length>10000))) {
     throw new AppError("VALIDATION_ERROR", "Language and code are required", undefined, 400);
   }
 
@@ -55,6 +69,7 @@ export const executeCode = asyncHandler(async (req: AuthenticatedRequest, res: R
       headers: {
         "Content-Type": "application/json",
       },
+      signal: AbortSignal.timeout(30000),
       body: JSON.stringify({
         clientId: process.env.JDOODLE_CLIENT_ID,
         clientSecret: process.env.JDOODLE_CLIENT_SECRET,
@@ -68,8 +83,8 @@ export const executeCode = asyncHandler(async (req: AuthenticatedRequest, res: R
     const data: any = await jdoodleResponse.json();
 
     if (!jdoodleResponse.ok) {
-      logger.error("JDoodle API error:", data);
-      throw new AppError("INTERNAL_ERROR", data.error || "Execution failed", undefined, 500);
+      logger.error("JDoodle request unavailable");
+      throw new AppError("INTERNAL_ERROR", "Execution failed", undefined, 500);
     }
 
     // JDoodle returns { output, statusCode, memory, cpuTime, error }
@@ -77,7 +92,8 @@ export const executeCode = asyncHandler(async (req: AuthenticatedRequest, res: R
     // which was originally expecting a Piston-like { run: { stdout, stderr, code, etc } } format.
 
     // Note: JDoodle doesn't separate stdout and stderr clearly, they are both in `output`.
-    const isError = data.statusCode !== 200 && data.statusCode !== null;
+    const isError = data.statusCode !== 200 || !!data.error;
+    if(capture && userId)await evaluationService.recordExecution(sessionId,userId,questionIndex,code,language,isError?"failed":"passed");
 
     res.json({
       run: {
@@ -90,7 +106,7 @@ export const executeCode = asyncHandler(async (req: AuthenticatedRequest, res: R
       },
     });
   } catch (error: any) {
-    logger.error("Code execution failed:", error);
-    throw new AppError("INTERNAL_ERROR", "Failed to execute code", error.message, 500);
+    logger.error("Code execution unavailable");
+    throw new AppError("INTERNAL_ERROR", "Failed to execute code", undefined, 500);
   }
 });

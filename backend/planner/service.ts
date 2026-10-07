@@ -121,7 +121,7 @@ export class PlannerService {
       coverage:p.coverage,difficultyDistribution:p.difficulty_distribution,timeBudget:p.time_budget,
       shortages:[...p.shortages,...(stale?["plan_stale_preview_again"]:[])],canConfirm:p.status==="ready" && !stale,
       confirmedAt:p.confirmed_at,modifierAvailability:{company:"requires_permitted_dated_reports",resume:"unavailable",jd:"unavailable",designLite:"mixed_only"},
-      evaluationMode:"legacy",items:items.map(i=>({id:i.id,position:i.position,questionVersionId:i.question_version_id,retrievalId:i.retrieval_id,
+      evaluationMode:p.confirmed_at?(await sessionRepository.findByIdForUser(p.session_id,userId))?.scoringVersion || "legacy":"rubric-v1",items:items.map(i=>({id:i.id,position:i.position,questionVersionId:i.question_version_id,retrievalId:i.retrieval_id,
         competency:i.primary_competency,category:i.category,difficulty:i.difficulty,origin:i.origin,selectionReason:i.selection_reason,
         estimatedMinutes:Number(i.estimated_minutes),available:available.some(e=>e.entity_id===i.question_version_id),
         provenance:available.some(e=>e.entity_id===i.question_version_id)?i.provenance_refs:[]}))};
@@ -146,9 +146,11 @@ export class PlannerService {
         await generation(p.corpus_version);
         const rows=await availableItems(id,p.corpus_version);
         if(rows.length!==p.effective_count || new Set(rows.map(r=>r.duplicate_group)).size!==rows.length)throw new PlannerError("stale_retrieval",409);
-        session.questions=rows.map(r=>({planItemId:r.id,questionVersionId:r.entity_id,category:r.category,
+        session.questions=rows.map(r=>({planItemId:r.id,questionVersionId:r.entity_id,category:r.category,primaryCompetency:r.primary_competency,
           questionText:r.text,questionType:r.category==="coding" || r.category==="sql"?"coding":r.category==="system-design-lite"?"system-design":"oral",
           idealAnswer:"",language:r.category==="sql"?"sql":p.setup_snapshot.codeLanguage,isSubmitted:false,isEvaluated:false} as IQuestion));
+        await query("UPDATE sessions SET scoring_version='rubric-v1' WHERE id=$1",[session._id]);
+        session.scoringVersion="rubric-v1";
         session.status="in-progress";session.startTime=new Date().toISOString();await sessionRepository.save(session);
         await query("UPDATE interview_plans SET status='active',revision=revision+1,confirmed_at=now() WHERE id=$1",[id]);
         return {sessionId:p.session_id,planId:id,revision:p.revision+1,status:"confirmed"};

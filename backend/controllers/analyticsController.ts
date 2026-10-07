@@ -24,11 +24,15 @@ export const getOverallProgress = asyncHandler(async (req: AuthenticatedRequest,
   }
 
   const uid = userId.toString();
-  const [user, completedSessions] = await Promise.all([
+  const [user, allCompletedSessions] = await Promise.all([
     userRepository.findById(uid),
     sessionRepository.listCompletedForUser(uid),
   ]);
 
+  const completedSessions=allCompletedSessions.filter(s=>s.scoringVersion!=="rubric-v1");
+  const rubricSessions=allCompletedSessions.filter(s=>s.scoringVersion==="rubric-v1");
+  const reviewed=rubricSessions.map(s=>s.reviewedSummary?.technicalScore).filter((n):n is number=>typeof n==="number");
+  // Legacy statistics stay separate from Phase 7 aggregates.
   // 1. Overall stats
   const overallStats =
     completedSessions.length > 0
@@ -102,6 +106,7 @@ export const getOverallProgress = asyncHandler(async (req: AuthenticatedRequest,
   }
 
   res.json({
+    evaluation: {legacySessions:completedSessions.length,rubricSessions:rubricSessions.length,reviewedScoredSessions:reviewed.length,reviewedMean:reviewed.length?round2(average(reviewed)):null,provisional:rubricSessions.reduce((s,r)=>s+(r.reviewedSummary?.provisional || 0),0),abstained:rubricSessions.reduce((s,r)=>s+(r.reviewedSummary?.abstained || 0),0)},
     stats: overallStats || {
       totalSessions: 0,
       averageOverallScore: 0,

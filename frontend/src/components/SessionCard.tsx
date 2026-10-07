@@ -111,12 +111,12 @@ const SessionCard = ({ session, onClick, onDelete }: SessionCardProps) => {
                                 <circle cx="18" cy="18" r="15.9155" fill="none" className={`stroke-current ${scoreColor} transition-all duration-1000 ease-out`} strokeWidth="4" strokeDasharray={`${session.status === 'completed' ? (session.overallScore || 0) : 0}, 100`} strokeLinecap="round" />
                             </svg>
                             <span className={`absolute text-[9px] font-black tracking-tighter ${scoreColor}`}>
-                                {session.status === 'completed' ? Math.round(session.overallScore || 0) : '--'}
+                                {session.status === 'completed' && session.overallScore != null ? Math.round(session.overallScore) : '--'}
                             </span>
                         </div>
                         <div className="flex flex-col">
                             <span className={`text-base leading-none font-black ${scoreColor}`}>
-                                {session.status === 'completed' ? session.overallScore?.toFixed(1) : '0.0'}
+                                {session.status === 'completed' ? session.overallScore == null ? 'Unscored' : session.overallScore.toFixed(1) : '—'}
                             </span>
                         </div>
                     </div>

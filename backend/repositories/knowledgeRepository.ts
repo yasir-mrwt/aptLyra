@@ -105,10 +105,10 @@ export const knowledgeRepository = {
       if (!rubric) throw new Error("Rubric not found");
       const id = randomUUID();
       await query(`INSERT INTO rubric_versions(id,rubric_id,question_id,question_version_id,version,kind,status,
-        scoring_policy_version,reviewed_by,reviewed_at,fatal_rule) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        scoring_policy_version,reviewed_by,reviewed_at,fatal_rule,content_hash,draft_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
       [id,input.rubricId,rubric.question_id,input.questionVersionId,input.version,input.kind,
         input.kind === "known" ? "reviewed" : "provisional",input.scoringPolicyVersion,
-        nullable(input.reviewedBy),nullable(input.reviewedAt),json(input.fatalRule || {})]);
+        nullable(input.reviewedBy),nullable(input.reviewedAt),json(input.fatalRule || {}),nullable(input.contentHash),nullable(input.draftId)]);
       for (const dimension of input.dimensions) {
         await query("INSERT INTO rubric_dimensions(rubric_version_id,dimension,aggregation_kind,applicable,weight,anchors) VALUES($1,$2,$3,$4,$5,$6)",
           [id,dimension.dimension,dimension.aggregation,dimension.applicable,dimension.weight,json(dimension.anchors)]);
@@ -213,11 +213,11 @@ export const knowledgeRepository = {
       if (!answer) throw new Error("Owned answer attempt not found");
       const id = randomUUID();
       await query(`INSERT INTO evaluations(id,answer_attempt_id,question_version_id,rubric_version_id,scoring_policy_version,
-        revision,supersedes_id,status,technical_score,evaluator_confidence,reason_codes,dimensions,delivery,model_metadata,prompt_version)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+        revision,supersedes_id,status,technical_score,evaluator_confidence,reason_codes,dimensions,delivery,model_metadata,prompt_version,rubric_kind_snapshot,feedback,concept_summary,objective_evidence)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
       [id,answer.id,answer.question_version_id,input.rubricVersionId,input.scoringPolicyVersion,input.revision,
         nullable(input.supersedesId),input.status,nullable(input.technicalScore),nullable(input.evaluatorConfidence),
-        json(input.reasonCodes || []),json(input.dimensions || {}),json(input.delivery || {}),json(input.modelMetadata || {}),nullable(input.promptVersion)]);
+        json(input.reasonCodes || []),json(input.dimensions || {}),json(input.delivery || {}),json(input.modelMetadata || {}),nullable(input.promptVersion),nullable(input.rubricKindSnapshot),nullable(input.feedback),json(input.conceptSummary || []),json(input.objectiveEvidence || {})]);
       for (const evidence of input.evidence || []) await query(`INSERT INTO evaluation_evidence(id,evaluation_id,rubric_version_id,
         expected_concept_id,answer_start,answer_end,artifact_or_test,reference_chunk_id,judgment,explanation,reason_code)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,

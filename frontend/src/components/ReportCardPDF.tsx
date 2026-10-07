@@ -242,16 +242,16 @@ const ReportCardPDF = ({ session }: ReportCardPDFProps) => {
                 {/* Score summary */}
                 <View style={styles.scoreRow}>
                     <View style={styles.scoreBoxAccent}>
-                        <Text style={styles.scoreValueLight}>{session.overallScore ?? 0}</Text>
-                        <Text style={styles.scoreLabelLight}>Overall Score</Text>
+                        <Text style={styles.scoreValueLight}>{session.scoringVersion === "rubric-v1" ? session.reviewedSummary?.technicalScore ?? "Withheld" : session.overallScore ?? 0}</Text>
+                        <Text style={styles.scoreLabelLight}>{session.scoringVersion === "rubric-v1"?"Reviewed aggregate":"Legacy Overall Score"}</Text>
                     </View>
                     <View style={styles.scoreBox}>
-                        <Text style={styles.scoreValue}>{session.metrics?.avgTechnical ?? 0}</Text>
-                        <Text style={styles.scoreLabel}>Technical</Text>
+                        <Text style={styles.scoreValue}>{session.scoringVersion === "rubric-v1" ? `${session.reviewedSummary?.eligible || 0}/${session.reviewedSummary?.planned || 0}` : session.metrics?.avgTechnical ?? 0}</Text>
+                        <Text style={styles.scoreLabel}>{session.scoringVersion === "rubric-v1"?"Eligible originals":"Technical"}</Text>
                     </View>
                     <View style={styles.scoreBox}>
-                        <Text style={styles.scoreValue}>{session.metrics?.avgConfidence ?? 0}</Text>
-                        <Text style={styles.scoreLabel}>Confidence</Text>
+                        <Text style={styles.scoreValue}>{session.scoringVersion === "rubric-v1" ? session.reviewedSummary?.abstained || 0 : session.metrics?.avgConfidence ?? 0}</Text>
+                        <Text style={styles.scoreLabel}>{session.scoringVersion === "rubric-v1"?"Abstained":"Legacy delivery"}</Text>
                     </View>
                 </View>
 
@@ -292,10 +292,10 @@ const ReportCardPDF = ({ session }: ReportCardPDFProps) => {
                         </View>
                         <View style={styles.scoreLine}>
                             <Text style={styles.scoreLineItem}>
-                                Technical: <Text style={styles.scoreStrong}>{q.technicalScore ?? 0}/100</Text>
+                                Technical: <Text style={styles.scoreStrong}>{q.evaluation ? q.evaluation.technicalScore === null ? "Withheld" : `${q.evaluation.technicalScore}/100` : session.scoringVersion === "rubric-v1" ? "Not assessed" : `${q.technicalScore ?? 0}/100`}</Text>
                             </Text>
                             <Text style={styles.scoreLineItem}>
-                                Confidence: <Text style={styles.scoreStrong}>{q.confidenceScore ?? 0}/100</Text>
+                                {session.scoringVersion === "rubric-v1"?"Evaluator Confidence":"Legacy delivery"}: <Text style={styles.scoreStrong}>{q.evaluation ? q.evaluation.evaluatorConfidence : session.scoringVersion === "rubric-v1" ? "Not assessed" : `${q.confidenceScore ?? 0}/100`}</Text>
                             </Text>
                             {q.speechMetrics && (
                                 <Text style={styles.scoreLineItem}>
@@ -303,6 +303,12 @@ const ReportCardPDF = ({ session }: ReportCardPDFProps) => {
                                 </Text>
                             )}
                         </View>
+                        {q.evaluation && <Text style={styles.feedback}>{q.evaluation.status === "abstained" ? "Abstained" : q.evaluation.rubricStatus} · {q.evaluation.scoringVersion}
+{Object.entries(q.evaluation.dimensions).map(([k,v])=>`${k}: ${v}/4`).join("; ")}
+{q.evaluation.concepts.map(c=>`${c.label}: ${c.judgment} — ${c.explanation}`).join("\n")}
+{q.evaluation.reasons.join(", ")}
+Objective evidence: {q.evaluation.objective.summary}
+Communication (descriptive): {q.evaluation.communication}</Text>}
                         {q.aiFeedback ? (
                             <Text style={styles.feedback}>{truncate(q.aiFeedback, 420)}</Text>
                         ) : null}

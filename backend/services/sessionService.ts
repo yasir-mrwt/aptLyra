@@ -1,3 +1,6 @@
+import {publicEvaluationSession} from "../evaluation/readModel.js";
+import {evaluationService,type Prepared} from "../evaluation/service.js";
+import type {EvaluationView,ProviderResult} from "../evaluation/contracts.js";
 import fs from "fs";
 import path from "node:path";
 import { sessionRepository, withSessionLock, ISession } from "../models/Session.js";
@@ -166,12 +169,7 @@ export const sessionService = {
     if (!session) {
       throw new Error("Session not found");
     }
-    if(session.planId) {
-      const available=(await query("SELECT entity_id FROM retrieval_entities WHERE purpose='question-selection' AND entity_id=ANY($1::uuid[])",[session.questions.map(q=>q.questionVersionId).filter(Boolean)])).rows;
-      session.questions=session.questions.map(q=>q.questionVersionId && !available.some(e=>e.entity_id===q.questionVersionId)
-        ? {...q,questionText:"This planned question is no longer available. Return to setup for a fresh plan.",idealAnswer:"",aiFeedback:undefined,evidenceUnavailable:true}:q);
-    }
-    return session;
+    return publicEvaluationSession(session);
   },
 
   async deleteInterviewSession(sessionId: string, userId: string | any) {
@@ -254,6 +252,7 @@ export const sessionService = {
     diagramImageUrl: string | null,
     answerText = ""
   ) {
+    let prepared:Prepared|undefined;
     try {
       const session = await sessionRepository.findById(sessionId);
       if (!session) throw new Error("Session not found");
@@ -289,7 +288,12 @@ export const sessionService = {
       // Stage 2: AI Evaluation (Groq-powered via the Python microservice)
       pushSocketUpdate(io, userId, sessionId, "AI_EVALUATING", `Evaluating question ${questionIdx + 1}...`);
 
-      const evaluation = await aiService.evaluateAnswer({
+      let rubricView:EvaluationView|undefined;let rubricProvider:ProviderResult|null=null;
+      if(session.scoringVersion === "rubric-v1") {
+        prepared=await evaluationService.prepare(sessionId,userId,questionIdx,transcription,codeSubmission || "",diagramImageUrl);
+        const computed=await evaluationService.compute(prepared);rubricView=computed.view;rubricProvider=computed.provider;
+      }
+      const evaluation = rubricView ? {technical_score:rubricView.technicalScore ?? undefined,confidence_score:undefined,ideal_answer:"",ai_feedback:rubricView.feedback} : await aiService.evaluateAnswer({
         question: question.questionText,
         question_type: question.questionType as "coding" | "oral" | "system-design",
         user_answer: transcription,
@@ -314,7 +318,8 @@ export const sessionService = {
         // Reserve follow-up capacity under the same lock. Other evaluations cannot
         // complete this session while an accepted follow-up is being generated.
         const used = fresh.questions.filter(item => item.followUpOf !== undefined || item.followUpPending).length;
-        q.followUpPending = evaluation.technical_score < 60 && q.followUpOf === undefined && used < 2;
+        q.followUpPending = (rubricView?!!rubricView.followUpConceptId:(evaluation.technical_score ?? 100) < 60) && q.followUpOf === undefined && used < 2;
+        if(rubricView && prepared)q.evaluation=await evaluationService.commit(userId,prepared.attempt,rubricView,rubricProvider);
 
         q.userAnswerText = transcription;
         q.userSubmittedCode = codeSubmission || "";
@@ -363,7 +368,7 @@ export const sessionService = {
           const followUp = await aiService.generateFollowUp({
             question: question.questionText,
             userAnswer: transcription || codeSubmission || "No answer provided.",
-            aiFeedback: evaluation.ai_feedback || "",
+            aiFeedback: rubricView?.followUpConceptId?`Probe the gap in concept ${rubricView.concepts.find(c=>c.id===rubricView.followUpConceptId)?.label || "understanding"}. ${evaluation.ai_feedback || ""}`:evaluation.ai_feedback || "",
             role: updatedSession.role,
             level: updatedSession.level,
           });
@@ -380,7 +385,11 @@ export const sessionService = {
             fresh.questions.push({
               questionText: followUp.question,
               questionType: "oral",
-              idealAnswer: followUp.ideal_answer,
+              idealAnswer: rubricView?"":followUp.ideal_answer,
+              questionVersionId: rubricView?question.questionVersionId:undefined,
+              primaryCompetency: question.primaryCompetency,
+              followUpConceptId: rubricView?.followUpConceptId,
+              parentEvaluationId: original.evaluation?.id,
               isSubmitted: false,
               isEvaluated: false,
               followUpOf: questionIdx,
@@ -428,6 +437,7 @@ export const sessionService = {
       // Provider/network bodies may contain private request details. Log only a safe category.
       console.error("Evaluation Async Task Error:", error instanceof SessionStateError ? "session_state" : "ai_or_persistence_unavailable");
 
+      if(prepared)await evaluationService.fail(prepared.attempt,userId).catch(()=>undefined);
       // Revert isSubmitted flag on error so the user can try again
       const errSession = await withSessionLock(sessionId, async () => {
         const fresh = await sessionRepository.findById(sessionId);

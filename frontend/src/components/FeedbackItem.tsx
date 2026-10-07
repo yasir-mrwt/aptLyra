@@ -4,9 +4,11 @@ import ReactMarkdown from "react-markdown";
 import type { FeedbackItemProps } from "../types/components";
 import { sanitizeQuestionText, formatIdealAnswer } from "../utils/formatters";
 import SpeechAnalyticsPanel from "./SpeechAnalyticsPanel";
+import RubricFeedback from "./RubricFeedback";
 
 const FeedbackItem: React.FC<FeedbackItemProps> = ({ question, index }) => {
     return (
+        question.evaluation ? <div className="glass-card p-6"><h3>Q{index+1}: {question.questionText}</h3><RubricFeedback evaluation={question.evaluation} /></div> :
         <div className="glass-card rounded-[2.5rem] overflow-hidden group/item transition-all duration-700 hover:shadow-[0_0_50px_rgba(139,92,246,0.05)] transform-gpu">
             <div className="p-8 sm:p-12 space-y-10 transition-colors">
                 {/* Question Header */}

@@ -1,6 +1,8 @@
 import React from "react";
+import type {ReviewedSummary} from "../types/session";
 
 interface SessionReviewStatsProps {
+    reviewedSummary?:ReviewedSummary;
     overallScore: number;
     avgTechnical: number;
     avgConfidence: number;
@@ -12,8 +14,14 @@ const SessionReviewStats: React.FC<SessionReviewStatsProps> = ({
     avgTechnical,
     avgConfidence,
     duration,
+    reviewedSummary,
 }) => {
-    const stats = [
+    const stats = reviewedSummary ? [
+        {label:"Reviewed aggregate",value:reviewedSummary.technicalScore===null?"Insufficient reviewed coverage":`${reviewedSummary.technicalScore}%`},
+        {label:"Eligible originals",value:`${reviewedSummary.eligible}/${reviewedSummary.planned}`},
+        {label:"Provisional / Abstained",value:`${reviewedSummary.provisional} / ${reviewedSummary.abstained}`},
+        {label:"Session Time",value:duration}
+    ] : [
         { label: 'Overall Result', value: `${overallScore}%` },
         { label: 'Avg. Technical', value: `${avgTechnical}%` },
         { label: 'Avg Confidence', value: `${avgConfidence}%` },

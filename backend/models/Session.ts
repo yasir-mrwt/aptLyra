@@ -8,6 +8,8 @@
  */
 
 import crypto from "crypto";
+import {publicEvaluationSession} from "../evaluation/readModel.js";
+import {reviewedAggregate,type EvaluationView} from "../evaluation/contracts.js";
 import { query, withDatabaseLock } from "../config/db.js";
 
 export interface ISpeechMetrics {
@@ -21,6 +23,10 @@ export interface ISpeechMetrics {
 }
 
 export interface IQuestion {
+  evaluation?: EvaluationView;
+  primaryCompetency?: string;
+  followUpConceptId?: string;
+  parentEvaluationId?: string;
   planItemId?: string;
   questionVersionId?: string;
   category?: string;
@@ -49,6 +55,8 @@ export interface IQuestion {
 }
 
 export interface ISession {
+  scoringVersion?: "legacy"|"rubric-v1";
+  reviewedSummary?: ReturnType<typeof reviewedAggregate>;
   planId?: string;
   _id: string;
   user: string;
@@ -58,10 +66,10 @@ export interface ISession {
   company?: string;
   companyTrack?: string;
   status: "pending" | "in-progress" | "completed" | "cancelled" | "failed";
-  overallScore: number;
+  overallScore: number | null;
   metrics: {
-    avgTechnical: number;
-    avgConfidence: number;
+    avgTechnical: number | null;
+    avgConfidence: number | null;
   };
   resumeId?: string;
   questions: IQuestion[];
@@ -75,6 +83,8 @@ const toISO = (v: any): string | null =>
   v == null ? null : v instanceof Date ? v.toISOString() : v;
 
 const rowToSession = (row: any): ISession => ({
+  scoringVersion: row.scoring_version || "legacy",
+  reviewedSummary: row.scoring_version === "rubric-v1" ? reviewedAggregate(row.questions || []) : undefined,
   planId: row.interview_plan_id || undefined,
   _id: row.id,
   user: row.user_id,
@@ -84,10 +94,10 @@ const rowToSession = (row: any): ISession => ({
   company: row.company || undefined,
   companyTrack: row.company_track || undefined,
   status: row.status,
-  overallScore: row.overall_score,
+  overallScore: row.scoring_version === "rubric-v1" ? reviewedAggregate(row.questions || []).technicalScore : row.overall_score,
   metrics: {
-    avgTechnical: row.avg_technical,
-    avgConfidence: row.avg_confidence,
+    avgTechnical: row.scoring_version === "rubric-v1" ? reviewedAggregate(row.questions || []).technicalScore : row.avg_technical,
+    avgConfidence: row.scoring_version === "rubric-v1" ? null : row.avg_confidence,
   },
   resumeId: row.resume_id || undefined,
   questions: row.questions || [],
@@ -150,6 +160,10 @@ export const sessionRepository = {
   },
 
   async save(session: ISession): Promise<ISession> {
+    if(session.scoringVersion === "rubric-v1") {
+      session.reviewedSummary=reviewedAggregate(session.questions);
+      await query("UPDATE sessions SET reviewed_summary=$2 WHERE id=$1",[session._id,JSON.stringify(session.reviewedSummary)]);
+    }
     const { rows } = await query(
       `UPDATE sessions
        SET status = $2, overall_score = $3, avg_technical = $4, avg_confidence = $5,
@@ -159,9 +173,9 @@ export const sessionRepository = {
       [
         session._id,
         session.status,
-        session.overallScore,
-        session.metrics?.avgTechnical || 0,
-        session.metrics?.avgConfidence || 0,
+        Math.round(session.overallScore || 0),
+        Math.round(session.metrics?.avgTechnical || 0),
+        Math.round(session.metrics?.avgConfidence || 0),
         JSON.stringify(session.questions || []),
         session.startTime,
         session.endTime || null,
@@ -205,11 +219,11 @@ export const sessionRepository = {
        ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
       [userId.toString(), limit, offset]
     );
-    return rows.map((r) => {
-      const { questions: _questions, ...rest } = rowToSession(r);
+    return Promise.all(rows.map(async (r) => {
+      const { questions: _questions, ...rest } = await publicEvaluationSession(rowToSession(r));
       void _questions; // intentionally omit the large question payload from lists
       return rest;
-    });
+    }));
   },
 
   /** All sessions for a user, full documents (used by analytics + badges). */
@@ -226,7 +240,7 @@ export const sessionRepository = {
       "SELECT * FROM sessions WHERE user_id = $1 AND status = 'completed' ORDER BY created_at DESC",
       [userId.toString()]
     );
-    return rows.map(rowToSession);
+    return Promise.all(rows.map(r=>publicEvaluationSession(rowToSession(r))));
   },
 
   /**
@@ -235,11 +249,15 @@ export const sessionRepository = {
    * penalised, not ignored.
    */
   calculateScoreSummary(session: ISession): {
-    overallScore: number;
-    avgTechnical: number;
-    avgConfidence: number;
+    overallScore: number | null;
+    avgTechnical: number | null;
+    avgConfidence: number | null;
   } {
     const questions = session.questions || [];
+    if(session.scoringVersion === "rubric-v1") {
+      const aggregate=reviewedAggregate(questions);
+      return {overallScore:aggregate.technicalScore,avgTechnical:aggregate.technicalScore,avgConfidence:null};
+    }
     if (questions.length === 0) {
       return { overallScore: 0, avgTechnical: 0, avgConfidence: 0 };
     }

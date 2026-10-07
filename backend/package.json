@@ -37,7 +37,10 @@
     "pretest:pgvector-unavailable": "npm run build",
     "test:pgvector-unavailable": "node tests/pgvector-unavailable.mjs",
     "pretest:planner": "npm run build",
-    "test:planner": "node --test tests/planner.test.mjs"
+    "test:planner": "node --test tests/planner.test.mjs",
+    "rubrics": "node dist/evaluation/cli.js",
+    "pretest:evaluation": "npm run build",
+    "test:evaluation": "node --test tests/evaluation.test.mjs"
   },
   "dependencies": {
     "@types/bcrypt": "^6.0.0",

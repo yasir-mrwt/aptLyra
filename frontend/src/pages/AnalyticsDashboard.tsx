@@ -174,6 +174,7 @@ const AnalyticsDashboard: React.FC = () => {
         </div>
       </div>
 
+      <section className="glass-card p-6 rounded-2xl"><h2>Reviewed rubric evaluation</h2><p>{data.evaluation?.reviewedMean == null ? "Insufficient reviewed coverage" : `Reviewed mean: ${data.evaluation.reviewedMean}/100`} · {data.evaluation?.reviewedScoredSessions || 0} eligible sessions · {data.evaluation?.provisional || 0} provisional · {data.evaluation?.abstained || 0} abstained</p><p>Score trends below use historical legacy evaluations only. Delivery feedback is separate from evaluator confidence.</p></section>
       {/* Top 3 Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Professional Development */}

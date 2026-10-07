@@ -6,9 +6,10 @@ import type { ExecutionResult } from "../types/codeRunner";
 interface CodeOutputPanelProps {
     language: string;
     code: string;
+    context?: {sessionId:string;questionIndex:number};
 }
 
-const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code }) => {
+const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code, context }) => {
     const [isRunning, setIsRunning] = useState(false);
     const [result, setResult] = useState<ExecutionResult | null>(null);
     const [stdin, setStdin] = useState("");
@@ -32,7 +33,7 @@ const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code }) => 
         setExecutionTime(null);
 
         const startTime = performance.now();
-        const res = await executeCode(language, code, stdin);
+        const res = await executeCode(language, code, stdin, context);
         const elapsed = performance.now() - startTime;
 
         setExecutionTime(Math.round(elapsed));

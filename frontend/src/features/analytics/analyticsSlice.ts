@@ -7,6 +7,7 @@ export interface BadgeRecord {
 }
 
 export interface AnalyticsData {
+    evaluation?: {legacySessions:number;rubricSessions:number;reviewedScoredSessions:number;reviewedMean:number|null;provisional:number;abstained:number};
     stats: {
         totalSessions: number;
         averageOverallScore: number;

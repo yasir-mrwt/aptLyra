@@ -21,7 +21,8 @@ export const isExecutable = (language: string): boolean => {
 export const executeCode = async (
     language: string,
     code: string,
-    stdin: string = ""
+    stdin: string = "",
+    context?: {sessionId:string;questionIndex:number}
 ): Promise<ExecutionResult> => {
     if (!isExecutable(language)) {
         return {
@@ -34,7 +35,7 @@ export const executeCode = async (
     }
 
     try {
-        const response = await apiClient.post("/code/execute", { language, code, stdin });
+        const response = await apiClient.post("/code/execute", { language, code, stdin, ...context });
         const data = response.data;
         const run = data.run;
 

@@ -21,6 +21,7 @@ approve-source SOURCE_ID REVIEWER_ID CONTRACT_HASH
 ingest SOURCE_ID CANONICAL_ALLOWED_FILE
 inspect RECORD_ID
 approve-document RECORD_ID REVIEWER_ID CONTENT_HASH [distinct|retain-provenance]
+approve-reference RECORD_ID REVIEWER_ID CONTENT_HASH [distinct|retain-provenance]
 publish-document RECORD_ID
 extract RECORD_ID
 approve-question CANDIDATE_ID REVIEWER_ID CONTENT_HASH [distinct|retain-provenance]
@@ -51,7 +52,7 @@ async function main() {
   try {
     const {ingestionRepository:r}=await import("../repositories/ingestionRepository.js");
     const arity:Record<string,[number,number]>={"register-reviewer":[3,3],"register-source":[3,3],"inspect-source":[1,1],"approve-source":[3,3],ingest:[2,2],inspect:[1,1],
-      "approve-document":[3,4],"publish-document":[1,1],extract:[1,1],"approve-question":[3,4],"publish-question":[1,1],"reject-document":[3,3],"reject-question":[3,3],
+      "approve-document":[3,4],"approve-reference":[3,4],"publish-document":[1,1],extract:[1,1],"approve-question":[3,4],"publish-question":[1,1],"reject-document":[3,3],"reject-question":[3,3],
       "withdraw-source":[3,3],"withdraw-document":[3,3],"withdraw-question":[3,3],"approve-batch":[3,3],expire:[0,0],manifest:[0,0]};
     if (!arity[command] || args.length<arity[command][0] || args.length>arity[command][1]) fail("invalid-command-arguments");
     let result: unknown={ok:true};
@@ -64,6 +65,7 @@ async function main() {
     case "ingest": result={recordIds:await r.ingestFile(a,b)}; break;
     case "inspect": result=await r.inspect(a); break;
     case "approve-document": await r.approveDocument(a,b,c,d); break;
+    case "approve-reference": await r.approveTechnicalReference(a,b,c,d); break;
     case "publish-document": await r.publishDocument(a); break;
     case "extract": result={candidateIds:await r.extract(a)}; break;
     case "approve-question": await r.approveQuestion(a,b,c,d); break;

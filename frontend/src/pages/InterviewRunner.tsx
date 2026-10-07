@@ -11,6 +11,7 @@ import InterviewerPanel from "../components/InterviewerPanel";
 import VerbalRecorder from "../components/VerbalRecorder";
 import CodeEditorSection from "../components/CodeEditorSection";
 import CodeOutputPanel from "../components/CodeOutputPanel";
+import RubricFeedback from "../components/RubricFeedback";
 import AIFeedbackSection from "../components/AIFeedbackSection";
 import InterviewLoading from "../components/InterviewLoading";
 import WhiteboardModal from "../components/WhiteboardModal";
@@ -103,7 +104,7 @@ const InterviewRunner = () => {
 
     return (
         <div className="max-w-7xl mx-auto px-4 pb-32">
-            {activeSession.planId && <p className="mb-4">Planner-backed questions · Legacy evaluation (reviewed rubric scoring is planned).</p>}
+            {activeSession.planId && <p className="mb-4">{activeSession.scoringVersion === "rubric-v1" ? "Rubric evaluation · Reviewed scores require approved scoring material; other results are provisional or abstained." : "Planner-backed questions · Legacy evaluation"}</p>}
             <InterviewHeader
                 role={activeSession.role}
                 startTime={activeSession.createdAt || activeSession.updatedAt || new Date().toISOString()}
@@ -156,6 +157,7 @@ const InterviewRunner = () => {
                         updateCode={updateDraftCode}
                     />
                     <CodeOutputPanel
+                        context={activeSession.scoringVersion === "rubric-v1" ? {sessionId:activeSession._id,questionIndex:currentQuestionIndex}:undefined}
                         language={selectedLanguage}
                         code={currentDraft.code || ""}
                     />
@@ -213,12 +215,12 @@ const InterviewRunner = () => {
                 />
             )}
 
-            <AIFeedbackSection
+            {currentQuestion?.evaluation ? <RubricFeedback evaluation={currentQuestion.evaluation} /> : <AIFeedbackSection
                 isEvaluated={!!currentQuestion?.isEvaluated}
                 feedback={currentQuestion?.aiFeedback || ""}
                 score={currentQuestion?.technicalScore || 0}
                 speechMetrics={currentQuestion?.speechMetrics}
-            />
+            />}
 
             <div className="fixed bottom-0 left-0 right-0 glass-card border-x-0 border-b-0 p-5 px-6 md:px-12 flex justify-between items-center z-50">
                 <button

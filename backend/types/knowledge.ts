@@ -45,6 +45,7 @@ export interface QuestionVersionInput {
   publish?: boolean; reviewedBy?: string; reviewedAt?: string;
 }
 export interface RubricInput {
+  contentHash?: string; draftId?: string;
   rubricId: string; questionVersionId: string; version: number; kind: RubricKind;
   scoringPolicyVersion: string; reviewedBy?: string; reviewedAt?: string; fatalRule?: JsonObject;
   dimensions: { dimension: Dimension; aggregation: "technical" | "delivery"; applicable: boolean; weight: number; anchors: JsonObject }[];
@@ -70,7 +71,8 @@ export interface AnswerInput {
   text?: string; code?: string; artifactRefs?: Json[]; contentHash: string;
 }
 export interface EvaluationInput {
-  answerAttemptId: string; rubricVersionId: string; scoringPolicyVersion: string; revision: number; supersedesId?: string;
+  answerAttemptId: string; rubricVersionId: string | null; scoringPolicyVersion: string; revision: number; supersedesId?: string;
+  rubricKindSnapshot?: string; feedback?: string; conceptSummary?: Json[]; objectiveEvidence?: JsonObject;
   status: "pending" | "succeeded" | "abstained" | "failed"; technicalScore?: number;
   evaluatorConfidence?: Confidence; reasonCodes?: string[]; dimensions?: Partial<Record<Dimension, number>>;
   delivery?: JsonObject; modelMetadata?: JsonObject; promptVersion?: string;
