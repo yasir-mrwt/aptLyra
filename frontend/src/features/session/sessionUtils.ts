@@ -9,7 +9,9 @@ export const updateSessionFromSocket = (
     payload: SocketUpdatePayload
 ) => {
     const { sessionId, status, message, session } = payload;
-    state.message = message;
+    // Durable socket envelopes are refresh hints. Candidate state comes only from owned REST.
+    if(payload.revision!==undefined)return;
+    state.message = message || "";
     
     const upperStatus = (status || "").toUpperCase();
 
@@ -24,7 +26,7 @@ export const updateSessionFromSocket = (
 
     // Handle mid-interview status updates (e.g. Q1 transcript ready)
     if (!session && state.activeSession && state.activeSession._id === sessionId) {
-        const qMatch = message.match(/Q(\d+)/);
+        const qMatch = (message || "").match(/Q(\d+)/);
         if (qMatch) {
             const qIndex = parseInt(qMatch[1]) - 1;
             const questions = state.activeSession.questions;

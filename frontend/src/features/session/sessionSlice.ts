@@ -1,6 +1,7 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import type { PayloadAction } from "@reduxjs/toolkit";
 import api from "../../services/api";
+import {isAxiosError} from "axios";
 import { handleThunkError } from "../../utils/thunkUtils";
 import { updateSessionFromSocket } from "./sessionUtils";
 import type { SessionState, Session, CreateSessionRequest, CreateSessionResponse, SocketUpdatePayload, PaginatedSessionsResponse } from "../../types/session";
@@ -15,6 +16,11 @@ const initialState: SessionState = {
     pagination: null,
     stats: null,
 };
+
+export function acceptSessionSnapshot(current:Session|null,next:Session):Session {
+    if(current?._id===next._id && current.revision!==undefined && next.revision!==undefined && next.revision<current.revision)return current;
+    return next;
+}
 
 /**
  * Fetch a paginated list of sessions for the current user.
@@ -58,6 +64,7 @@ export const getSessionById = createAsyncThunk<Session, string, { rejectValue: s
             const response = await api.get<Session>(`/sessions/${sessionId}`);
             return response.data;
         } catch (error) {
+            if(isAxiosError(error) && [403,404].includes(error.response?.status || 0))thunkAPI.dispatch({type:"session/clearActiveSession",payload:sessionId});
             return thunkAPI.rejectWithValue(handleThunkError(error));
         }
     }
@@ -113,11 +120,17 @@ export const sessionSlice = createSlice({
     initialState,
     reducers: {
         reset: () => initialState,
+        setSocketConnection:(state,action:PayloadAction<SessionState["socketConnection"]>)=>{
+            state.socketConnection=action.payload;
+        },
         socketUpdateSession: (state, action: PayloadAction<SocketUpdatePayload>) => {
             updateSessionFromSocket(state, action.payload);
         },
         setActiveSession: (state, action: PayloadAction<Session>) => {
             state.activeSession = action.payload;
+        },
+        clearActiveSession:(state,action:PayloadAction<string>)=>{
+            if(state.activeSession?._id===action.payload)state.activeSession=null;
         }
     },
     extraReducers: (builder) => {
@@ -174,19 +187,23 @@ export const sessionSlice = createSlice({
             })
 
             // Get session by ID
-            .addCase(getSessionById.pending, (state) => {
-                state.isLoading = true;
+            .addCase(getSessionById.pending, (state,action) => {
+                state.requestedSessionId=action.meta.arg;
+                state.isLoading = state.activeSession?._id!==action.meta.arg;
             })
             .addCase(getSessionById.fulfilled, (state, action) => {
+                if(state.requestedSessionId!==action.meta.arg)return;
                 state.isLoading = false;
                 const payload = action.payload as { session?: Session };
                 if (payload && payload.session) {
-                    state.activeSession = payload.session;
+                    state.activeSession = acceptSessionSnapshot(state.activeSession,payload.session);
                 } else {
-                    state.activeSession = action.payload as Session;
+                    state.activeSession = acceptSessionSnapshot(state.activeSession,action.payload as Session);
                 }
+                state.isError=false;state.message="";
             })
             .addCase(getSessionById.rejected, (state, action) => {
+                if(state.requestedSessionId!==action.meta.arg)return;
                 state.isLoading = false;
                 state.isError = true;
                 state.message = action.payload || "Failed to locate session";
@@ -212,6 +229,7 @@ export const sessionSlice = createSlice({
                 }
 
                 state.sessions = sessionsList.filter((s) => s._id !== payloadId);
+                if(state.activeSession?._id===payloadId)state.activeSession=null;
             })
             .addCase(deleteSession.rejected, (state, action) => {
                 state.isLoading = false;
@@ -248,7 +266,7 @@ export const sessionSlice = createSlice({
             .addCase(endSession.fulfilled, (state, action) => {
                 state.isLoading = false;
                 const payload = action.payload as { session?: Session };
-                state.activeSession = payload.session || (action.payload as Session);
+                state.activeSession = acceptSessionSnapshot(state.activeSession,payload.session || (action.payload as Session));
             })
             .addCase(endSession.rejected, (state, action) => {
                 state.isLoading = false;
@@ -258,5 +276,5 @@ export const sessionSlice = createSlice({
     }
 });
 
-export const { reset, socketUpdateSession, setActiveSession } = sessionSlice.actions;
+export const { reset, socketUpdateSession, setActiveSession,setSocketConnection } = sessionSlice.actions;
 export default sessionSlice.reducer;

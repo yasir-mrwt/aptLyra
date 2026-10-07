@@ -15,6 +15,7 @@ import RubricFeedback from "../components/RubricFeedback";
 import AIFeedbackSection from "../components/AIFeedbackSection";
 import InterviewLoading from "../components/InterviewLoading";
 import WhiteboardModal from "../components/WhiteboardModal";
+import OperationStatusPanel from "../components/OperationStatusPanel";
 
 const InterviewRunner = () => {
     const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
@@ -53,7 +54,9 @@ const InterviewRunner = () => {
         updateDraftDiagram,
         deleteDraftAudio,
         handleSubmitAnswer,
-        confirmFinishInterview
+        confirmFinishInterview,
+        handleOperation,
+        unfinished,socketConnection
     } = useInterviewSession(stopRecording, setRecordingTime);
 
     // AI interviewer voice (Groq TTS + live lip-sync amplitude)
@@ -70,7 +73,7 @@ const InterviewRunner = () => {
         activeSession?._id,
         currentQuestionIndex,
         currentQuestion?.questionText,
-        activeSession?.status === "in-progress" && !currentQuestion?.evidenceUnavailable && !isRecording && !isStarting && !isProcessing
+        activeSession?.status === "in-progress" && activeSession.runtimeState!=="finishing" && !currentQuestion?.evidenceUnavailable && !isRecording && !isStarting && !isProcessing
     );
 
     const handleConfirmFinish = async () => {
@@ -80,6 +83,7 @@ const InterviewRunner = () => {
         try {
 
             await confirmFinishInterview();
+            setIsFinishing(false);
         } catch (error) {
             console.error("Failed to finish interview:", error);
             setIsFinishing(false);
@@ -87,6 +91,7 @@ const InterviewRunner = () => {
         }
     };
 
+    if(!activeSession && sessionError)return <div className="p-6"><p role="alert">{sessionMessage}</p><Link to="/dashboard">Return to interview setup</Link></div>;
     if (activeSession?.status === "failed" || activeSession?.status === "cancelled") {
         return <div role="alert" className="max-w-xl mx-auto p-6 text-white">
             <p>This interview could not start. Please retry by creating a new session.</p>
@@ -105,6 +110,8 @@ const InterviewRunner = () => {
     return (
         <div className="max-w-7xl mx-auto px-4 pb-32">
             {activeSession.planId && <p className="mb-4">{activeSession.scoringVersion === "rubric-v1" ? "Rubric evaluation · Reviewed scores require approved scoring material; other results are provisional or abstained." : "Planner-backed questions · Legacy evaluation"}</p>}
+            <OperationStatusPanel session={activeSession} onAction={handleOperation} connection={socketConnection} />
+            {activeSession.runtimeState==="finishing" && <p role="status" className="mb-4">Lyra is finalizing your report. Answers are saved and locked. This page will restore progress after a reload.</p>}
             <InterviewHeader
                 role={activeSession.role}
                 startTime={activeSession.createdAt || activeSession.updatedAt || new Date().toISOString()}
@@ -114,7 +121,7 @@ const InterviewRunner = () => {
                 handleNavigation={(index) => { if (!isStarting) void handleNavigation(index); }}
                 handleFinishInterview={() => setIsFinishModalOpen(true)}
                 isLoading={isLoading || isSubmitting}
-                finishDisabled={activeSession.status !== "in-progress" || isStarting || isRecording || isSubmitting || activeSession.questions.some(q => (q.isSubmitted && !q.isEvaluated) || q.followUpPending)}
+                finishDisabled={activeSession.status !== "in-progress" || activeSession.runtimeState==="finishing" || !!unfinished || isStarting || isRecording || isSubmitting || activeSession.questions.some(q => (q.isSubmitted && !q.isEvaluated) || q.followUpPending)}
                 questionsCount={activeSession.questions.length}
                 company={activeSession.company}
             />
@@ -127,7 +134,7 @@ const InterviewRunner = () => {
                     processing={isProcessing}
                     preparing={isPreparing || isStarting}
                     completed={activeSession.status === "completed"}
-                    error={currentQuestion?.processingError || (sessionError ? sessionMessage : null) || recordingError || voiceError}
+                    error={(currentQuestion?.processingError ? activeSession.runtimeVersion ? "Saved processing needs your attention. Use the controls above to retry or continue." : currentQuestion.processingError : null) || (sessionError ? sessionMessage : null) || recordingError || voiceError}
                     usingBrowserVoice={usingBrowserVoice}
                     amplitude={amplitude}
                     muted={isMuted}

@@ -1,0 +1,34 @@
+import {afterEach,describe,it,expect,vi} from "vitest";
+import {renderHook,act,waitFor,cleanup} from "@testing-library/react";
+import {Provider} from "react-redux";
+import {configureStore} from "@reduxjs/toolkit";
+import {MemoryRouter} from "react-router-dom";
+import sessionReducer from "../features/session/sessionSlice";
+import useSocket from "./useSocket";
+import api from "../services/api";
+import type {Session} from "../types/session";
+const fixture=vi.hoisted(()=>({events:new Map<string,(value?:unknown)=>void>(),socket:{connected:false,disconnected:true,on:vi.fn(),emit:vi.fn(),disconnect:vi.fn(),connect:vi.fn()}}));
+vi.mock("socket.io-client",()=>({io:()=>{fixture.socket.on.mockImplementation((event:string,handler:(value?:unknown)=>void)=>fixture.events.set(event,handler));return fixture.socket;}}));
+vi.mock("../services/api",()=>({default:{get:vi.fn()}}));
+afterEach(()=>{cleanup();vi.clearAllMocks();fixture.events.clear();});
+describe("durable socket recovery",()=>{
+    it("refreshes REST after disconnect/reconnect and revision gaps while ignoring duplicate/older events",async()=>{
+        const saved:Session={_id:"owned",user:"owner",role:"Backend",level:"Junior",interviewType:"oral-only",status:"in-progress",revision:1,runtimeVersion:"aptlyra-runtime-v1",questions:[{questionText:"FIFO",questionType:"oral",isSubmitted:true,isEvaluated:false}]};
+        const state=sessionReducer(undefined,{type:"initial"});
+        const store=configureStore({reducer:{session:sessionReducer,auth:()=>({user:{id:"owner"}})},preloadedState:{session:{...state,activeSession:saved}}});
+        vi.mocked(api.get).mockResolvedValue({data:{session:saved}});
+        renderHook(()=>useSocket(),{wrapper:({children})=><Provider store={store}><MemoryRouter>{children}</MemoryRouter></Provider>});
+        act(()=>fixture.events.get("connect")?.());await waitFor(()=>expect(api.get).toHaveBeenCalledTimes(1));
+        await waitFor(()=>expect(store.getState().session.isLoading).toBe(false));
+        act(()=>fixture.events.get("disconnect")?.("transport close"));
+        expect(store.getState().session.socketConnection).toBe("recovering");
+        vi.mocked(api.get).mockResolvedValue({data:{session:{...saved,revision:4,questions:[{...saved.questions[0],isEvaluated:true}]}}});
+        act(()=>fixture.events.get("connect")?.());await waitFor(()=>expect(store.getState().session.activeSession?.revision).toBe(4));
+        expect(store.getState().session.socketConnection).toBe("connected");
+        expect(store.getState().session.activeSession?.questions[0].isEvaluated).toBe(true);
+        vi.mocked(api.get).mockResolvedValue({data:{session:{...saved,revision:8,status:"completed"}}});
+        const envelope={sessionId:"owned",revision:8,eventId:"event-eight",operationId:"operation",state:"completed"};
+        act(()=>{fixture.events.get("sessionUpdate")?.(envelope);fixture.events.get("sessionUpdate")?.(envelope);fixture.events.get("sessionUpdate")?.({...envelope,revision:2,eventId:"late-event"});});
+        await waitFor(()=>expect(store.getState().session.activeSession?.status).toBe("completed"));expect(api.get).toHaveBeenCalledTimes(3);
+    });
+});

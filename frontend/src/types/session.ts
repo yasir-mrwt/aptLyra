@@ -28,6 +28,11 @@ export interface SpeechMetrics {
 }
 
 export interface Question {
+    operationId?: string;
+    processingState?: "received"|"transcribing"|"evaluating"|"evaluated"|"abstained"|"failed"|"cancelled";
+    probeOperationId?: string;
+    followUpConceptId?: string;
+    followUpRationale?: string;
     evaluation?: RubricEvaluation;
     planItemId?: string;
     questionVersionId?: string;
@@ -53,6 +58,11 @@ export interface Question {
 }
 
 export interface Session {
+    runtimeVersion?: string;
+    runtimeState?: "active"|"finishing"|"completed";
+    revision?: number;
+    operations?: InterviewOperation[];
+    report?: {id:string;snapshotRevision:number;createdAt:string;scoringVersion:string};
     scoringVersion?: "legacy"|"rubric-v1";
     reviewedSummary?: ReviewedSummary;
     planId?: string;
@@ -96,6 +106,8 @@ export interface PaginatedSessionsResponse {
 }
 
 export interface SessionState {
+    socketConnection?: "connecting" | "connected" | "recovering";
+    requestedSessionId?: string;
     sessions: Session[];
     activeSession: Session | null;
     isGenerating: boolean;
@@ -122,9 +134,19 @@ export interface SessionState {
 
 export interface SocketUpdatePayload {
     sessionId: string;
-    status: string;
-    message: string;
+    status?: string;
+    message?: string;
     session?: Session;
+    revision?: number;
+    operationId?: string;
+    eventId?: string;
+    state?: string;
+    errorCode?: string|null;
+}
+export interface InterviewOperation {
+    id:string;type:string;status:"queued"|"running"|"succeeded"|"retryable_failed"|"terminal_failed";
+    questionIndex:number|null;attempts:number;maxAttempts:number;totalAttempts:number;manualRetries:number;
+    retryAvailable:boolean;nextRetryAt:string|null;errorCode:string|null;
 }
 
 /**

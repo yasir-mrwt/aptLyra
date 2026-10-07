@@ -11,13 +11,15 @@ import SessionReviewStats from "../components/SessionReviewStats";
 import FeedbackItem from "../components/FeedbackItem";
 import ReportCardPDF from "../components/ReportCardPDF";
 import { formatDuration } from "../utils/formatters";
+import OperationStatusPanel from "../components/OperationStatusPanel";
+import api from "../services/api";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 const SessionReview = () => {
     const { sessionId } = useParams<{ sessionId: string }>();
     const dispatch = useDispatch<AppDispatch>();
-    const { activeSession, isLoading } = useSelector((state: RootState) => state.session);
+    const { activeSession, isLoading,isError,message,socketConnection } = useSelector((state: RootState) => state.session);
 
     useEffect(() => {
         if (sessionId) {
@@ -25,7 +27,14 @@ const SessionReview = () => {
         }
     }, [sessionId, dispatch]);
 
-    if (isLoading) return <div className="text-center py-32 font-black text-surface-500 animate-pulse uppercase tracking-[0.3em] text-[10px]">Processing Intelligence...</div>
+    useEffect(()=>{
+        if(!sessionId || activeSession?._id!==sessionId || !activeSession.runtimeVersion || activeSession.status==="completed")return;
+        const timer=window.setInterval(()=>{void dispatch(getSessionById(sessionId));},2000);
+        return()=>window.clearInterval(timer);
+    },[sessionId,activeSession?._id,activeSession?.runtimeVersion,activeSession?.status,dispatch]);
+
+    if(!isLoading && !activeSession && isError)return <div className="p-6"><p role="alert">{message}</p><button onClick={()=>{if(sessionId)void dispatch(getSessionById(sessionId));}}>Refresh saved progress</button><Link to="/dashboard">Return to dashboard</Link></div>;
+    if (isLoading || activeSession?._id!==sessionId) return <div className="text-center py-32 font-black text-surface-500 animate-pulse uppercase tracking-[0.3em] text-[10px]">Loading saved interview...</div>
 
     if (!activeSession || activeSession.status !== 'completed') {
         return (
@@ -34,6 +43,9 @@ const SessionReview = () => {
                     <span className="text-3xl">⌛</span>
                 </div>
                 <h2 className="text-2xl font-black text-white mb-4 tracking-tighter uppercase">Assessment In Progress</h2>
+                {activeSession?.runtimeVersion && <OperationStatusPanel session={activeSession} connection={socketConnection} onAction={async(id,action)=>{
+                    await api.post(`/sessions/${sessionId}/operations/${id}/${action}`);await dispatch(getSessionById(sessionId!));
+                }} />}
                 <p className="text-surface-500 mb-10 font-bold text-xs uppercase tracking-widest leading-relaxed">
                     Our AI is currently synthesizing your performance data.<br />Please check back in a few moments.
                 </p>
@@ -49,7 +61,7 @@ const SessionReview = () => {
     const finalMetrics = metrics || {};
 
     const barData = {
-        labels: (questions || []).map((_: unknown, i: number) => `Q${i + 1}`),
+        labels: (questions || []).map((q: Question, i: number) => q.followUpOf===undefined?`Q${i + 1}`:`Probe of Q${q.followUpOf+1}`),
         datasets: [{
             label: 'Technical Mastery',
             data: (questions || []).map((q: Question) => q.evaluation ? q.evaluation.technicalScore : q.technicalScore ?? null),
@@ -78,7 +90,7 @@ const SessionReview = () => {
 
                     <PDFDownloadLink
                         document={<ReportCardPDF session={activeSession} />}
-                        fileName={`techvera-report-${(sessionId || "session").slice(-8)}.pdf`}
+                        fileName={`aptlyra-report-${(sessionId || "session").slice(-8)}.pdf`}
                         className="flex items-center justify-center gap-2 px-6 py-2 text-[10px] tracking-widest uppercase font-black print:hidden cursor-pointer bg-primary-600 hover:bg-primary-500 text-white transition-colors rounded-xl whitespace-nowrap"
                     >
                         {({ loading }) => (

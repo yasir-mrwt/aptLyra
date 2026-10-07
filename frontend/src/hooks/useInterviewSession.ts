@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import type { AppDispatch, RootState } from "../app/store";
-import type { DraftRecord } from "../types/session";
+import type { DraftRecord,Session } from "../types/session";
 import { getSessionById, submitAnswer, endSession } from "../features/session/sessionSlice";
 import { ROLE_LANGUAGE_MAP } from "../constants/interview";
 import { saveDrafts, getDrafts, deleteDrafts } from "../utils/idb";
@@ -23,7 +23,8 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
     const { sessionId } = useParams<{ sessionId: string }>();
     const navigate = useNavigate();
     const dispatch = useDispatch<AppDispatch>();
-    const { activeSession, isLoading, isError: sessionError, message: sessionMessage } = useSelector((state: RootState) => state.session);
+    const { activeSession:loadedSession, isLoading, isError: sessionError, message: sessionMessage,socketConnection } = useSelector((state: RootState) => state.session);
+    const activeSession=loadedSession?._id===sessionId?loadedSession:null;
 
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     // Derive selected language securely without side-effects (React paradigm)
@@ -35,6 +36,7 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
     const submittingRef = useRef(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submittedLocal, setSubmittedLocal] = useState<Record<number, boolean>>({});
+    const restoredSession=useRef<string|null>(null);
 
     // Initial drafts state from IDB with empty fallback
     const [drafts, setDrafts] = useState<DraftRecord>({});
@@ -76,6 +78,28 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
     }, [dispatch, sessionId]);
 
     const currentQuestion = activeSession?.questions?.[currentQuestionIndex];
+    const durable=activeSession?.runtimeVersion==="aptlyra-runtime-v1";
+    const unfinished=activeSession?.operations?.some(op=>["queued","running","retryable_failed"].includes(op.status));
+    const currentOperation=activeSession?.operations?.find(op=>op.id===currentQuestion?.operationId);
+
+    useEffect(()=>{
+        if(!sessionId || !durable || activeSession?._id!==sessionId)return;
+        const refresh=()=>{void dispatch(getSessionById(sessionId));};
+        if(activeSession.status==="completed"){
+            localStorage.removeItem(`draft_code_${sessionId}`);void deleteDrafts(sessionId);navigate(`/review/${sessionId}`);return;
+        }
+        const timer=window.setInterval(refresh,2000);
+        window.addEventListener("online",refresh);window.addEventListener("focus",refresh);
+        return()=>{window.clearInterval(timer);window.removeEventListener("online",refresh);window.removeEventListener("focus",refresh);};
+    },[sessionId,durable,activeSession?._id,activeSession?.status,dispatch,navigate]);
+
+    useEffect(()=>{
+        if(!sessionId || activeSession?._id!==sessionId || restoredSession.current===sessionId)return;
+        const pending=activeSession.operations?.find(op=>op.type==="evaluate" && ["queued","running","retryable_failed"].includes(op.status));
+        const first=activeSession.questions.findIndex(q=>!q.isEvaluated);
+        const timer=window.setTimeout(()=>{restoredSession.current=sessionId;setCurrentQuestionIndex(pending?.questionIndex ?? Math.max(0,first));},0);
+        return()=>window.clearTimeout(timer);
+    },[sessionId,activeSession]);
     const isReduxSubmitted = currentQuestion?.isSubmitted === true;
     const isLocallySubmitted = submittedLocal[currentQuestionIndex] === true;
     const isEvaluationError = !!currentQuestion?.processingError || (sessionError && /failed|error/i.test(sessionMessage));
@@ -92,8 +116,10 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
         }
     }, [isEvaluationError, isLocallySubmitted, currentQuestionIndex, sessionMessage]);
 
-    const isQuestionLocked = activeSession?.status !== "in-progress" || isSubmitting || isReduxSubmitted || (isLocallySubmitted && !isEvaluationError);
-    const isProcessing = activeSession?.status === "in-progress" && (isSubmitting || isReduxSubmitted || (isLocallySubmitted && !isEvaluationError)) && !currentQuestion?.isEvaluated;
+    const isQuestionLocked = activeSession?.status !== "in-progress" || activeSession?.runtimeState==="finishing" || !!unfinished || isSubmitting || isReduxSubmitted || (isLocallySubmitted && !isEvaluationError);
+    const isProcessing = activeSession?.status === "in-progress" && !currentQuestion?.isEvaluated && (durable?
+        isSubmitting || !!(currentOperation && (["queued","running"].includes(currentOperation.status) || currentOperation.nextRetryAt)):
+        (isSubmitting || isReduxSubmitted || (isLocallySubmitted && !isEvaluationError)));
 
     const handleNavigation = async (index: number) => {
         if (submittingRef.current) return;
@@ -182,6 +208,7 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
             if (diagramImageUrl) formData.append("diagramImageUrl", diagramImageUrl);
             setSubmittedLocal(prev => ({ ...prev, [index]: true }));
             await dispatch(submitAnswer({ sessionId, formData })).unwrap();
+            if(durable)await dispatch(getSessionById(sessionId));
         } catch {
             setSubmittedLocal(prev => ({ ...prev, [index]: false }));
             toast.error("Answer upload failed. Your draft is preserved; please retry.");
@@ -193,7 +220,11 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
 
     const confirmFinishInterview = async () => {
         if (!sessionId) return;
-        return dispatch(endSession(sessionId)).unwrap().then(() => {
+        return dispatch(endSession(sessionId)).unwrap().then((result) => {
+            const saved=(result as unknown as {session?:Session}).session || result;
+            if(saved.status!=="completed"){
+                toast.info("Lyra is preparing your saved report. You can reload this page safely.");return;
+            }
             localStorage.removeItem(`draft_code_${sessionId}`);
             deleteDrafts(sessionId);
             navigate(`/review/${sessionId}`);
@@ -202,6 +233,12 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
             toast.error("Failed to end interview. Please try again.");
             throw error;
         });
+    };
+
+    const handleOperation=async(id:string,action:"retry"|"cancel")=>{
+        if(!sessionId)return;
+        try{await api.post(`/sessions/${sessionId}/operations/${id}/${action}`);await dispatch(getSessionById(sessionId));}
+        catch{toast.error("Unable to update processing. Refresh your saved progress and try again.");}
     };
 
     return {
@@ -226,6 +263,9 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
         updateDraftDiagram,
         deleteDraftAudio,
         handleSubmitAnswer,
-        confirmFinishInterview
+        confirmFinishInterview,
+        handleOperation,
+        unfinished,
+        socketConnection
     };
 };
