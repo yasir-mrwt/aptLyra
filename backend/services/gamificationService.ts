@@ -1,9 +1,10 @@
 import { userRepository } from "../models/User.js";
 import { sessionRepository, ISession } from "../models/Session.js";
 import { gamificationRepository, IGamification } from "../models/Gamification.js";
-import { withDatabaseLock } from "../config/db.js";
+import { query,withDatabaseLock } from "../config/db.js";
 import redisClient from "../config/redisConfig.js";
 import { ACHIEVEMENTS, XP_REWARDS, getLevelForXP } from "../config/achievements.js";
+import {randomUUID} from "node:crypto";
 
 export const gamificationService = {
   async ensureGamificationRecord(userId: string): Promise<IGamification> {
@@ -48,6 +49,17 @@ export const gamificationService = {
     });
   },
 
+  /** SQL ledger, XP and denormalized user fields share the caller's grade/report transaction. */
+  async rewardDurable(sessionId:string,userId:string,key:string,completion=false) {
+    return withDatabaseLock(`gamification:${userId}`,async()=>{
+      const amount=completion?XP_REWARDS.COMPLETE_INTERVIEW:XP_REWARDS.PERFECT_QUESTION;
+      const inserted=await query("INSERT INTO reward_ledger(id,session_id,user_id,reward_key,amount) VALUES($1,$2,$3,$4,$5) ON CONFLICT(session_id,reward_key) DO NOTHING RETURNING id",[randomUUID(),sessionId,userId,key,amount]);
+      if(!inserted.rows.length)return null;
+      if(completion)await this.updateStreakLocked(userId);
+      return this.persistXPLocked(userId,amount);
+    });
+  },
+
   async flushXPLocked(userId: string, completionXP = 0) {
     const redisKey = `user:${userId}:xp_buffer`;
 
@@ -55,12 +67,16 @@ export const gamificationService = {
     const multiResult = await redisClient.multi().get(redisKey).del(redisKey).exec();
     const bufferedXPStr = multiResult ? (multiResult[0][1] as string) : null;
 
-    const record = await this.ensureGamificationRecord(userId);
-
     let bufferedXP = completionXP;
     if (bufferedXPStr && parseInt(bufferedXPStr, 10) > 0) {
       bufferedXP += parseInt(bufferedXPStr, 10);
     }
+
+    return this.persistXPLocked(userId,bufferedXP);
+  },
+
+  async persistXPLocked(userId:string,bufferedXP:number) {
+    const record = await this.ensureGamificationRecord(userId);
 
     record.xp += bufferedXP;
 

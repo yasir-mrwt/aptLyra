@@ -16,6 +16,7 @@ import {
   speakQuestion,
 } from "../controllers/sessionController.js";
 import { uploadSingleAudio } from "../middleware/uploadMiddleware.js";
+import {getOperations,retryInterviewOperation,cancelInterviewOperation} from "../controllers/operationController.js";
 import {
   sessionCreationValidation,
   validateResult,
@@ -40,5 +41,8 @@ router.route("/:sessionId").get(getSessionById).delete(deleteSession);
 router.route("/:sessionId/submit-answer").post(uploadSingleAudio, submitAnswer);
 router.route("/:sessionId/speak").post(speakQuestion);
 router.route("/:sessionId/end").post(endSession);
+router.get("/:sessionId/operations",getOperations);
+router.post("/:sessionId/operations/:operationId/retry",retryInterviewOperation);
+router.post("/:sessionId/operations/:operationId/cancel",cancelInterviewOperation);
 
 export default router;

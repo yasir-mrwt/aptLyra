@@ -9,10 +9,9 @@ import { aiService } from "./aiService.js";
 import { pushSocketUpdate } from "./socketService.js";
 import { gamificationService } from "./gamificationService.js";
 import { query } from "../config/db.js";
-
-export class SessionStateError extends Error {
-  constructor(message: string, public status = 409) { super(message); }
-}
+import {RUNTIME,SessionStateError} from "../runtime/contracts.js";
+import {acceptAnswer,requestFinish,deleteRuntimeSession,adoptIdlePlanner} from "../runtime/operations.js";
+export {SessionStateError} from "../runtime/contracts.js";
 
 async function completeLocked(session: ISession) {
   if (session.status === "completed") return session;
@@ -173,6 +172,8 @@ export const sessionService = {
   },
 
   async deleteInterviewSession(sessionId: string, userId: string | any) {
+    const owned=await sessionRepository.findByIdForUser(sessionId,userId.toString());
+    if(owned?.runtimeVersion===RUNTIME){await deleteRuntimeSession(sessionId,userId.toString());return sessionId;}
     return withSessionLock(sessionId, async () => {
       const session = await sessionRepository.findByIdForUser(sessionId, userId.toString());
       if (!session) throw new Error("Session not found");
@@ -203,7 +204,7 @@ export const sessionService = {
     const typedAnswer = answerText?.trim() || "";
     if (audioFilePath && typedAnswer) throw new SessionStateError("Choose a recorded or typed answer", 400);
 
-    await withSessionLock(sessionId, async () => {
+    const operation=await withSessionLock(sessionId, async () => {
       const session = await sessionRepository.findByIdForUser(sessionId, userId.toString());
       if (!session) {
         throw new Error("Session not found");
@@ -213,20 +214,23 @@ export const sessionService = {
         throw new Error("Question not found");
       }
 
-      if (session.status !== "in-progress") throw new SessionStateError("This interview is not active");
+      if (session.status !== "in-progress" && session.runtimeVersion!==RUNTIME) throw new SessionStateError("This interview is not active");
       const q = session.questions[qIdx];
       if(session.planId && q.questionVersionId && !(await query("SELECT entity_id FROM retrieval_entities WHERE purpose='question-selection' AND entity_id=$1",[q.questionVersionId])).rows.length)
         throw new SessionStateError("This planned question is unavailable. Create a fresh plan.",409);
       if(session.planId && q.questionType==="coding" && language!==q.language)throw new SessionStateError("Use the planned coding language",400);
-      if (q.isSubmitted || q.isEvaluated) throw new SessionStateError("Answer already submitted");
       if (q.questionType === "oral" && !audioFilePath && !typedAnswer) throw new SessionStateError("Record or type an answer before submitting", 400);
       if (q.questionType === "coding" && !code?.trim()) throw new SessionStateError("Code is required", 400);
       if (q.questionType === "system-design" && !audioFilePath && !diagramImageUrl && !typedAnswer) throw new SessionStateError("Provide an answer or a diagram", 400);
+      await adoptIdlePlanner(session);
+      if(session.runtimeVersion===RUNTIME)return acceptAnswer(session,qIdx,typedAnswer,code || "",language || "",diagramImageUrl,audioFilePath);
+      if (q.isSubmitted || q.isEvaluated) throw new SessionStateError("Answer already submitted");
       delete q.processingError;
       // Mark as submitted immediately to prevent duplicate submissions
       session.questions[qIdx].isSubmitted = true;
       await sessionRepository.save(session);
     });
+    if(operation)return operation;
 
     this.evaluateAnswerAsync(
       io,
@@ -470,8 +474,10 @@ export const sessionService = {
         throw new Error("Session not found");
       }
 
-      return completeLocked(fresh);
+      await adoptIdlePlanner(fresh);
+      return fresh.runtimeVersion===RUNTIME?requestFinish(fresh):completeLocked(fresh);
     });
+    if(session.runtimeVersion===RUNTIME)return publicEvaluationSession(session);
 
     pushSocketUpdate(
       io,

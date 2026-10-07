@@ -149,7 +149,7 @@ export class PlannerService {
         session.questions=rows.map(r=>({planItemId:r.id,questionVersionId:r.entity_id,category:r.category,primaryCompetency:r.primary_competency,
           questionText:r.text,questionType:r.category==="coding" || r.category==="sql"?"coding":r.category==="system-design-lite"?"system-design":"oral",
           idealAnswer:"",language:r.category==="sql"?"sql":p.setup_snapshot.codeLanguage,isSubmitted:false,isEvaluated:false} as IQuestion));
-        await query("UPDATE sessions SET scoring_version='rubric-v1' WHERE id=$1",[session._id]);
+        await query("UPDATE sessions SET scoring_version='rubric-v1',runtime_version='aptlyra-runtime-v1',runtime_state='active',runtime_revision=runtime_revision+1 WHERE id=$1",[session._id]);
         session.scoringVersion="rubric-v1";
         session.status="in-progress";session.startTime=new Date().toISOString();await sessionRepository.save(session);
         await query("UPDATE interview_plans SET status='active',revision=revision+1,confirmed_at=now() WHERE id=$1",[id]);

@@ -177,7 +177,7 @@ export const aiService = {
     aiFeedback: string;
     role: string;
     level: string;
-  }): Promise<{ question: string; ideal_answer: string; question_type: string }> => {
+  }, attempts=2): Promise<{ question: string; ideal_answer: string; question_type: string }> => {
     const response = await fetchWithRetry(`${API_SERVICE_URL}/generate-followup`, {
       method: "POST",
       headers: {
@@ -191,7 +191,7 @@ export const aiService = {
         role: params.role,
         level: params.level,
       }),
-    });
+    }, attempts);
 
     if (!response.ok) {
       throw await providerError(response);

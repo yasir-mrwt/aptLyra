@@ -10,16 +10,20 @@ import type {Json,JsonObject} from "../types/knowledge.js";
 export const unavailableObjective=():Objective=>({status:"unavailable",kind:"runtime",summary:"No matching execution evidence or reviewed tests available."});
 export interface Prepared {attempt:string;input:EvaluationInput|null;objective:Objective}
 export const evaluationService={
-  async prepare(sessionId:string,userId:string,index:number,answer:string,code:string,diagram?:string|null):Promise<Prepared> {
+  async prepare(sessionId:string,userId:string,index:number,answer:string,code:string,diagram?:string|null,existingAttempt?:string):Promise<Prepared> {
     const session=await sessionRepository.findByIdForUser(sessionId,userId);const q=session?.questions[index];
     if(!session || !q || session.scoringVersion!==POLICY)throw new Error("Owned rubric session not found");
     const parent=q.followUpOf===undefined?q:session.questions[q.followUpOf];
     if(!parent?.planItemId || !parent.questionVersionId)throw new Error("Pinned plan item required");
     const item=(await query("SELECT * FROM plan_items WHERE id=$1 AND session_id=$2 AND user_id=$3",[parent.planItemId,sessionId,userId])).rows[0];
     if(!item || item.question_version_id!==parent.questionVersionId)throw new Error("Owned pinned question required");
-    const objective:Objective=code?(await this.objective(sessionId,index,code,q.language || "")):unavailableObjective();
-    let rubric=await rubricEditor.load(parent.questionVersionId,item.rubric_version_id || undefined);
-    if(!rubric && !item.rubric_version_id && q.followUpOf===undefined){
+    const existing=existingAttempt?await knowledgeRepository.findAnswerForUser(existingAttempt,userId):null;
+    if(existingAttempt && (!existing || existing.session_id!==sessionId || existing.plan_item_id!==item.id || existing.privacy_status!=="present"))throw new Error("Stale answer");
+    const pinned=!!existing?.runtime_prepared;
+    const objective:Objective=pinned?existing!.grounding_snapshot.objective as Objective:code?(await this.objective(sessionId,index,code,q.language || "")):unavailableObjective();
+    let rubric=pinned?(existing!.selected_rubric_id?await rubricEditor.load(parent.questionVersionId,existing!.selected_rubric_id):null):await rubricEditor.load(parent.questionVersionId,item.rubric_version_id || undefined);
+    if(pinned && existing!.selected_rubric_id && !rubric)throw new Error("Rubric/reference withdrawn during evaluation");
+    if(!pinned && !rubric && !item.rubric_version_id && q.followUpOf===undefined){
       const references=await new RetrievalService().retrieveTechnicalEvidence({query:q.questionText,limit:5,filters:{competencies:[item.primary_competency]},ownership:{sessionId,userId}});
       if(references.hits.length){const refs=references.hits.map(h=>({id:h.chunkId!,text:h.text.slice(0,6000)}));
         const generated=await aiService.draftRubric(q.questionText,refs) as {concepts:unknown[]};
@@ -29,6 +33,8 @@ export const evaluationService={
       }
     }
     const input:EvaluationInput|null=rubric?{question:q.questionText,questionVersionId:parent.questionVersionId,rubric,answer,code,objective,derived:q.followUpOf!==undefined,artifactUnavailable:!!diagram && !answer.trim()}:null;
+    // Durable callers claim before STT and seal preparation in their lease-fenced transaction.
+    if(existingAttempt)return {attempt:existingAttempt,input,objective};
     const attempt=await withDatabaseLock(`session:${sessionId}`,async()=>{
       const fresh=await sessionRepository.findByIdForUser(sessionId,userId);const current=fresh?.questions[index];
       if(!fresh || fresh.status!=="in-progress" || !current?.isSubmitted || current.isEvaluated)throw new Error("Stale answer");

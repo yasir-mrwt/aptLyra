@@ -2,9 +2,17 @@ import type {ISession} from "../models/Session.js";
 import {query} from "../config/db.js";
 import {rubricEditor} from "./rubrics.js";
 import {reviewedAggregate} from "./contracts.js";
+import {publicOperation} from "../runtime/operations.js";
 
 /** Current public availability; immutable historical grades stay in PostgreSQL. */
 export async function publicEvaluationSession(session:ISession):Promise<ISession> {
+  if(session.runtimeVersion==="aptlyra-runtime-v1"){
+    session.operations=(await query("SELECT * FROM durable_operations WHERE session_id=$1 AND user_id=$2 AND runtime_version='aptlyra-runtime-v1' ORDER BY created_at,id",[session._id,session.user])).rows.map(publicOperation);
+    if(session.status==="completed"){
+      const report=(await query("SELECT * FROM interview_reports WHERE session_id=$1 AND user_id=$2",[session._id,session.user])).rows[0];
+      if(report){session.questions=report.questions;session.report={id:report.id,snapshotRevision:Number(report.snapshot_revision),createdAt:new Date(report.created_at).toISOString(),scoringVersion:report.scoring_version};}
+    }
+  }
   if(session.planId){
     const available=(await query("SELECT entity_id FROM retrieval_entities WHERE purpose='question-selection' AND entity_id=ANY($1::uuid[])",[session.questions.map(q=>q.questionVersionId).filter(Boolean)])).rows;
     session.questions=session.questions.map(q=>q.questionVersionId && !available.some(e=>e.entity_id===q.questionVersionId)

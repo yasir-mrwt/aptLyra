@@ -37,21 +37,14 @@ const redisClient = new Redis(redisUrl, {
   ...(isTls && { tls: { rejectUnauthorized: false } }),
 });
 
-redisClient.on('error', (err) => {
-  console.error('Upstash Redis connection error:', err);
+redisClient.on('error', () => {
+  // Driver errors can contain AUTH command arguments; never log the raw object.
+  console.error('Redis connection unavailable. Durable interview work remains in PostgreSQL.');
 });
 
 redisClient.on('connect', () => {
   console.log('Connected to Upstash Redis successfully');
 });
 
-const handleShutdown = async () => {
-  console.log('Shutting down Redis client...');
-  await redisClient.quit();
-  process.exit(0);
-};
-
-process.on('SIGINT', handleShutdown);
-process.on('SIGTERM', handleShutdown);
-
+// The server owns shutdown ordering: stop durable workers before closing Redis/PostgreSQL.
 export default redisClient;

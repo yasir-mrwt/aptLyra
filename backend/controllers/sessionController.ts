@@ -83,7 +83,8 @@ export const getSessionById = asyncHandler(async (req: AuthenticatedRequest, res
     const session = await sessionService.getSessionDetails(sessionId, userId);
     res.status(200).json({ message: "Session found", session });
   } catch (error: any) {
-    res.status(404).json({ message: error.message });
+    const missing=error.message==="Session not found";
+    res.status(missing?404:503).json({ message: missing?"Session not found":"Saved interview progress is temporarily unavailable. Please retry." });
   }
 });
 
@@ -129,7 +130,7 @@ export const submitAnswer = asyncHandler(async (req: AuthenticatedRequest, res: 
   try {
     const audioFilePath = req.file ? path.join(process.cwd(), req.file.path) : null;
 
-    await sessionService.submitSessionAnswer(
+    const operation=await sessionService.submitSessionAnswer(
       sessionId,
       userId,
       questionIndex,
@@ -141,7 +142,8 @@ export const submitAnswer = asyncHandler(async (req: AuthenticatedRequest, res: 
       answerText
     );
 
-    res.status(200).json({ message: "Answer received" });
+    if(operation && req.file)await fs.unlink(req.file.path).catch(()=>undefined);
+    res.status(200).json({ message: "Answer received",...(operation?{operation}: {}) });
   } catch (error: any) {
     if (req.file) await fs.unlink(req.file.path).catch(() => undefined);
     const status = error instanceof SessionStateError ? error.status : ["Session not found", "Question not found"].includes(error.message) ? 404 : 500;

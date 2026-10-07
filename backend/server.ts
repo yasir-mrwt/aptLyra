@@ -42,6 +42,8 @@ import path from "path";
 import { startResumeWorker, setWorkerIoInstance } from "./services/queue/resumeWorker.js";
 import requestIdMiddleware from "./middleware/requestId.js";
 import logger from "./utils/logger.js";
+import {startInterviewRuntime,type InterviewRuntime} from "./runtime/worker.js";
+import type {Worker} from "bullmq";
 
 import { AuthenticatedSocket } from "./types/express.js";
 
@@ -234,13 +236,30 @@ io.on("connection", (socket) => {
 
 const PORT = process.env.PORT || 5000;
 
-server.listen(PORT, () => {
+let interviewRuntime:InterviewRuntime|null=null;
+let resumeWorker:Worker|null=null;
+server.listen(PORT, async () => {
   logger.info(`Server running on port ${PORT}`);
 
   // Start BullMQ Worker and inject IO instance
   setWorkerIoInstance(io);
-  startResumeWorker();
+  resumeWorker=startResumeWorker();
   logger.info("Resume processing worker started");
+  try {interviewRuntime=await startInterviewRuntime(io);}
+  catch {logger.error("Interview runtime unavailable. SQL work remains recoverable; apply migration 008 and restart.");}
 });
+
+let shuttingDown=false;
+async function shutdown() {
+  if(shuttingDown)return;shuttingDown=true;
+  const deadline=setTimeout(()=>process.exit(1),10000);deadline.unref();
+  server.close();io.close();
+  try {
+    // Forced worker close leaves bounded SQL leases available for the next API process.
+    await interviewRuntime?.stop(true);await resumeWorker?.close(true);
+    await redisClient.quit();await pool.end();clearTimeout(deadline);process.exit(0);
+  }catch {process.exit(1);}
+}
+process.on("SIGINT",()=>{void shutdown();});process.on("SIGTERM",()=>{void shutdown();});
 
 export default app;

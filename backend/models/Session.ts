@@ -11,6 +11,7 @@ import crypto from "crypto";
 import {publicEvaluationSession} from "../evaluation/readModel.js";
 import {reviewedAggregate,type EvaluationView} from "../evaluation/contracts.js";
 import { query, withDatabaseLock } from "../config/db.js";
+import type {OperationView} from "../runtime/contracts.js";
 
 export interface ISpeechMetrics {
   fillerWordCount: number;
@@ -23,6 +24,10 @@ export interface ISpeechMetrics {
 }
 
 export interface IQuestion {
+  operationId?: string;
+  processingState?: "received"|"transcribing"|"evaluating"|"evaluated"|"abstained"|"failed"|"cancelled";
+  probeOperationId?: string;
+  followUpRationale?: string;
   evaluation?: EvaluationView;
   primaryCompetency?: string;
   followUpConceptId?: string;
@@ -55,6 +60,11 @@ export interface IQuestion {
 }
 
 export interface ISession {
+  runtimeVersion?: string;
+  runtimeState?: "active"|"finishing"|"completed";
+  revision?: number;
+  operations?: OperationView[];
+  report?: {id:string;snapshotRevision:number;createdAt:string;scoringVersion:string};
   scoringVersion?: "legacy"|"rubric-v1";
   reviewedSummary?: ReturnType<typeof reviewedAggregate>;
   planId?: string;
@@ -83,6 +93,9 @@ const toISO = (v: any): string | null =>
   v == null ? null : v instanceof Date ? v.toISOString() : v;
 
 const rowToSession = (row: any): ISession => ({
+  runtimeVersion: row.runtime_version || undefined,
+  runtimeState: row.runtime_state || undefined,
+  revision: row.runtime_revision===undefined?undefined:Number(row.runtime_revision),
   scoringVersion: row.scoring_version || "legacy",
   reviewedSummary: row.scoring_version === "rubric-v1" ? reviewedAggregate(row.questions || []) : undefined,
   planId: row.interview_plan_id || undefined,
