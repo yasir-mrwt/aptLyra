@@ -207,6 +207,7 @@ def call_groq(
     image_base64: str = None,
     api_key: str = None,
     temperature: float = 0.6,
+    max_retries: int = 5,
 ) -> str:
     """Shared helper to call the Groq chat completions API. Supports text and images.
 
@@ -226,7 +227,6 @@ def call_groq(
     timeout = int(os.getenv("REQUEST_TIMEOUT", "60"))
 
     # Retry logic for Rate Limiting (429) and Server Errors (500, 503, 504)
-    max_retries = 5
     retry_delay = 5  # Groq rate-limit windows are short; start small
 
     resp = None  # ensure resp is defined for the post-loop code
