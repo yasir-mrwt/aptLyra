@@ -11,7 +11,7 @@ export default function PlanPreview({plan,confirming,error,onConfirm,onEdit}:{pl
     {plan.shortages.length>0 && <div role="alert" className="text-amber-200"><h2>Review these shortages and fallback choices</h2><ul>{plan.shortages.map((s,i)=><li key={s+i}>{shortageLabel(s)}</li>)}</ul></div>}
     <p>Company: {plan.setup.modifiers.company || "Core practice"}. Occurrence dates: {plan.setup.modifiers.occurredAfter || "No lower bound"} — {plan.setup.modifiers.occurredBefore || "No upper bound"}. Preferences are preserved in every fallback.</p>
     <p>Resume/JD unavailable. Design-lite: {plan.setup.modifiers.designLite?"allowed when feasible":"off"}.</p>
-    <p>Questions come from reviewed selection evidence. Practice currently uses legacy evaluation; reviewed rubric scoring and evaluator confidence are planned.</p>
+    <p>Questions come from reviewed selection evidence. {plan.evaluationMode === "legacy" ? "This historical practice uses legacy evaluation." : "New practice uses rubric evaluation with separate evaluator confidence. Scores are provisional or withheld until the required reference and rubric review is available."}</p>
     <ol className="space-y-2">{plan.items.map(item=><li key={item.id}>{item.position+1}. {ROOT_LABELS[item.competency.split('.')[0]]} · {item.category} · {item.difficulty} · {item.estimatedMinutes} min · {item.selectionReason.replaceAll('_',' ')}{!item.available?" · unavailable":""}</li>)}</ol>
     {error && <p role="alert" className="text-rose-300">{error}</p>}
     <div className="flex gap-4"><button className="btn-primary" disabled={confirming || !plan.canConfirm && !plan.confirmedAt} onClick={onConfirm}>{confirming?"Starting…":plan.confirmedAt?"Open confirmed practice":"Confirm and start"}</button>
