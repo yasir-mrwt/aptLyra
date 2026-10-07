@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import type { RootState } from "./app/store";
 import useSocket from "./hooks/useSocket";
+import { usePageMetadata } from "./hooks/usePageMetadata";
 import { ToastContainer, Slide } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import Header from "./components/Header";
@@ -26,6 +27,7 @@ import AnalyticsDashboard from "./pages/AnalyticsDashboard";
 function App() {
   useSocket();
   const location = useLocation();
+  usePageMetadata(location.pathname);
   const { user } = useSelector((state: RootState) => state.auth);
 
   // The landing page is a full-bleed experience with its own navbar —

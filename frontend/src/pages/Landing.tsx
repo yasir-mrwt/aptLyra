@@ -1,3 +1,4 @@
+import { BRAND } from "../constants/brand";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -15,8 +16,8 @@ import {
 import InterviewerAvatar from "../components/InterviewerAvatar";
 
 /**
- * TechVera landing — pitch-black grid canvas, monochrome typography,
- * and a 3D mouse-tilt hero card where Ava (the AI interviewer) is
+ * Aptlyra landing — pitch-black grid canvas, monochrome typography,
+ * and a 3D mouse-tilt hero card where Lyra (the AI interviewer) is
  * literally talking. No tech jargon — pure product story.
  */
 
@@ -33,22 +34,22 @@ const FEATURES = [
   {
     icon: Mic,
     title: "A Real Voice Interview",
-    desc: "Ava asks questions out loud, listens to your answers, and cross-questions you when you leave gaps — just like the real thing.",
+    desc: `${BRAND.interviewer} guides your practice aloud and helps you explain your reasoning. You can also answer by typing.`,
   },
   {
     icon: Code2,
     title: "Live Coding Rounds",
-    desc: "Write and run real code under interview pressure. Your solution is judged on what it actually does, not what it looks like.",
+    desc: "Write and run code, then explain your reasoning. Execution facts and concept feedback are reported separately.",
   },
   {
     icon: PenTool,
     title: "Design on a Whiteboard",
-    desc: "Sketch your system architecture the way you would in the room. Ava reads your diagram and scores the design itself.",
+    desc: "Explore optional junior design questions. Feedback withholds scores when the answer or rubric evidence is insufficient.",
   },
   {
     icon: BarChart3,
     title: "Know How You Sound",
-    desc: "Every spoken answer is measured — pace, filler words, pauses and clarity — so you fix the habits interviewers notice.",
+    desc: "When speech analysis is available, review pace, filler words and pauses alongside your technical feedback.",
   },
   {
     icon: FileText,
@@ -66,22 +67,22 @@ const STEPS = [
   {
     step: "01",
     title: "Pick your target",
-    desc: "Choose the role, seniority and interview style — or attach your resume for questions about your own projects.",
+    desc: "Choose junior software engineering topics and an estimated duration, then preview your evidence-grounded question plan.",
   },
   {
     step: "02",
     title: "Face the interviewer",
-    desc: "Answer out loud, write real code, draw real systems. The timer is running and Ava is listening.",
+    desc: "Answer by voice or text, practice coding, and explain your reasoning at your own pace.",
   },
   {
     step: "03",
     title: "Read the verdict",
-    desc: "Scores, ideal answers, speech metrics and a downloadable report card after every session.",
+    desc: "Review evidence-grounded concept feedback, confidence and score availability, with a downloadable report card.",
   },
 ];
 
-/** Ava periodically "speaks" in the hero — mouth syncing to a fake amplitude. */
-const useHeroAvaVoice = () => {
+/** Lyra periodically "speaks" in the hero — mouth syncing to a fake amplitude. */
+const useHeroInterviewerVoice = () => {
   const [speaking, setSpeaking] = useState(false);
   const [amplitude, setAmplitude] = useState(0);
 
@@ -120,7 +121,7 @@ const useSessionClock = () => {
 
 const WAVE_FACTORS = [0.5, 0.85, 0.65, 1, 0.75, 0.9, 0.55];
 
-/** Voice bars — amplitude-driven when Ava speaks, gentle idle pulse otherwise. */
+/** Voice bars — amplitude-driven when Lyra speaks, gentle idle pulse otherwise. */
 const HeroWaveform = ({ amplitude, active }: { amplitude: number; active: boolean }) => (
   <div className="flex h-5 shrink-0 items-center gap-[3px]">
     {WAVE_FACTORS.map((f, i) => (
@@ -173,7 +174,7 @@ const TiltCard = ({ children }: { children: React.ReactNode }) => {
 };
 
 const Landing = () => {
-  const { speaking, amplitude } = useHeroAvaVoice();
+  const { speaking, amplitude } = useHeroInterviewerVoice();
   const clock = useSessionClock();
 
   return (
@@ -195,9 +196,9 @@ const Landing = () => {
       <header className="sticky top-0 z-50 border-b border-white/5 bg-[#050505]/80 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <Link to="/" className="flex items-center gap-2.5">
-            <img src="/logo.svg" alt="TechVera" className="h-8 w-8" />
+            <img src="/logo.svg" alt={BRAND.name} className="h-8 w-8" />
             <span className="text-[17px] font-extrabold tracking-tight text-white">
-              TechVera
+              {BRAND.name}
             </span>
           </Link>
 
@@ -243,7 +244,7 @@ const Landing = () => {
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
               </span>
-              Your personal AI interviewer is live
+              {BRAND.tagline}
             </span>
           </motion.div>
 
@@ -267,9 +268,8 @@ const Landing = () => {
             custom={2}
             className="mx-auto mt-8 max-w-xl text-base leading-relaxed text-zinc-400 sm:text-lg lg:mx-0"
           >
-            Meet <span className="font-bold text-white">Ava</span> — an interviewer who
-            speaks, listens and pushes back. Practice the real thing, get brutally
-            honest feedback, and walk into your interview already warmed up.
+            Meet <span className="font-bold text-white">{BRAND.interviewer}</span>, your technical practice guide.
+            Explain your reasoning and review evidence-grounded feedback with clear confidence labels.
           </motion.p>
 
           <motion.div
@@ -308,7 +308,7 @@ const Landing = () => {
           </motion.ul>
         </div>
 
-        {/* Right — 3D floating interview card with a LIVE Ava */}
+        {/* Right — 3D floating interview card with a LIVE Lyra */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
@@ -334,7 +334,7 @@ const Landing = () => {
               </div>
 
               <div className="flex flex-col items-center">
-                {/* Glowing halo behind Ava — brightens while she speaks */}
+                {/* Glowing halo behind Lyra — brightens while she speaks */}
                 <div className="relative">
                   <div
                     className={`ring-spin absolute -inset-2.5 rounded-full transition-opacity duration-700 ${speaking ? "opacity-100" : "opacity-35"}`}
@@ -350,7 +350,7 @@ const Landing = () => {
                 </div>
 
                 <div className="mt-4 flex items-center gap-2">
-                  <p className="font-black text-white">Ava</p>
+                  <p className="font-black text-white">{BRAND.interviewer}</p>
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
                 </div>
                 <p className="text-[9px] font-black uppercase tracking-[0.25em] text-zinc-500">
@@ -539,12 +539,11 @@ const Landing = () => {
             {/* Brand */}
             <div>
               <div className="flex items-center gap-2.5">
-                <img src="/logo.svg" alt="TechVera" className="h-9 w-9" />
-                <span className="text-xl font-extrabold tracking-tight text-white">TechVera</span>
+                <img src="/logo.svg" alt={BRAND.name} className="h-9 w-9" />
+                <span className="text-xl font-extrabold tracking-tight text-white">{BRAND.name}</span>
               </div>
               <p className="mt-4 max-w-xs text-sm leading-relaxed text-zinc-500">
-                The AI interviewer that talks back. Practice voice interviews,
-                live coding and system design — and walk in prepared.
+                {BRAND.positioning}
               </p>
               <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-4 py-1.5">
                 <span className="h-2 w-2 rounded-full bg-emerald-400" />
@@ -579,7 +578,7 @@ const Landing = () => {
             <div>
               <p className="text-[11px] font-black uppercase tracking-[0.25em] text-zinc-600">Ready?</p>
               <p className="mt-5 text-sm leading-relaxed text-zinc-500">
-                Your first mock interview takes 10 minutes.
+                Preview your practice plan before you begin.
               </p>
               <Link
                 to="/register"
@@ -593,7 +592,7 @@ const Landing = () => {
           {/* Bottom bar */}
           <div className="mt-14 flex flex-col items-center justify-between gap-4 border-t border-white/[0.06] pt-8 sm:flex-row">
             <p className="text-xs text-zinc-600">
-              © {new Date().getFullYear()} TechVera. All rights reserved.
+              © {new Date().getFullYear()} {BRAND.name}. All rights reserved.
             </p>
             <p className="text-xs text-zinc-600">
               Built for the next generation of talent. 🎙️

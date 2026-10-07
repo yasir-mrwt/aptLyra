@@ -1,3 +1,4 @@
+import { BRAND } from "../constants/brand";
 import { useState, useEffect } from "react";
 import type { ChangeEvent, SyntheticEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
@@ -76,7 +77,7 @@ const Login = () => {
                         <h2 className="text-4xl font-extrabold tracking-tight mb-3">
                             Welcome <span className="text-gradient">Back</span>
                         </h2>
-                        <p className="text-surface-400 text-sm font-medium">Sign in to your TechVera account</p>
+                        <p className="text-surface-400 text-sm font-medium">Sign in to your {BRAND.name} account</p>
                     </div>
 
                     <div className="w-full flex items-center justify-center relative z-10">
@@ -149,7 +150,7 @@ const Login = () => {
 
                 {/* Footer text */}
                 <p className="mt-8 text-center text-surface-500 text-[10px] font-bold uppercase tracking-widest">
-                    &copy; {new Date().getFullYear()} TechVera AI. Built for the next generation of talent.
+                    &copy; {new Date().getFullYear()} {BRAND.name}. Built for the next generation of talent.
                 </p>
             </div>
         </div>

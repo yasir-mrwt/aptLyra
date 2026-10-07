@@ -71,7 +71,7 @@ class UtteranceFixture {
     onerror: (() => void) | null = null;
 }
 
-describe("Ava voice baseline", () => {
+describe("Lyra voice baseline", () => {
     it("autoplay suspension cannot block the server request or browser fallback", async () => {
         const resume = vi.fn(() => new Promise<void>(() => {}));
         class SuspendedContext { state = "suspended"; resume = resume; close() { return Promise.resolve(); } }

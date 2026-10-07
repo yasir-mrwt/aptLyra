@@ -1,3 +1,4 @@
+import { BRAND } from "../../constants/brand";
 import { Link } from "react-router-dom";
 
 export const Logo = () => {
@@ -5,11 +6,11 @@ export const Logo = () => {
     <Link to="/" className="flex items-center space-x-3 group transition-all duration-300">
       <img
         src="/logo.svg"
-        alt="TechVera"
+        alt={BRAND.name}
         className="h-9 w-9 group-hover:rotate-6 group-hover:scale-105 transition-all duration-500 drop-shadow-[0_0_16px_rgba(255,255,255,0.2)]"
       />
       <span className="text-2xl font-black tracking-tighter uppercase font-display text-white group-hover:text-surface-300 transition-colors">
-        TechVera
+        {BRAND.name}
       </span>
     </Link>
   );

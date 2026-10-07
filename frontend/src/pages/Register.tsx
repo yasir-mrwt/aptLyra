@@ -1,3 +1,4 @@
+import { BRAND } from "../constants/brand";
 import { useState, useEffect, useRef } from "react";
 import type { ChangeEvent, SyntheticEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -297,7 +298,7 @@ const Register = () => {
                 </div>
 
                 <p className="mt-8 text-center text-surface-500 text-[10px] font-bold uppercase tracking-widest">
-                    &copy; {new Date().getFullYear()} TechVera AI. The smart way to interview.
+                    &copy; {new Date().getFullYear()} {BRAND.name}. The smart way to interview.
                 </p>
             </div>
         </div>

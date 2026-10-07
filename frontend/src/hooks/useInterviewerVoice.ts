@@ -88,7 +88,7 @@ export const useInterviewerVoice = (
         );
         if (femaleVoice) utterance.voice = femaleVoice;
         utterance.rate = 0.95;
-        utterance.pitch = 1.1;
+        utterance.pitch = 1.0;
 
         utterance.onstart = () => {
             if (generationRef.current !== generation) return;
