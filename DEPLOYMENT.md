@@ -1,6 +1,6 @@
-# TechVera — Deployment Guide
+# Aptlyra — Deployment Guide
 
-TechVera is deployed across three managed platforms. The frontend is hosted on Vercel, while the backend and the AI service run as independent web services on Render. The data tier (Neon PostgreSQL and Upstash Redis) and media storage (Cloudinary) are already serverless and require no additional hosting.
+Aptlyra is deployed across three managed platforms. The frontend is hosted on Vercel, while the backend and the AI service run as independent web services on Render. The data tier (Neon PostgreSQL and Upstash Redis) and media storage (Cloudinary) are already serverless and require no additional hosting.
 
 ## Architecture
 
@@ -169,3 +169,7 @@ when the origin/key is missing or mismatched. Docker now uses Python 3.11.
 General remote diagram URLs are rejected; keep the existing Cloudinary PNG
 whiteboard upload flow. This is configuration documentation, not a deployment
 migration. See [SECURITY.md](SECURITY.md) for remaining reliability limits.
+
+## Phase 8 release prerequisite
+
+No deployment is performed by this phase. Before a later authorized release, drain old in-process interviews, apply the reviewed additive 008 migration, restart backend processes, and mount the same private persistent `INTERVIEW_MEDIA_DIR` for every API/worker. The existing server starts/reconciles interview workers. PostgreSQL owns results; Redis queues can be reconstructed from SQL. Do not rename existing hosted service IDs, reset managed Redis, republish scoring content or assume ephemeral audio survives an instance replacement. The local folder rename is deferred; [branding](docs/branding.md) documents the manual procedure. [Runtime/recovery](docs/runtime-recovery.md) defines the operational boundary.

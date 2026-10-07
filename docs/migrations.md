@@ -145,3 +145,9 @@ embeddings is separate from DDL and publication. See [retrieval](retrieval.md).
 ## Phase 7 migration
 
 After the tested 001–006 baseline, explicitly apply `007_rubric_evaluation.sql` using `npm run db:migrate` (production/staging requires `--apply`). It adds immutable rubric draft/hash human approval records, session policy/summary, attempt grading/probe pins, grade classification/feedback/objective metadata and owned code execution evidence. Deferred and immediate constraints check review, confidence, deterministic five-dimension totals, complete concept evidence and consecutive reevaluation lineage. Default legacy policy preserves existing sessions. No corpus, seed, vector generation, permission or review is changed by the migration. Back up/review before release; no destructive rollback/reset is provided. Verify schema plus `test:evaluation` in the disposable fixture environment. [Review workflow](rubric-evaluation.md).
+
+## Phase 8 migration — 008
+
+`008_durable_interview_runtime.sql` extends existing session, answer, operation/outbox/reward foundations and adds private staging metadata and immutable report snapshots. It does not rewrite account/session content, publish references/rubrics, change vector generation or modify migrations 001–007. The migrator remains explicit, checksum-checked, advisory-locked and transactional. Clean/adopted databases apply eight migrations; repeats and concurrent calls are no-ops. The intentional rollback/failure test now uses unapplied migration 009.
+
+Validate schema, persistence, planner, retrieval, ingestion, evaluation, smoke, durable-operation and E2E suites in disposable stores before applying 008 to the configured manual-testing database. Drain old in-process work before deployment; use the same shared private media volume on restart. No destructive rollback, live reseed or re-embedding is part of this phase. See [runtime/recovery](runtime-recovery.md).

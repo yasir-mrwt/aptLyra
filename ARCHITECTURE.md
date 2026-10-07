@@ -1,9 +1,11 @@
-# TechVera architecture
+# Aptlyra architecture
+
+This document records cumulative phase boundaries. The current Phase 8 runtime is described at the end and in [runtime/recovery](docs/runtime-recovery.md); earlier baseline behavior remains historical/legacy context.
 
 ## CURRENTLY IMPLEMENTED: Phase 1 baseline
 
 The Phase 1 baseline preserves React 19/Vite/TypeScript, Express 5/TypeScript,
-FastAPI/Pydantic, PostgreSQL, and Redis/BullMQ. Ava remains the existing SVG
+FastAPI/Pydantic, PostgreSQL, and Redis/BullMQ. The existing SVG interviewer is now Lyra
 interviewer with cloud TTS and browser voice fallback. The live baseline has no retrieval integration, research agent or new scoring engine.
 Phase 5 adds CPU semantic retrieval separately, described below; no local GPU is required.
 
@@ -17,11 +19,11 @@ still use Phase 1 JSONB/scoring/background work. Startup verifies the old bootst
 knowledge migrations are explicit. No Phase 3 user-facing behavior change; schema
 is preparatory. See [database schema](docs/database-schema.md) and
 [migration operations](docs/migrations.md). Phase 3 itself enabled no ingestion/model/retrieval execution; Phases 4–5 now add
-editorial ingestion and internal retrieval. Phase 6 implements the planner; Phase 7 adds rubric evaluation below. Durable interview execution remains later work.
+editorial ingestion and internal retrieval. Phase 6 implements the planner; Phase 7 adds rubric evaluation below. Phase 8 now implements durable interview execution.
 
 ## PLANNED FOR LATER PHASE: frozen FYP architecture
 
-TechVera targets evidence-grounded preparation for final-year students and junior
+Aptlyra targets evidence-grounded preparation for final-year students and junior
 software engineers (0–2 years). Oral, coding and mixed interviews are core;
 company/resume focus and design-lite are optional. Eight junior competencies replace
 unbounded role coverage in the target design. Technical performance, candidate
@@ -30,13 +32,14 @@ delivery feedback and evaluator confidence are separate outputs.
 Express remains the owner of authentication, orchestration and PostgreSQL writes.
 FastAPI computes validated AI results; Phase 5 pgvector retrieval stays in PostgreSQL,
 with Redis/BullMQ for jobs/caches. Versioned questions, rubrics, plans and evidence
-supplement compatible legacy session JSONB at the schema level. Live planner/evaluator use
-and durable operations/outbox recovery remain planned; current interviews do not use them.
+supplement compatible legacy session JSONB. The Phase 8 runtime now executes SQL
+operations/outbox recovery for planner-backed rubric interviews; the later sections
+state its compatibility boundary.
 
 | Design document | Purpose |
 |---|---|
 | [Final scope](docs/final-scope.md) | Users, modes, domain, exclusions and acceptance boundary |
-| [Target architecture](docs/target-architecture.md) | Lifecycle, REST/Socket.IO, questions, data ownership, ingestion, retrieval, planner and Ava |
+| [Target architecture](docs/target-architecture.md) | Lifecycle, REST/Socket.IO, questions, data ownership, ingestion, retrieval, planner and Lyra |
 | [Competency taxonomy](docs/competency-taxonomy.md) | Eight roots, junior difficulty and observable evidence |
 | [Evaluation design](docs/evaluation-design.md) | Reviewed/provisional rubrics, scoring, confidence, abstention and FYP research protocol |
 | [Data and privacy](docs/data-and-privacy.md) | Current limits, required controls, retention/deletion and provider exposure |
@@ -51,7 +54,7 @@ The remaining sections describe
 
 | Component | Responsibility |
 |---|---|
-| `frontend/` | Redux state, interview setup, recorder, Ava, Monaco, Excalidraw, reports |
+| `frontend/` | Redux state, interview setup, recorder, Lyra, Monaco, Excalidraw, reports |
 | `backend/` | Cookie authentication, ownership, lifecycle, SQL repositories, provider proxy, resume queue |
 | `ai-service/` | Groq question/evaluation/follow-up calls, Whisper STT, TTS, resume parsing/analysis |
 | PostgreSQL | Users, refresh tokens, sessions, resumes, gamification |
@@ -253,8 +256,12 @@ No live interview behavior change in Phase 5; retrieval is ready for the Phase 6
 
 ## CURRENTLY IMPLEMENTED: Phase 6 planner
 
-The dashboard now uses deterministic Express planning over Phase 5 retrieval, owned persisted previews and explicit confirmation. Relational immutable plan/item/evidence snapshots link to sessions; confirmation projects server-selected originals into the existing JSONB runner. New setup is junior/scoped; old sessions and routes remain compatible. Previously confirmed sessions retain legacy evaluation. Phase 7 adds rubric scoring/confidence for newly confirmed sessions, as described below. No durable interview worker is implemented. See [planner](docs/interview-planner.md) for budgets, constraints, availability checks, frontend states and legal/compatibility audit.
+The dashboard now uses deterministic Express planning over Phase 5 retrieval, owned persisted previews and explicit confirmation. Relational immutable plan/item/evidence snapshots link to sessions; confirmation projects server-selected originals into the existing JSONB runner. New setup is junior/scoped; old sessions and routes remain compatible. Previously confirmed sessions retain legacy evaluation. Phase 7 adds rubric scoring/confidence for newly confirmed sessions, as described below. This records the Phase 6 boundary; Phase 8 now supplies the durable runtime described below. See [planner](docs/interview-planner.md) for budgets, constraints, availability checks, frontend states and legal/compatibility audit.
 
 ## CURRENTLY IMPLEMENTED: Phase 7 evaluation
 
-Fresh planner confirmations select `rubric-v1`; legacy sessions retain historical scoring. Express owns immutable draft/hash review, versioned concept/rubric/attempt/evaluation/evidence persistence, deterministic five-dimension scoring and reviewed original aggregation. FastAPI provides bounded strict computation, separate evidence confidence and abstention. Frontend runner, review, PDF and analytics distinguish reviewed/provisional/abstained/legacy. Coding uses exact-code JDoodle runtime facts with honest test limitations. Concept gaps may drive at most two nonrecursive provisional probes. Migration 007 extends the existing schema; no new database/model/queue architecture. See [implemented scoring and operator readiness](docs/rubric-evaluation.md). No human reference/rubric review is inferred from seed question approval; the configured corpus currently abstains. Durable recovery and research remain later phases.
+Fresh planner confirmations select `rubric-v1`; legacy sessions retain historical scoring. Express owns immutable draft/hash review, versioned concept/rubric/attempt/evaluation/evidence persistence, deterministic five-dimension scoring and reviewed original aggregation. FastAPI provides bounded strict computation, separate evidence confidence and abstention. Frontend runner, review, PDF and analytics distinguish reviewed/provisional/abstained/legacy. Coding uses exact-code JDoodle runtime facts with honest test limitations. Concept gaps may drive at most two nonrecursive provisional probes. Migration 007 extends the existing schema; no new database/model/queue architecture. See [implemented scoring and operator readiness](docs/rubric-evaluation.md). No human reference/rubric review is inferred from seed question approval; the configured corpus currently abstains. This records the Phase 7 boundary. Phase 8 now supplies durable recovery; research remains future approved work.
+
+## Phase 8 durable execution — current implementation
+
+The interview runtime now extends the Phase 3 SQL operation/outbox/reward foundations with migration 008 and the existing BullMQ dependency. Received claims precede STT; sealed extraction/pins, leased workers, startup reconciliation and revision/ownership/editorial fences protect graded results. Answer grade, SQL XP and probe reservation are atomic. Finishing queues an immutable report snapshot and commits completion/reward together; report failures recover separately. Socket events are safe REST-refresh hints; the runner/review recover after reconnect/reload and offer operation-specific retry/cancel. New confirmed plans and idle older real rubric plans on their next owned write use this runtime. Historical legacy execution/scoring remain compatible. Earlier in-process/Redis-buffer descriptions in the baseline sections describe the historical/legacy path. See [runtime and recovery](docs/runtime-recovery.md) for the exact boundary, audio shared-volume requirement and failure semantics. No dependency versions, reviewed content or scoring policy changed.

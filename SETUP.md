@@ -1,4 +1,4 @@
-# 🛠️ TechVera — Local Setup Guide
+# 🛠️ Aptlyra — Local Setup Guide
 
 Run the existing three-service stack on Node 20 and Python 3.11. No local GPU is required. Phase 5/6 CPU retrieval requires externally provisioned pinned model files, as described below.
 
@@ -45,7 +45,7 @@ Optional (recommended):
 |---|---|---|
 | **Neon** | PostgreSQL — primary database | [neon.tech](https://neon.tech) |
 | **Upstash** | Redis — queues, caches, OTP store | [upstash.com](https://upstash.com) |
-| **Groq** | All AI — LLM, Whisper, Ava's voice (TTS) | [console.groq.com](https://console.groq.com) |
+| **Groq** | All AI — LLM, Whisper, Lyra's voice (TTS) | [console.groq.com](https://console.groq.com) |
 | **Google Gemini** | Resume-analyzer fallback when Groq is rate-limited | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
 | **Google Cloud** | Google Login (OAuth) | [console.cloud.google.com](https://console.cloud.google.com) |
 | **JDoodle** | Live code execution in interviews | [jdoodle.com](https://www.jdoodle.com) |
@@ -115,7 +115,7 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=465
 SMTP_USER=<your gmail>
 SMTP_PASS=<16-char Gmail App Password, no spaces>
-EMAIL_FROM="TechVera <your gmail>"
+EMAIL_FROM="Aptlyra <sender@example.test>"
 ```
 
 > No SMTP creds? Leave them empty — OTPs get printed to the backend console in development.
@@ -140,10 +140,10 @@ GROQ_MODEL=llama-3.3-70b-versatile
 GROQ_VISION_MODEL=meta-llama/llama-4-scout-17b-16e-instruct
 GROQ_MIN_CALL_INTERVAL=1
 
-# ── Ava's voice ──
+# ── Lyra's voice ──
 # One-time: accept the Orpheus terms at console.groq.com/playground?model=canopylabs%2Forpheus-v1-english
 GROQ_TTS_MODEL=canopylabs/orpheus-v1-english
-GROQ_TTS_VOICE=autumn
+GROQ_TTS_VOICE=hannah
 
 # ── Gemini — Resume Analyzer fallback ONLY ──
 # Kicks in when ALL Groq keys are rate-limited. Voice + interviews stay on Groq.
@@ -189,7 +189,7 @@ curl http://localhost:5001/health
 # → {"status":"ok","db":"connected", ...}
 
 curl http://localhost:8000/
-# → {"message":"TechVera AI Microservice is running (Modular Version)"}
+# → {"message":"Aptlyra AI Microservice is running (Modular Version)"}
 ```
 
 Open **http://localhost:5173** — register with email (OTP arrives in your inbox, or in the backend console if SMTP isn't set) or use Google Login.
@@ -203,7 +203,7 @@ Open **http://localhost:5173** — register with email (OTP arrives in your inbo
 | `EADDRINUSE :::5001` | Something else owns the port — `lsof -tiTCP:5001 -sTCP:LISTEN \| xargs kill` |
 | `EADDRINUSE :::5000` | macOS AirPlay owns 5000 — this project deliberately uses **5001** |
 | First request takes ~5-10s | Neon free tier cold start — the backend retries automatically |
-| Ava speaks with a robotic voice | Accept the Orpheus TTS terms in the Groq Playground (with the key's account) |
+| Lyra speaks with a robotic voice | Accept the Orpheus TTS terms in the Groq Playground (with the key's account) |
 | Google popup `origin_mismatch` | Add `http://localhost:5173` to Authorized JavaScript origins |
 | Redis `ECONNREFUSED` | Use the **TCP** `rediss://` URL from Upstash, not the REST URL |
 | All Groq keys rate-limited | Resume analyzer falls back to Gemini automatically; interviews wait for the cooldown |
@@ -441,8 +441,27 @@ Apply migrations through 006 explicitly, then use the Phase 4 exact-hash reviewe
 
 For disposable verification: `docker compose -f compose.test.yml --profile without-vector up -d --wait postgres redis postgres-without-vector`, then backend `npm run test:planner` plus schema/ingestion/seed/retrieval/persistence/smoke suites. Tests refuse external datastore environment configuration and select localhost fixtures. The embeddings profile uses the external model cache for real model checks; it does not download or commit model files. Stop only these task fixtures afterward with the same Compose profiles.
 
-Use the dashboard to configure junior practice, then review `/plans/:planId` and confirm. An underfilled preview explains shortages; impossible coverage or stale evidence requires a fresh preview. The current corpus has no company reports or reviewed rubrics; resume/JD is unavailable for this setup. Previously confirmed sessions retain legacy grading; new confirmations use Phase 7 rubric evaluation and may abstain until grading evidence is approved. See [planner operations/contracts](docs/interview-planner.md). Persisted deployment/asset/mute identifiers are intentionally retained; ordinary product presentation is TechVera.
+Use the dashboard to configure junior practice, then review `/plans/:planId` and confirm. An underfilled preview explains shortages; impossible coverage or stale evidence requires a fresh preview. The current corpus has no company reports or reviewed rubrics; resume/JD is unavailable for this setup. Previously confirmed sessions retain legacy grading; new confirmations use Phase 7 rubric evaluation and may abstain until grading evidence is approved. See [planner operations/contracts](docs/interview-planner.md). Persisted deployment/asset/mute identifiers are intentionally retained; ordinary product presentation is Aptlyra.
 
 ## Phase 7 rubric readiness
 
-Apply migration 007 explicitly and retain Node 20.19–20.x. Fresh planner confirmations use rubric evaluation; existing sessions stay legacy. Approved question content does not supply reviewed technical references or rubrics. With the current question-only seed, a typed answer is retained with low-confidence abstention and no absolute score. The [rubric operator workflow](docs/rubric-evaluation.md) covers private draft export, genuine exact-hash reference/rubric review, provisional practice, retirement and append-only reevaluation. Do not auto-approve generated content. Add `npm run test:evaluation` to the existing disposable `compose.test.yml` verification; destructive tests never use configured cloud stores. No dependency/lockfile upgrade or Phase 8 worker is required.
+Apply migration 007 explicitly and retain Node 20.19–20.x. Fresh planner confirmations use rubric evaluation; existing sessions stay legacy. Approved question content does not supply reviewed technical references or rubrics. With the current question-only seed, a typed answer is retained with low-confidence abstention and no absolute score. The [rubric operator workflow](docs/rubric-evaluation.md) covers private draft export, genuine exact-hash reference/rubric review, provisional practice, retirement and append-only reevaluation. Do not auto-approve generated content. Add `npm run test:evaluation` to the existing disposable `compose.test.yml` verification; destructive tests never use configured cloud stores. This describes the Phase 7 setup boundary; Phase 8 migration/worker setup is now described below.
+
+## Aptlyra identity configuration
+
+Set backend `PUBLIC_FRONTEND_URL` to the single public frontend origin for transactional links (otherwise the first `FRONTEND_URL` CORS origin is used). Set frontend `VITE_PUBLIC_URL` to that same origin when chosen; leave it blank locally to omit canonical/OG URLs. Rebuild the frontend after changes. No production domain is assumed. API, CORS, callback and Google OAuth settings remain environment/provider configured.
+
+Use `GROQ_TTS_MODEL=canopylabs/orpheus-v1-english` and `GROQ_TTS_VOICE=hannah` for Lyra, after accepting provider terms. Existing private voice overrides win. See [voice audition](docs/voice-audition.md). All email templates use Aptlyra and the A monogram; `EMAIL_FROM` sets the mailbox, while the application normalizes its display name. See [branding operations](docs/branding.md) for sender-avatar actions and domain/remote migration steps.
+
+## Phase 8 runtime installation and verification
+
+Use Node 20.19–20.x and the existing Python 3.11 venv. Drain pre-upgrade in-process interview work and stop old API processes before a release; PostgreSQL cannot recover input that old code never stored. Build and apply the additive 008 migration explicitly from `backend/`:
+
+```sh
+npm run build
+npm run db:migrate -- --apply
+```
+
+Never point destructive fixture tests at a configured/managed database. Start disposable PostgreSQL/pgvector and Redis with `docker compose -f compose.test.yml up -d --wait postgres redis` from the product root, then run all earlier checks plus `npm run test:durable` and `npm run test:e2e`. The Compose project is now `aptlyra-baseline`; database/user fixture identifiers remain compatible. If older `techvera-baseline` fixture containers occupy the ports, stop those exact disposable services before starting the renamed project. No dependency installation/upgrade is needed for this phase.
+
+Start the normal backend after 008. It starts the interview worker and reconciles SQL intents automatically. Provide a persistent, private `INTERVIEW_MEDIA_DIR` shared by every API/worker process; the default is `uploads/interviews` relative to backend cwd. Keep it outside public serving. Typed answers require no media volume. Do not change the existing CORS/internal callback/auth settings or ignored environment files as part of runtime recovery. The intentional operator addition of `PUBLIC_FRONTEND_URL` remains preserved. See [runtime/recovery](docs/runtime-recovery.md) for retries, deadlines, finishing, deletion and diagnostics, and [branding](docs/branding.md) for verified remote/package identity and the deferred manual folder rename.

@@ -133,7 +133,7 @@ with an explicit reason; do not loop until a plausible score appears.
 
 Pin scoring versions in reports and PDFs. Historical equal-weight technical/delivery
 scores remain legacy; no conversion into new competency/evaluator-confidence scores.
-Visibility, Ava behavior, question types and evidence lineage are defined in
+Visibility, Lyra behavior, question types and evidence lineage are defined in
 [the target architecture](target-architecture.md).
 
 ## FYP evaluation protocol (future work)

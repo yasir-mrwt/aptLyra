@@ -1,6 +1,6 @@
-# TechVera Frontend 💻
+# Aptlyra Frontend 💻
 
-The user-facing application for TechVera. A high-performance, responsive React application built with Vite and TypeScript, providing an immersive interview experience.
+The user-facing application for Aptlyra. A high-performance, responsive React application built with Vite and TypeScript, providing an immersive interview experience.
 
 ## ✨ Features
 

@@ -56,11 +56,11 @@ Cross-user IDs return 404. Authentication is the existing cookie middleware. Pre
 
 Dashboard shows scoped setup; `/plans/:planId` reloads an owned preview. Coverage, effective count/time, distribution, fallback and unavailable evidence are shown before confirmation. No expected answers are exposed. Shortages requiring correction disable confirmation; reduced count/difficulty warnings remain explicit. Waiting reflects real network state with idle/preparing/plan-ready/transitioning/error-retry, disabled duplicate actions and retry paths. Navigation to `/interview/:sessionId` waits for successful server confirmation. Existing speaking/listening/evaluating states and SVG appearance remain.
 
-Name-neutral `AIInterviewer`, `InterviewerState`, `InterviewerPanel`, `InterviewerAvatar` and existing voice hook share a central display profile. The display name remains Ava. Remaining direct character references are in the central profile, landing-page copy/demo hook/comments, welcome email copy and the legacy voice test description; final character changes belong to Phase 9. The landing demo's synthetic animation is still a demo, not planning progress.
+Name-neutral `AIInterviewer`, `InterviewerState`, `InterviewerPanel`, `InterviewerAvatar` and existing voice hook share a central display profile. At the Phase 6 checkpoint the display name was Ava; the current identity is Lyra, as documented in [branding operations](branding.md). At that checkpoint direct character references were in the central profile, landing-page copy/demo hook/comments, welcome email copy and the legacy voice test description; the focused pre-Phase-8 rebrand now updates these names; visual character polish remains Phase 9. The landing demo's synthetic animation is still a demo, not planning progress.
 
 ## Branding and attribution
 
-README now describes TechVera, distinguishes current planning/legacy evaluation from planned scoring/runtime work, and omits outdated screenshots. Assets remain. Every remaining source occurrence of the upstream name is classified here:
+Historical Phase 6 branding snapshot: README then described TechVera, distinguishes current planning/legacy evaluation from planned scoring/runtime work, and omits outdated screenshots. Assets remain. Every remaining source occurrence of the upstream name is classified here:
 
 | Location / retained text | Class | Reason |
 |---|---|---|

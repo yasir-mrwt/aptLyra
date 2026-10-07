@@ -1,6 +1,6 @@
-# TechVera Backend ⚙️
+# Aptlyra Backend ⚙️
 
-The core orchestrator for TechVera. This Node.js service manages the API, user authentication, session state, and coordinates communication between the frontend and the AI microservice.
+The core orchestrator for Aptlyra. This Node.js service manages the API, user authentication, session state, and coordinates communication between the frontend and the AI microservice.
 
 ## 🚀 Key Responsibilities
 
@@ -94,3 +94,7 @@ npm start
 ## Stable baseline verification
 
 Use the supported runtimes and commands in [SETUP.md](../SETUP.md#phase-1-verification). Contracts, state transitions, and known limits are documented in [ARCHITECTURE.md](../ARCHITECTURE.md) and [SECURITY.md](../SECURITY.md).
+
+## Phase 8 interview worker
+
+Apply migration 008 explicitly, then start the existing server. `runtime/operations.ts` claims owned work; `runtime/worker.ts` reconciles SQL intents and leases BullMQ execution; `runtime/media.ts` handles bounded private shared-volume staging. REST session details include revision/runtime state/safe operation and report metadata. Owned operation list/retry/cancel routes extend the existing sessions router. Run `npm run test:durable` and `npm run test:e2e` against disposable local stores. See [runtime/recovery](../docs/runtime-recovery.md). BullMQ was already installed; dependency versions/resolutions remain unchanged.

@@ -1,6 +1,6 @@
 # Final FYP scope
 
-**TechVera — Evidence-Grounded AI Technical Interview Coach**
+**Aptlyra — Evidence-Grounded AI Technical Interview Coach**
 
 Scope version: `fyp-scope-v1`, frozen in Phase 2. This is a preparation tool for
 final-year CS students and junior software-engineering candidates with 0–2 years
@@ -82,7 +82,7 @@ and the required privacy controls. It must also publish measured retrieval/scori
 and system results with limitations. Provider availability and a successful code
 run alone do not prove technical knowledge or scoring validity.
 
-Functional setup, runner, report, and Ava behavior ship alongside each backend/AI
+Functional setup, runner, report, and Lyra behavior ship alongside each backend/AI
 feature. Phase 9 consolidates visual, accessibility, responsive, and performance
 polish. [The roadmap](implementation-roadmap.md) defines the phase boundaries;
 Phase 2 implements none of the planned behavior above.

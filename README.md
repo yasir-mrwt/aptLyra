@@ -1,6 +1,8 @@
-# TechVera
+# Aptlyra
 
-TechVera is an AI technical interview preparation platform for final-year students and junior software engineers with 0–2 years of experience. It helps candidates practice; it does not make hiring or personality judgments.
+**Practice with evidence. Improve with confidence.**
+
+Aptlyra is an AI technical interview preparation platform for final-year students and junior software engineers with 0–2 years of experience. It helps candidates practice; it does not make hiring or personality judgments.
 
 ## CURRENTLY IMPLEMENTED
 
@@ -10,7 +12,7 @@ TechVera is an AI technical interview preparation platform for final-year studen
 - A persisted plan preview before confirmation. The server selects questions; confirmation starts practice through the existing runner. Confirm retries are idempotent.
 - Permission-aware ingestion, withdrawal and an exact-hash human-reviewed corpus of 48 locally authored/AI-assisted questions. Editorial provenance is labeled accurately; no company interview-bank authenticity is claimed.
 - Internal semantic retrieval using pinned local CPU embeddings and PostgreSQL/pgvector. Source availability, model compatibility and corpus completeness are checked before use.
-- Existing SVG interviewer, cloud/browser voice, code and diagram tools, legacy technical/delivery feedback and PDF reports. Provider-dependent features require configuration.
+- Lyra, the SVG interviewer, with cloud/browser voice, code and diagram tools, legacy technical/delivery feedback and PDF reports. Provider-dependent features require configuration.
 
 Planning is evidence-backed. Newly confirmed interviews use **rubric evaluation with separate evaluator confidence**: reviewed or provisional scores require approved grading evidence; insufficient grounding withholds the score. Previously confirmed and historical sessions retain legacy grading. See [rubric operations and readiness](docs/rubric-evaluation.md). Planning time is an estimate, including a four-minute probe reserve, rather than a runtime deadline.
 
@@ -42,10 +44,18 @@ From `frontend/`: `npm run lint`, `npm run typecheck`, `npm test`, `npm run buil
 
 ## Deployment notes
 
-[DEPLOYMENT.md](DEPLOYMENT.md) and `render.yaml` describe the existing deployment structure. Production requires reviewed migrations, pgvector availability, pinned model provisioning, private credentials and release verification. No production migration or deployment is performed by this phase. Existing resource names and persisted preference/asset identifiers are retained where compatibility requires them; see the [compatibility audit](docs/interview-planner.md#branding-and-attribution).
+[DEPLOYMENT.md](DEPLOYMENT.md) and `render.yaml` describe the existing deployment structure. Production requires reviewed migrations, pgvector availability, pinned model provisioning, private credentials and release verification. No production migration or deployment is performed by this phase. Existing resource names and persisted preference/asset identifiers are retained where compatibility requires them; see the [current branding and compatibility audit](docs/branding.md).
 
 Screenshots from the earlier interface have been removed from this README because they do not show the planner. Reusable assets remain available; final screenshots belong to the later UI phase.
 
 ## License and attribution
 
-Distributed under the [MIT license](LICENSE), including the original copyright and permission notice. Upstream and model attribution is collected in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Existing contributor metadata and dependency/model notices are preserved; the TechVera product name does not change ownership of upstream work.
+Distributed under the [MIT license](LICENSE), including the original copyright and permission notice. Upstream and model attribution is collected in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Existing contributor metadata and dependency/model notices are preserved; the Aptlyra product name does not change ownership of upstream work.
+
+## Product identity and domain readiness
+
+Current product identity is Aptlyra; the interviewer is Lyra. English Groq Orpheus defaults to `hannah`, with private environment overrides retained and browser speech fallback preserved. See [voice audition](docs/voice-audition.md) and [branding, email, SEO and domain operations](docs/branding.md). The local folder, stable storage/source identifiers and legal attribution retain their existing names.
+
+### Durable interview execution
+
+Phase 8 connects planner-backed interviews to SQL-backed received claims, leased BullMQ execution, targeted retry, durable probes, report completion and idempotent SQL rewards. Reload/reconnect restores saved progress through owned REST. Apply migration 008 explicitly and share a private persistent audio staging volume across API/workers. Legacy scoring remains compatible, and missing approved scoring material still produces an abstention. See [runtime and recovery](docs/runtime-recovery.md). No provider invocation is promised to occur only once; committed grade/reward effects are protected against replay.

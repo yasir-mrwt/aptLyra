@@ -2,13 +2,13 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in TechVera, please report it privately rather than opening a public issue. Email the maintainer with a description of the issue and steps to reproduce it. Reports are reviewed promptly, and fixes are prioritized based on severity.
+If you discover a security vulnerability in Aptlyra, please report it privately rather than opening a public issue. Email the maintainer with a description of the issue and steps to reproduce it. Reports are reviewed promptly, and fixes are prioritized based on severity.
 
 Please do not disclose the vulnerability publicly until a fix has been released.
 
 ## Handling of Secrets
 
-TechVera integrates with several third-party services, each of which requires credentials. These credentials must never be committed to the repository.
+Aptlyra integrates with several third-party services, each of which requires credentials. These credentials must never be committed to the repository.
 
 - All `.env` files are excluded from version control through `.gitignore`.
 - Each service ships an `.env.example` that lists the required variable names with placeholder values only.

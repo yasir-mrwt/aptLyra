@@ -30,7 +30,7 @@ run the worker with the backend; a separate process uses the same code and contr
 
 ```mermaid
 flowchart LR
-    UI[React / Redux / Ava] -->|Owned REST commands and reads| API[Express orchestration]
+    UI[React / Redux / Lyra] -->|Owned REST commands and reads| API[Express orchestration]
     API -->|Authenticated Socket.IO notifications| UI
     API --> PG[(PostgreSQL + pgvector)]
     API --> Redis[(Redis / BullMQ / bounded caches)]
@@ -47,7 +47,7 @@ Phase 5 enables pgvector and an authenticated internal embedding endpoint.
 
 ## Target lifecycle and recovery
 
-| Stage | Synchronous boundary | Asynchronous work | Persisted authority / recovery | Ava and frontend |
+| Stage | Synchronous boundary | Asynchronous work | Persisted authority / recovery | Lyra and frontend |
 |---|---|---|---|---|
 | Setup | Validate owned resume, role/junior/topics/mode/count/time and consent; create session and job intent | None required before acknowledgement | Setup snapshot, request idempotency key, session revision | Idle → preparing; REST acknowledgement |
 | Plan/select | Return pending state; accept no answers yet | Embed/filter/retrieve, deterministic planner, optional grounded generation; validate complete plan | Versioned plan/items, retrieval trace and job attempt; recover expired lease | Preparing, honest availability/shortage message |
@@ -99,7 +99,7 @@ equal-weight results are labeled legacy scoring, not retroactively reinterpreted
 
 All six target categories require a recorded origin and provenance availability.
 For generated/no-evidence items that means explicit absence, not invented citations.
-Ava presents every category and can speak instructions; candidates may mute voice
+Lyra presents every category and can speak instructions; candidates may mute voice
 or use typed input. Text alternatives are required for the FYP.
 
 | Category | Candidate input / expected evidence | Evaluation | Deterministic checks | LLM role |
@@ -326,14 +326,14 @@ performance remain separate. Only unasked items may be replaced, preserving sele
 coverage and budget, recording a new revision/reason. An LLM may suggest a probe,
 but cannot rewrite the plan or validated selection constraints on its own.
 
-## Frontend and Ava direction
+## Frontend and Lyra direction
 
 Setup shows three roles, junior level, 1–4 competencies, difficulty, core mode,
 time/count and language where relevant. Company, resume and JD are optional toggles
 with permission/consent and availability messages. Show planned coverage, effective
 count and estimates before starting; a resume cannot silently enable a different mode.
 
-| Ava state | Meaning / controls |
+| Lyra state | Meaning / controls |
 |---|---|
 | Idle | Setup/ready; no claim that microphone is active |
 | Preparing | Plan or question voice pending; readable text and cancellation |
@@ -345,7 +345,7 @@ count and estimates before starting; a resume cannot silently enable a different
 | Completed | Read-only interview, report/export and next practice choice |
 | Error/retry | Explain operation failure, retain safe draft, retry or skip when allowed |
 
-Ava remains the SVG interviewer. It asks neutral technical questions, supports
+Lyra remains the SVG interviewer. It asks neutral technical questions, supports
 muting/text fallback, and describes actual progress. It does not infer emotions,
 promise correctness, flatter, expose reference answers mid-interview, or judge
 accent/personality. Functional behavior is integrated per phase; no Phase 2 UI edit.
@@ -372,7 +372,7 @@ Technical Interviewer's `backend/app/agents/planning_agent.py`,
 `backend/app/core/question_selector.py`, and `backend/app/rag/retriever.py` were
 studied read-only. Useful ideas are explicit sections/budgets, stable exclusions,
 adjacent-difficulty fallback, bounded source-bearing retrieval, and missing-index
-degradation. TechVera replaces role presets with junior competencies, empty-hit
+degradation. Aptlyra replaces role presets with junior competencies, empty-hit
 ambiguity with explicit reasons, filesystem/FAISS storage with PostgreSQL, and
 reference-native state with Express-owned REST/Socket.IO/SQL. No source files,
 assets, eight-metric rubric, SQLite/ORM, or 3D/voice stack were copied. Existing
@@ -412,3 +412,7 @@ CURRENTLY IMPLEMENTED: Express deterministic planner→owned relational preview�
 ## Phase 7 implementation boundary
 
 CURRENTLY IMPLEMENTED: the existing session pipeline now pins rubric/concept/reference versions, validates bounded FastAPI output, calculates the frozen 45/20/20/10/5 technical total in Express, and commits relational evaluation/evidence with the JSONB projection under the existing session lock. New confirmations opt in; legacy sessions retain their original policy. Feedback is shown after an answer, including confidence, scored/withheld status and concept judgments; hidden expected answers, reference excerpts and prompts stay private. The earlier proposed delayed-feedback behavior is not the Phase 7 runner contract. Operator draft/hash-bound review, provisional generation from approved retrieved references and append-only reevaluation are implemented. Durable operation/outbox execution is still deferred to Phase 8. See [rubric evaluation](rubric-evaluation.md) for gates, aggregation, coding and truthful corpus readiness.
+
+## Phase 8 implementation boundary
+
+The planned operation/outbox/lease/revision design now executes confirmed rubric-backed interviews on the existing Express/BullMQ stack. Runtime state is active → finishing → completed; received/STT/prepared/graded traces, probe reservations, report snapshots and reward idempotency are SQL-backed. React uses owned REST plus safe socket refresh hints. Existing legacy records stay readable with their original policy; idle older real rubric plans adopt on an owned write. Bounded shared-volume audio staging is separate from SQL artifacts. Refer to [runtime/recovery](runtime-recovery.md) for exact implemented behavior, retries, deletion, migration and legacy/volume limitations. No research/calibration, ranking, visual redesign or later hardening was implemented.
