@@ -252,7 +252,7 @@ const forgotPassword = asyncHandler(async (req: Request, res: Response) => {
             const token = crypto.randomBytes(32).toString("hex");
             await redis.set(resetTokenKey(sha256(token)), user._id, "EX", RESET_TTL_SECONDS);
 
-            const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173").split(",")[0].trim();
+            const frontendUrl = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:5173").split(",")[0].trim();
             const resetUrl = `${frontendUrl}/reset-password?token=${token}`;
 
             await emailService.sendPasswordResetEmail(user.email, user.name, resetUrl);

@@ -11,8 +11,10 @@
 
 import nodemailer from "nodemailer";
 import logger from "../utils/logger.js";
+import addressparser from "nodemailer/lib/addressparser/index.js";
+import {BRAND as IDENTITY} from "../config/brand.js";
 
-const BRAND = "TechVera";
+const BRAND = IDENTITY.name;
 const ACCENT = "#8b5cf6";
 
 const smtpConfigured = (): boolean =>
@@ -45,7 +47,7 @@ const layout = (title: string, bodyHtml: string): string => `
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#141416;border:1px solid #26262a;border-radius:16px;overflow:hidden;">
           <tr>
             <td style="padding:28px 32px;border-bottom:1px solid #26262a;">
-              <span style="display:inline-block;background:#ffffff;color:#000;font-weight:800;border-radius:8px;padding:4px 9px;font-size:14px;">P</span>
+              <span aria-label="${BRAND} monogram" style="display:inline-block;background:#ffffff;color:#000;font-weight:800;border-radius:8px;padding:4px 9px;font-size:14px;">${IDENTITY.initial}</span>
               <span style="color:#ffffff;font-weight:800;font-size:16px;margin-left:8px;letter-spacing:0.5px;">${BRAND}</span>
             </td>
           </tr>
@@ -68,6 +70,16 @@ const layout = (title: string, bodyHtml: string): string => `
   </body>
 </html>`;
 
+/** Preserve the configured sender mailbox, normalize only application display identity. */
+const sender = () => {
+  const configured=process.env.EMAIL_FROM || process.env.SMTP_USER || "";
+  const addresses=addressparser(configured,{flatten:true});
+  if(/[\r\n]/.test(configured) || addresses.length!==1 || !/^[^\s@<>]+@[^\s@<>]+$/.test(addresses[0].address)) {
+    throw new Error("Configure one valid sender mailbox in EMAIL_FROM or SMTP_USER");
+  }
+  return {name:BRAND,address:addresses[0].address};
+};
+
 const sendMail = async (to: string, subject: string, html: string, textFallback: string): Promise<void> => {
   if (!smtpConfigured()) {
     // Dev fallback — never block auth flows on missing SMTP config.
@@ -81,7 +93,7 @@ const sendMail = async (to: string, subject: string, html: string, textFallback:
   }
 
   await getTransporter().sendMail({
-    from: process.env.EMAIL_FROM || `"${BRAND}" <${process.env.SMTP_USER}>`,
+    from: sender(),
     to,
     subject,
     html,
@@ -109,18 +121,18 @@ export const emailService = {
 
   /** Sent once the account is verified/created. */
   async sendWelcomeEmail(to: string, name: string): Promise<void> {
-    const appUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const appUrl = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:5173").split(",")[0].trim();
     const html = layout(
       `Welcome to ${BRAND}, ${name}! 🎙️`,
       `<p style="color:#a1a1aa;font-size:14px;line-height:1.6;margin:0 0 24px 0;">
-         Your account is live. Ava — your AI interviewer — is ready when you are:
-         realistic voice interviews, live coding rounds, system-design whiteboards and instant feedback.
+         Your account is live. ${IDENTITY.interviewer} — your AI interviewer — is ready when you are.
+         Practice junior technical questions and receive evidence-grounded feedback when grading material is available.
        </p>
        <a href="${appUrl}" style="display:inline-block;background:#ffffff;color:#000;font-weight:700;font-size:14px;padding:12px 28px;border-radius:10px;text-decoration:none;">
          Start your first interview
        </a>`
     );
-    await sendMail(to, `Welcome to ${BRAND} — Ava is waiting 🎙️`, html, `Welcome to ${BRAND}, ${name}! Start your first interview: ${appUrl}`);
+    await sendMail(to, `Welcome to ${BRAND} — ${IDENTITY.interviewer} is waiting 🎙️`, html, `Welcome to ${BRAND}, ${name}! Practice with ${IDENTITY.interviewer}: ${appUrl}`);
   },
 
   /** Password reset link (15-minute validity). */
