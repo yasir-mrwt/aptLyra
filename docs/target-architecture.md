@@ -7,7 +7,7 @@ React/Vite/Redux → Express/TypeScript → FastAPI, PostgreSQL JSONB sessions, 
 caches/XP and BullMQ resume jobs, REST and authenticated Socket.IO updates. Questions
 and scores are generated through prompts. Interview work runs in the API process.
 Phase 3 supplies versioned migrations, taxonomy and preparatory knowledge, rubric,
-plan, evidence, embedding-metadata and operation/outbox tables. Phase 6 consumes Phase 5 retrieval for persisted deterministic question selection and preview/confirmation, described below. Confirmed originals use the existing runner; no durable interview jobs or new rubric/confidence computation exist. Reload reads an
+plan, evidence, embedding-metadata and operation/outbox tables. Phase 6 consumes Phase 5 retrieval for persisted deterministic question selection and preview/confirmation, described below. Confirmed originals use the existing runner. Phase 7 adds rubric/confidence computation below; durable interview jobs remain unimplemented. Reload reads an
 owned session over REST; current events have no durable revision/replay protocol.
 See [database schema](database-schema.md) and [migration policy](migrations.md).
 No Phase 3 user-facing behavior change; schema is preparatory.
@@ -241,7 +241,7 @@ reasons. Similarity alone cannot override licensing, role, or evidence quality.
 
 CURRENTLY IMPLEMENTED Phase 6 planner fallback order: exact filtered retrieval → adjacent junior difficulty with explicit
 reason → unchanged reviewed local seed for the selected competency → deterministic
-approved template labeled fallback → underfilled plan or setup correction. Phase 6 uses unchanged reviewed seed references as templates and never generates new fallback text. Company/date constraints remain exact; changing them requires an explicit new setup/preview. No acceptable selection evidence means a non-confirmable correction. Legacy evaluation remains separately labeled; grounded scoring/abstention belongs to Phase 7. Retrieval outage and no relevant hits have different reason codes.
+approved template labeled fallback → underfilled plan or setup correction. Phase 6 uses unchanged reviewed seed references as templates and never generates new fallback text. Company/date constraints remain exact; changing them requires an explicit new setup/preview. No acceptable selection evidence means a non-confirmable correction. Legacy evaluation remains separately labeled; Phase 7 grounded scoring/abstention is described below. Retrieval outage and no relevant hits have different reason codes.
 
 Design targets, **not measurements**: warm retrieval p95 ≤1 second including query
 embedding; planning p95 ≤5 seconds without generation; grounded generation/evaluation
@@ -389,8 +389,8 @@ distinguishes real reviewed artifacts/disposable imports from fictional test dat
 
 No candidate-facing Phase 4 behavior; reviewed corpus is preparatory for Phase 5/6.
 
-Planner selection and preview/confirmation are now implemented in Phase 6. Scoring and durable runtime integration remain PLANNED FOR LATER PHASE.
-Phase 5 retrieval is implemented internally and consumed by Phase 6 selection. No new model extraction or concept/rubric engine is activated. Backend owns every durable ingestion write; FastAPI has
+Planner selection and preview/confirmation are now implemented in Phase 6. Phase 7 scoring is implemented below. Durable runtime integration remains PLANNED FOR LATER PHASE.
+Phase 5 retrieval is implemented internally and consumed by Phase 6 selection. Phase 7 activates bounded grounded concept/rubric evaluation as described below. Backend owns every durable ingestion write; FastAPI has
 no new database access. Phase 2 remains the architecture source of truth.
 
 
@@ -407,4 +407,8 @@ No live interview behavior change in Phase 5; retrieval is ready for the Phase 6
 
 ## Phase 6 implementation boundary
 
-CURRENTLY IMPLEMENTED: Express deterministic planner→owned relational preview→confirmed server-selected JSONB originals→existing runner. FastAPI supplies embeddings and legacy AI computations; PostgreSQL owns all plan/retrieval writes. Frontend functional setup/preview and truthful planning states ship with this phase. Current score/report/follow-up behavior remains legacy; reviewed rubrics, evaluator confidence, durable operations and final avatar redesign remain later work. See [planner](interview-planner.md) for exact policies and compatibility. The service ownership/design above remains the frozen target; it does not claim future execution exists.
+CURRENTLY IMPLEMENTED: Express deterministic planner→owned relational preview→confirmed server-selected JSONB originals→existing runner. FastAPI supplies embeddings and legacy AI computations; PostgreSQL owns all plan/retrieval writes. Frontend functional setup/preview and truthful planning states ship with this phase. Previously confirmed sessions retain legacy scores; Phase 7 adds rubric evaluation/confidence to new confirmations below. Durable operations and final avatar redesign remain later work. See [planner](interview-planner.md) for exact policies and compatibility. The service ownership/design above remains the frozen target; it does not claim future execution exists.
+
+## Phase 7 implementation boundary
+
+CURRENTLY IMPLEMENTED: the existing session pipeline now pins rubric/concept/reference versions, validates bounded FastAPI output, calculates the frozen 45/20/20/10/5 technical total in Express, and commits relational evaluation/evidence with the JSONB projection under the existing session lock. New confirmations opt in; legacy sessions retain their original policy. Feedback is shown after an answer, including confidence, scored/withheld status and concept judgments; hidden expected answers, reference excerpts and prompts stay private. The earlier proposed delayed-feedback behavior is not the Phase 7 runner contract. Operator draft/hash-bound review, provisional generation from approved retrieved references and append-only reevaluation are implemented. Durable operation/outbox execution is still deferred to Phase 8. See [rubric evaluation](rubric-evaluation.md) for gates, aggregation, coding and truthful corpus readiness.

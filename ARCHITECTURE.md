@@ -17,7 +17,7 @@ still use Phase 1 JSONB/scoring/background work. Startup verifies the old bootst
 knowledge migrations are explicit. No Phase 3 user-facing behavior change; schema
 is preparatory. See [database schema](docs/database-schema.md) and
 [migration operations](docs/migrations.md). Phase 3 itself enabled no ingestion/model/retrieval execution; Phases 4–5 now add
-editorial ingestion and internal retrieval. Phase 6 now implements the planner below; evaluator and durable executor remain later work.
+editorial ingestion and internal retrieval. Phase 6 implements the planner; Phase 7 adds rubric evaluation below. Durable interview execution remains later work.
 
 ## PLANNED FOR LATER PHASE: frozen FYP architecture
 
@@ -253,4 +253,8 @@ No live interview behavior change in Phase 5; retrieval is ready for the Phase 6
 
 ## CURRENTLY IMPLEMENTED: Phase 6 planner
 
-The dashboard now uses deterministic Express planning over Phase 5 retrieval, owned persisted previews and explicit confirmation. Relational immutable plan/item/evidence snapshots link to sessions; confirmation projects server-selected originals into the existing JSONB runner. New setup is junior/scoped; old sessions and routes remain compatible. Evaluation/follow-ups/reports are still legacy, visibly labeled. No rubric scoring, evaluator confidence or durable interview worker is implemented. See [planner](docs/interview-planner.md) for budgets, constraints, availability checks, frontend states and legal/compatibility audit.
+The dashboard now uses deterministic Express planning over Phase 5 retrieval, owned persisted previews and explicit confirmation. Relational immutable plan/item/evidence snapshots link to sessions; confirmation projects server-selected originals into the existing JSONB runner. New setup is junior/scoped; old sessions and routes remain compatible. Previously confirmed sessions retain legacy evaluation. Phase 7 adds rubric scoring/confidence for newly confirmed sessions, as described below. No durable interview worker is implemented. See [planner](docs/interview-planner.md) for budgets, constraints, availability checks, frontend states and legal/compatibility audit.
+
+## CURRENTLY IMPLEMENTED: Phase 7 evaluation
+
+Fresh planner confirmations select `rubric-v1`; legacy sessions retain historical scoring. Express owns immutable draft/hash review, versioned concept/rubric/attempt/evaluation/evidence persistence, deterministic five-dimension scoring and reviewed original aggregation. FastAPI provides bounded strict computation, separate evidence confidence and abstention. Frontend runner, review, PDF and analytics distinguish reviewed/provisional/abstained/legacy. Coding uses exact-code JDoodle runtime facts with honest test limitations. Concept gaps may drive at most two nonrecursive provisional probes. Migration 007 extends the existing schema; no new database/model/queue architecture. See [implemented scoring and operator readiness](docs/rubric-evaluation.md). No human reference/rubric review is inferred from seed question approval; the configured corpus currently abstains. Durable recovery and research remain later phases.

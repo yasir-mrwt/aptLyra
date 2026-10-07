@@ -141,3 +141,7 @@ embeddings is separate from DDL and publication. See [retrieval](retrieval.md).
 ## Phase 6 migration
 
 `006_interview_planner.sql` is additive owned plan/session linkage, immutable setup/provenance snapshots and planner-specific invariant guards. Fresh and adopted databases apply six migrations; reapplication is a no-op. Failure-fixture migration is now 007. Migration checksums 001–005 remain unchanged. Rollout still requires the explicit reviewed migration command; no production/staging migration is performed. See [schema](database-schema.md) and [planner](interview-planner.md).
+
+## Phase 7 migration
+
+After the tested 001–006 baseline, explicitly apply `007_rubric_evaluation.sql` using `npm run db:migrate` (production/staging requires `--apply`). It adds immutable rubric draft/hash human approval records, session policy/summary, attempt grading/probe pins, grade classification/feedback/objective metadata and owned code execution evidence. Deferred and immediate constraints check review, confidence, deterministic five-dimension totals, complete concept evidence and consecutive reevaluation lineage. Default legacy policy preserves existing sessions. No corpus, seed, vector generation, permission or review is changed by the migration. Back up/review before release; no destructive rollback/reset is provided. Verify schema plus `test:evaluation` in the disposable fixture environment. [Review workflow](rubric-evaluation.md).

@@ -12,13 +12,13 @@ TechVera is an AI technical interview preparation platform for final-year studen
 - Internal semantic retrieval using pinned local CPU embeddings and PostgreSQL/pgvector. Source availability, model compatibility and corpus completeness are checked before use.
 - Existing SVG interviewer, cloud/browser voice, code and diagram tools, legacy technical/delivery feedback and PDF reports. Provider-dependent features require configuration.
 
-Planning is evidence-backed; **answer evaluation still uses the legacy evaluator**. No reviewed-rubric scoring or evaluator-confidence computation is enabled. Planning time is an estimate, including a four-minute probe reserve, rather than a runtime deadline.
+Planning is evidence-backed. Newly confirmed interviews use **rubric evaluation with separate evaluator confidence**: reviewed or provisional scores require approved grading evidence; insufficient grounding withholds the score. Previously confirmed and historical sessions retain legacy grading. See [rubric operations and readiness](docs/rubric-evaluation.md). Planning time is an estimate, including a four-minute probe reserve, rather than a runtime deadline.
 
 The current corpus has no eligible company reports or reviewed technical-reference/rubric bank. Company/date choices appear only when supporting evidence exists. Resume/JD personalization is unavailable in the planner; design-lite is optional in mixed mode. Coding coverage varies by competency, so setup may need correction. Existing sessions retain their legacy behavior.
 
 ## PLANNED
 
-Reviewed/provisional rubric evaluation and separate evaluator confidence; durable interview operations and recovery; complete evidence-linked reports; final interviewer/UI polish; release security, research evaluation and deployment hardening. See the [implementation roadmap](docs/implementation-roadmap.md). These capabilities are not claimed as implemented.
+Durable interview operations and recovery; complete evidence-linked reports; final interviewer/UI polish; release security, research evaluation and deployment hardening. See the [implementation roadmap](docs/implementation-roadmap.md). These capabilities are not claimed as implemented.
 
 ## Architecture and stack
 
