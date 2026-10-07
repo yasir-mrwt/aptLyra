@@ -92,6 +92,22 @@ def test_tts_success_returns_actual_wav(client, monkeypatch):
     assert response.content == audio
 
 
+def test_lyra_voice_defaults_to_hannah_and_preserves_overrides(client, monkeypatch):
+    monkeypatch.delenv("GROQ_TTS_VOICE", raising=False)
+    monkeypatch.delenv("GROQ_TTS_MODEL", raising=False)
+    calls = []
+    def post(*args, **kwargs):
+        calls.append(kwargs["json"])
+        return ProviderResponse(content=wav())
+    monkeypatch.setattr(requests, "post", post)
+    assert client.post("/speech/tts", json={"text": "Welcome. I'm Lyra."}).status_code == 200
+    assert calls[-1]["voice"] == "hannah"
+    assert calls[-1]["model"] == "canopylabs/orpheus-v1-english"
+    monkeypatch.setenv("GROQ_TTS_VOICE", "autumn")
+    assert client.post("/speech/tts", json={"text": "Take your time."}).status_code == 200
+    assert calls[-1]["voice"] == "autumn"
+
+
 @pytest.mark.parametrize("content", [b"", b"not audio" * 10])
 def test_provider_200_without_wav_is_failure(client, monkeypatch, content):
     monkeypatch.setattr(requests, "post", lambda *a, **k: ProviderResponse(content=content))

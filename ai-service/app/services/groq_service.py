@@ -430,7 +430,7 @@ GROQ_TTS_URL = "https://api.groq.com/openai/v1/audio/speech"
 # Orpheus TTS (Canopy Labs) — requires one-time terms acceptance in the Groq
 # console: https://console.groq.com/playground?model=canopylabs/orpheus-v1-english
 DEFAULT_TTS_MODEL = "canopylabs/orpheus-v1-english"
-DEFAULT_TTS_VOICE = "autumn"  # female interviewer voice (also: diana, hannah; male: austin, daniel, troy)
+DEFAULT_TTS_VOICE = "hannah"  # Lyra: audition calm professional delivery; env override retained.
 
 
 def call_groq_tts(text: str, voice: str = None, api_key: str = None) -> bytes:

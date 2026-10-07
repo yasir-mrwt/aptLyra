@@ -1,5 +1,5 @@
 """
-TechVera AI Microservice - Entry Point
+Aptlyra AI Microservice - Entry Point
 Main entry for the modular AI service using FastAPI.
 
 ARCHITECTURE OVERVIEW:
@@ -61,7 +61,7 @@ def create_app() -> FastAPI:
     @returns: FastAPI application object.
     """
     app = FastAPI(
-        title="TechVera AI Microservice",
+        title="Aptlyra AI Microservice",
         description="Refactored microservice for generating and evaluating interview questions.",
         version="2.0.0",
         lifespan=lifespan,
@@ -107,7 +107,7 @@ def create_app() -> FastAPI:
     @app.get("/", tags=["Health"])
     async def root():
         """Basic health check endpoint."""
-        return {"message": "TechVera AI Microservice is running (Modular Version)"}
+        return {"message": "Aptlyra AI Microservice is running (Modular Version)"}
 
     @app.get("/health", tags=["Health"])
     async def health():

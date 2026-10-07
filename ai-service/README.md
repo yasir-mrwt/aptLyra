@@ -1,6 +1,6 @@
-# TechVera AI Service 🤖
+# Aptlyra AI Service 🤖
 
-The AI microservice backend for TechVera. This service specialized in handling heavy-duty AI tasks, including audio transcription and generative interview intelligence, while maintaining a minimal resource footprint.
+The AI microservice backend for Aptlyra. This service specialized in handling heavy-duty AI tasks, including audio transcription and generative interview intelligence, while maintaining a minimal resource footprint.
 
 ## 🚀 Capabilities
 
