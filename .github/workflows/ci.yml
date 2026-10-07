@@ -1,4 +1,4 @@
-name: AI Interviewer CI/CD
+name: Aptlyra CI/CD
 
 on:
   push:
@@ -56,6 +56,11 @@ jobs:
     - run: npm run test:seed
     - run: npm run test:retrieval
     - run: npm run test:planner
+    - run: npm run test:evaluation
+    - run: npm run test:durable
+    - run: npm run test:e2e
+    - run: npm run test:persistence
+    - run: npm run test:smoke
     - run: npm run test:pgvector-unavailable
 
   backend-checks:

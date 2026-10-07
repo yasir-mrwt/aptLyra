@@ -61,7 +61,7 @@ before(async()=>{
   process.env.DATABASE_URL=base+database; process.env.DATABASE_SSL='false'; process.env.NODE_ENV='test';
   ({pool,query}=await import('../dist/config/db.js'));
   ({ingestionRepository:r}=await import('../dist/repositories/ingestionRepository.js'));
-  assert.equal((await runMigrations(pool)).applied.length,7);
+  assert.equal((await runMigrations(pool)).applied.length,8);
   await r.registerReviewer(actor,'FICTIONAL TEST EDITOR','fixture');
   const path=join(directory,'base.json'); await writeFile(path,JSON.stringify(packet([doc()])));
   contract=contractFor([path]); sourceId=await r.registerSource('base-fixture','Fixture',contract);

@@ -1,5 +1,5 @@
 {
-  "name": "techvera-backend",
+  "name": "aptlyra-backend",
   "version": "1.0.0",
   "description": "",
   "license": "MIT",
@@ -40,7 +40,11 @@
     "test:planner": "node --test tests/planner.test.mjs",
     "rubrics": "node dist/evaluation/cli.js",
     "pretest:evaluation": "npm run build",
-    "test:evaluation": "node --test tests/evaluation.test.mjs"
+    "test:evaluation": "node --test tests/evaluation.test.mjs",
+    "pretest:durable": "npm run build",
+    "test:durable": "node --test tests/durable.test.mjs",
+    "pretest:e2e": "npm run build",
+    "test:e2e": "node tests/runtime-e2e.mjs"
   },
   "dependencies": {
     "@types/bcrypt": "^6.0.0",

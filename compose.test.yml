@@ -1,4 +1,4 @@
-name: techvera-baseline
+name: aptlyra-baseline
 services:
   postgres:
     image: pgvector/pgvector:0.8.2-pg16
