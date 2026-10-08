@@ -33,7 +33,7 @@ after(async()=>{
   finally{await admin.end();}
 });
 test('migration 009 applies and consented submissions remain quarantined and owner-scoped',async()=>{
-  assert.equal(migrations.applied.length,12);
+  assert.ok(migrations.applied.includes('009_dynamic_interview_intelligence.sql'));
   record=await service.create(first,{role:'Backend Developer',occurredOn:null,roundType:'technical',topics:['SQL indexing'],
     questions:['How does an index affect a query plan?'],practiceConsent:true,rightToShare:true,anonymizedResearchConsent:false});
   assert.equal(record.state,'quarantined');
