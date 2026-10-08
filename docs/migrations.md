@@ -162,3 +162,5 @@ Validate schema, persistence, planner, retrieval, ingestion, evaluation, smoke, 
 ## Phase 9 migration — 012
 
 `012_admin_rbac.sql` adds the `users.app_role` role contract, preserves enabled linked human reviewers, creates the single-owner guard and an append-only role-change audit. It never promotes a first registered account; initial ownership is a separate explicit operator action. Migrations 001–011 are unchanged. Migration 012 was validated only on temporary databases created by the disposable Compose PostgreSQL fixture; it was not applied to any configured or cloud database. See [admin RBAC](admin-rbac.md).
+
+`013_ai_editorial_review.sql` adds append-only, exact-question-hash-bound AI editorial proposal versions and records proposal events. It does not approve or publish candidate questions. Migration 013 was validated only in disposable local PostgreSQL test databases; no configured database was changed.

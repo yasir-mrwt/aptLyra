@@ -7,7 +7,8 @@ for(const key of ['DATABASE_URL','NEON_DATABASE_URL','REDIS_URL','UPSTASH_REDIS_
 const fixtureUrl='postgresql://techvera_test:techvera_local_fixture@127.0.0.1:15432/techvera_test';
 const admin=new pg.Pool({connectionString:fixtureUrl,ssl:false}),dbName=`aptlyra_content_e2e_${randomUUID().replaceAll('-','')}`;
 const userId=randomUUID(),reviewerId='phase85-e2e-reviewer';
-let pool,query,submissions,editorial,aiService,sessionRepository,originalExtract,originalDraft;
+process.env.REDIS_URL='redis://127.0.0.1:16379/14';
+let pool,query,submissions,editorial,aiService,sessionRepository,originalExtract,originalDraft,originalReview;
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const successEmbedder={async embed(texts){return {modelId:'sentence-transformers/paraphrase-MiniLM-L3-v2',modelRevision:'4ca70771034acceecb2e72475f72050fcdde4ddc',dimension:384,normalization:'l2',embeddingVersion:'onnx-mean-l2-v1',vectors:texts.map(()=>[1,...Array(383).fill(0)]),processingMs:1};}};
 const failedEmbedder={async embed(){throw new Error('fixture embedding outage');}};
@@ -22,13 +23,13 @@ before(async()=>{
   ({contentEditorial:editorial}=await import('../dist/contentIntelligence/editorial.js'));
   ({aiService}=await import('../dist/services/aiService.js'));
   ({sessionRepository}=await import('../dist/models/Session.js'));
-  originalExtract=aiService.extractInterviewExperience;originalDraft=aiService.draftRubric;
+  originalExtract=aiService.extractInterviewExperience;originalDraft=aiService.draftRubric;originalReview=aiService.reviewEditorialCandidate;
   await query("INSERT INTO users(id,name,email,app_role) VALUES($1,$2,$3,'reviewer')",[userId,'Disposable editorial fixture','editorial-fixture@example.invalid']);
   await query("INSERT INTO ingestion_reviewers(id,display_name,kind,user_id) VALUES($1,'Disposable human reviewer','human',$2)",[reviewerId,userId]);
 });
 
 after(async()=>{
-  try{if(aiService){aiService.extractInterviewExperience=originalExtract;aiService.draftRubric=originalDraft;}if(pool)await pool.end();
+  try{if(aiService){aiService.extractInterviewExperience=originalExtract;aiService.draftRubric=originalDraft;aiService.reviewEditorialCandidate=originalReview;}if(pool)await pool.end();
     await admin.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);}
   finally{await admin.end();delete process.env.DATABASE_URL;delete process.env.DATABASE_SSL;delete process.env.INTERNAL_API_KEY;delete process.env.AI_SERVICE_URL;}
 });
@@ -50,6 +51,20 @@ test('quarantine → extraction → human reviews → technical grounding/rubric
   assert.equal(reExtraction.candidateIds.length,0);
   assert.equal((await query("SELECT count(*)::int AS n FROM ingestion_review_events WHERE record_id=$1 AND action='re-extraction-requested'",[submitted.id])).rows[0].n,1);
   const candidates=(await query('SELECT id,content_hash FROM ingestion_candidates WHERE record_id=$1 ORDER BY id',[submitted.id])).rows;
+  aiService.reviewEditorialCandidate=async()=>({contractVersion:'editorial-review-v1',relevance:'relevant',verdict:'recommend-edit',taxonomy:'dbms-sql.transactions-indexes',
+    category:'sql',difficulty:'standard',duplicateWarning:false,wordingIssues:['Could ask for a concrete trade-off'],correctedQuestion:'What trade-offs come with adding a database index?',
+    technicalCorrectness:'uncertain',expectedConcepts:['faster lookups','write and storage cost'],evidenceStatus:'weak',evidenceSummary:'Experience reports are weak technical evidence.',
+    rubricGuidance:['Assess lookup benefit and write cost.'],confidence:'high',flags:['weak-evidence','needs-human-review']});
+  const firstPacket=await editorial.reviewCandidate(userId,candidates[0].id,candidates[0].content_hash);
+  const secondPacket=await editorial.reviewCandidate(userId,candidates[0].id,candidates[0].content_hash);
+  assert.equal(firstPacket.aiApproved,false);assert.equal(firstPacket.version,1);assert.equal(secondPacket.version,2);
+  assert.equal(firstPacket.packet.confidence,'medium','fresh content must never carry high AI confidence');
+  assert.equal(firstPacket.packet.referenceStatus,'no-reviewed-reference');
+  assert.notEqual(firstPacket.id,secondPacket.id);
+  assert.equal((await query('SELECT state FROM ingestion_candidates WHERE id=$1',[candidates[0].id])).rows[0].state,'review_required');
+  assert.equal((await query('SELECT count(*)::int AS n FROM candidate_ai_review_packets WHERE candidate_id=$1',[candidates[0].id])).rows[0].n,2);
+  await assert.rejects(()=>editorial.reviewCandidate(userId,candidates[0].id,'f'.repeat(64)),/review-hash-mismatch/);
+  await assert.rejects(()=>query("UPDATE candidate_ai_review_packets SET version=3 WHERE candidate_id=$1",[candidates[0].id]),/append-only/);
   for(const candidate of candidates)await editorial.approveQuestion(userId,candidate.id,candidate.content_hash);
   assert.equal((await query('SELECT state FROM ingestion_records WHERE id=$1',[submitted.id])).rows[0].state,'approved');
 

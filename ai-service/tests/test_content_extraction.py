@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 import main
 
-from app.api.content_extraction import Request, extract, validate_result
+from app.api.content_extraction import Request, extract, validate_result, ReviewRequest, review, validate_review_packet
 
 
 def request():
@@ -63,3 +63,58 @@ def test_internal_validation_error_does_not_echo_untrusted_submission(monkeypatc
     assert response.status_code==422
     assert raw not in response.text
     assert response.json()=={"detail":{"code":"invalid_input"}}
+
+
+def review_request(**overrides):
+    value={"question":"What does a SQL index help a database do?","allowedCompetencies":["dbms-sql.queries"],
+        "allowedCategories":["conceptual-oral","sql"],"evidenceText":"They asked about indexes.","similarQuestions":[]}
+    value.update(overrides)
+    return ReviewRequest(**value)
+
+
+def packet(**overrides):
+    value={"contractVersion":"editorial-review-v1","relevance":"relevant","verdict":"recommend-approve",
+        "taxonomy":"dbms-sql.queries","category":"sql","difficulty":"standard","duplicateWarning":False,
+        "wordingIssues":[],"correctedQuestion":None,"technicalCorrectness":"supported","expectedConcepts":["Indexes can reduce rows scanned"],
+        "evidenceStatus":"weak","evidenceSummary":"Interview wording is a weak signal, not technical proof.",
+        "rubricGuidance":["Explain lookup benefits and write/update costs."],"confidence":"medium","flags":["weak-evidence","needs-human-review"]}
+    value.update(overrides)
+    return value
+
+
+def test_ai_review_returns_valid_proposal_and_never_approves():
+    proposed=packet()
+    with patch("app.api.content_extraction.call_groq",return_value=json.dumps(proposed)) as call:
+        result=review(review_request())
+    assert result["contractVersion"]=="editorial-review-v1"
+    assert result["flags"][-1]=="needs-human-review"
+    assert call.call_args.kwargs["temperature"]==0
+    assert "UNTRUSTED DATA" in call.call_args.args[0]
+
+
+def test_irrelevant_question_must_recommend_rejection_and_duplicate_is_flagged():
+    request=review_request()
+    assert validate_review_packet(packet(relevance="irrelevant",verdict="recommend-reject",flags=["irrelevant","needs-human-review"]),request)
+    duplicate=validate_review_packet(packet(duplicateWarning=True,flags=["duplicate","needs-human-review"]),request)
+    assert duplicate.duplicateWarning is True
+    with pytest.raises(ValueError):
+        validate_review_packet(packet(relevance="irrelevant"),request)
+
+
+def test_ambiguous_or_suspicious_question_gets_a_human_edit_proposal():
+    result=validate_review_packet(packet(verdict="recommend-edit",technicalCorrectness="suspicious",
+        correctedQuestion="What trade-offs can an index introduce?",wordingIssues=["The original wording is ambiguous."],
+        flags=["ambiguous","technically-suspicious","needs-human-review"]),review_request())
+    assert result.verdict=="recommend-edit"
+    assert result.correctedQuestion
+    with pytest.raises(ValueError):
+        validate_review_packet(packet(approved=True),review_request())
+    with pytest.raises(ValueError):
+        validate_review_packet(packet(technicalCorrectness="suspicious",verdict="recommend-approve"),review_request())
+
+
+def test_review_rejects_unapproved_taxonomy_and_missing_human_review_flag():
+    with pytest.raises(ValueError):
+        validate_review_packet(packet(taxonomy="invented.taxonomy"),review_request())
+    with pytest.raises(ValueError):
+        validate_review_packet(packet(flags=["weak-evidence"]),review_request())

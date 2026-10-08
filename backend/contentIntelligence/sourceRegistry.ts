@@ -28,7 +28,10 @@ async function reviewer(userId:string){const r=(await query(`SELECT r.id,r.displ
 const sourceSelect=`SELECT s.id,s.title AS name,s.source_type,s.origin AS base_url,s.terms_url,s.permission_basis,s.permission_status,s.review_status,s.permission_evidence,
   s.attribution,s.reviewed_by,s.reviewed_at,s.state,s.allowed_scope,s.full_text_storage,s.derived_facts_storage,s.model_processing_allowed,s.raw_retention,
   s.collection_interval_minutes,s.last_collection_at,s.last_success_at,s.last_failure_code,s.last_failure_category,s.next_due_at,s.collection_cursor,s.source_health,s.withdrawn_at,s.withdrawal_reason,
-  s.permission_evidence_hash,s.permission_reviewed_hash,s.permission_expires_at,a.adapter_id
+  s.permission_evidence_hash,s.permission_reviewed_hash,s.permission_expires_at,a.adapter_id,
+  (SELECT jsonb_build_object('status',r.status,'discovered',r.discovered_count,'imported',r.imported_count,'duplicates',r.duplicate_count,
+    'quarantined',r.quarantined_count,'rejected',r.rejected_count,'errorCategory',r.safe_error_category,'completedAt',r.completed_at)
+    FROM source_collection_runs r WHERE r.source_id=s.id ORDER BY r.created_at DESC LIMIT 1) AS last_safe_result
   FROM sources s LEFT JOIN ingestion_adapters a ON a.source_id=s.id`;
 export const sourceRegistry={
   async list(userId:string){await reviewer(userId);return (await query(`${sourceSelect} ORDER BY s.created_at DESC LIMIT 200`)).rows;},

@@ -77,6 +77,10 @@ export const aiService = {
     const response=await fetchWithRetry(`${API_SERVICE_URL}/internal/content/extract`,{method:"POST",headers:{"Content-Type":"application/json","X-API-Key":process.env.INTERNAL_API_KEY || ""},body:JSON.stringify(input)},1);
     if(!response.ok)throw await providerError(response);return response.json();
   },
+  async reviewEditorialCandidate(input: {question:string;allowedCompetencies:string[];allowedCategories:string[];evidenceText:string|null;similarQuestions:string[]}): Promise<unknown> {
+    const response=await fetchWithRetry(`${API_SERVICE_URL}/internal/content/review`,{method:"POST",headers:{"Content-Type":"application/json","X-API-Key":process.env.INTERNAL_API_KEY || ""},body:JSON.stringify(input)},1);
+    if(!response.ok)throw await providerError(response);return response.json();
+  },
   async evaluateRubric(input: import("../evaluation/contracts.js").EvaluationInput): Promise<unknown> {
     const response=await fetchWithRetry(`${API_SERVICE_URL}/internal/rubrics/evaluate`,{method:"POST",headers:{"Content-Type":"application/json","X-API-Key":process.env.INTERNAL_API_KEY || ""},body:JSON.stringify(input)},1);
     if(!response.ok)throw await providerError(response);return response.json();

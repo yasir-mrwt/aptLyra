@@ -106,12 +106,75 @@ export const contentEditorial={
       return {recordId,candidateIds:created,aiApproved:false};
       });
   },
+  async reviewCandidate(userId:string,candidateId:string,expectedHash:string){
+    const reviewer=await reviewerFor(userId);
+    if(!uuid.test(candidateId)||!/^[a-f0-9]{64}$/.test(expectedHash))fail("invalid-id");
+    return withDatabaseLock(`candidate-ai-review:${candidateId}`,async()=>{
+      const candidate=(await query(`SELECT c.id,c.state,c.specification,c.content_hash,c.duplicate_links,c.extraction_metadata,c.question_version_id,
+          (SELECT ready.publication_class FROM content_question_readiness ready WHERE ready.question_version_id=c.question_version_id) AS publication_class,
+          r.id AS record_id,r.source_id,r.document_version_id,v.normalized_text,v.title AS source_title,
+          s.source_type,s.model_processing_allowed,e.ai_processing_consent
+        FROM ingestion_candidates c JOIN ingestion_records r ON r.id=c.record_id JOIN sources s ON s.id=r.source_id
+        LEFT JOIN source_document_versions v ON v.id=r.document_version_id
+        LEFT JOIN interview_experience_records e ON e.document_version_id=r.document_version_id
+        WHERE c.id=$1 FOR UPDATE OF c,r,s`,[candidateId])).rows[0];
+      if(!candidate||candidate.content_hash!==expectedHash)fail("review-hash-mismatch");
+      if(!["review_required","approved","published"].includes(candidate.state))fail("candidate-not-reviewable");
+      const question=String(candidate.specification?.text||"");
+      if(!question||Buffer.byteLength(question)>1000)fail("candidate-not-reviewable");
+      const eligibleReferences=candidate.question_version_id?(await query(`SELECT count(*)::int AS count FROM question_technical_references tr
+        JOIN source_chunks c ON c.id=tr.chunk_id JOIN source_document_versions v ON v.id=c.document_version_id
+        JOIN source_documents d ON d.id=v.document_id JOIN sources s ON s.id=d.source_id
+        WHERE tr.question_version_id=$1 AND tr.state='approved' AND c.status='active' AND v.status='published'
+          AND v.content_hash=tr.source_version_hash AND v.quality='technical-reference' AND v.permission_status='permitted'
+          AND v.review_status='approved' AND v.pii_status='clear' AND v.confidentiality_status='clear'
+          AND s.state='enabled' AND s.permission_status='permitted' AND s.review_status='approved'
+          AND s.permission_evidence_hash=tr.permission_hash AND s.withdrawn_at IS NULL`,[candidate.question_version_id])).rows[0].count:0;
+      const competencies=await knowledgeRepository.listCompetencies("junior-se-v1");
+      const allowedCompetencies=competencies.filter((item:any)=>item.kind==="child"&&item.status==="active").map((item:any)=>item.id);
+      const duplicateLinks=Array.isArray(candidate.duplicate_links)?candidate.duplicate_links:[];
+      const similarIds=[...new Set<string>(duplicateLinks.map((link:any)=>String(link.candidateId||"")).filter((id:string)=>uuid.test(id)))].slice(0,10);
+      const similarRows=similarIds.length?(await query("SELECT id,specification FROM ingestion_candidates WHERE id=ANY($1::uuid[])",[similarIds])).rows:[];
+      // Interview reports are not technical evidence. Only send explicitly model-permitted source excerpts.
+      const evidenceText=candidate.model_processing_allowed&&candidate.ai_processing_consent
+        ?String(candidate.extraction_metadata?.evidenceText||"").slice(0,1000)||null:null;
+      const packet=await aiService.reviewEditorialCandidate({question,allowedCompetencies,allowedCategories:[...categories],evidenceText,
+        similarQuestions:similarRows.map((row:any)=>String(row.specification?.text||"").slice(0,1000))}) as any;
+      const flags=["irrelevant","ambiguous","duplicate","technically-suspicious","weak-evidence","needs-human-review"];
+      if(packet?.contractVersion!=="editorial-review-v1"||!(["relevant","borderline","irrelevant"].includes(packet.relevance))||
+        !(["recommend-approve","recommend-edit","recommend-reject"].includes(packet.verdict))||!allowedCompetencies.includes(packet.taxonomy)||
+        !categories.includes(packet.category)||!difficulties.includes(packet.difficulty)||typeof packet.duplicateWarning!=="boolean"||
+        !Array.isArray(packet.wordingIssues)||packet.wordingIssues.length>8||
+        !(packet.correctedQuestion===null||typeof packet.correctedQuestion==="string"&&packet.correctedQuestion.length<=1000)||
+        !(["supported","uncertain","suspicious"].includes(packet.technicalCorrectness))||!Array.isArray(packet.expectedConcepts)||
+        packet.expectedConcepts.length<1||packet.expectedConcepts.length>12||!(["present","weak","missing"].includes(packet.evidenceStatus))||
+        typeof packet.evidenceSummary!=="string"||packet.evidenceSummary.length>500||!Array.isArray(packet.rubricGuidance)||packet.rubricGuidance.length>12||
+        !(["low","medium","high"].includes(packet.confidence))||!Array.isArray(packet.flags)||packet.flags.some((flag:string)=>!flags.includes(flag))||
+        !packet.flags.includes("needs-human-review")||(packet.relevance==="irrelevant"&&packet.verdict!=="recommend-reject"))fail("invalid-review-output");
+      // Reference state is calculated from reviewed source permissions, never trusted from the model.
+      packet.referenceStatus=eligibleReferences>0?"eligible-reviewed-reference":"no-reviewed-reference";
+      packet.eligibleReferenceCount=eligibleReferences;
+      packet.taxonomyRoot=competencies.find((item:any)=>item.id===packet.taxonomy)?.parent_id||null;
+      if(candidate.publication_class!=="reviewed/scoring-ready"&&packet.confidence==="high")packet.confidence="medium";
+      const packetHash=sha256(JSON.stringify(packet));
+      const prior=(await query("SELECT COALESCE(max(version),0)::int AS version FROM candidate_ai_review_packets WHERE candidate_id=$1 AND content_hash=$2",[candidateId,expectedHash])).rows[0].version;
+      const row=(await query(`INSERT INTO candidate_ai_review_packets(id,candidate_id,content_hash,packet_hash,version,contract_version,packet,created_by)
+        VALUES($1,$2,$3,$4,$5,'editorial-review-v1',$6,$7) RETURNING id,version,packet_hash,created_at`,
+        [randomUUID(),candidateId,expectedHash,packetHash,prior+1,JSON.stringify(packet),userId])).rows[0];
+      if(candidate.source_id)await query(`INSERT INTO ingestion_review_events(id,source_id,record_id,candidate_id,reviewer_id,action,content_hash,reason_code,event_metadata)
+        VALUES($1,$2,$3,$4,$5,'ai-review-proposed',$6,'human-review-required',$7)`,[randomUUID(),candidate.source_id,candidate.record_id,candidateId,reviewer.id,expectedHash,
+        JSON.stringify({packetId:row.id,packetHash:row.packet_hash,version:row.version,aiApproved:false})]);
+      return {...row,packet,aiApproved:false};
+    });
+  },
   async candidateQueue(userId:string){
     await reviewerFor(userId);
     return (await query(`SELECT c.id AS candidate_id,c.state,c.specification,c.content_hash,c.derivation_type,c.extraction_contract,c.confidence,c.extraction_metadata,
       c.evidence_start,c.evidence_end,c.duplicate_links,c.duplicate_of,r.id AS record_id,r.state AS record_state,r.expires_at,
       v.normalized_text,s.id AS source_id,s.title AS source_name,s.source_type,s.origin,s.permission_status,s.review_status,
-      e.company_label,e.role,e.occurred_on,e.round_type,e.topics
+      e.company_label,e.role,e.occurred_on,e.round_type,e.topics,
+      (SELECT jsonb_build_object('id',p.id,'version',p.version,'hash',p.packet_hash,'createdAt',p.created_at,'packet',p.packet)
+        FROM candidate_ai_review_packets p WHERE p.candidate_id=c.id AND p.content_hash=c.content_hash ORDER BY p.version DESC LIMIT 1) AS ai_review
       FROM ingestion_candidates c JOIN ingestion_records r ON r.id=c.record_id
       JOIN sources s ON s.id=r.source_id LEFT JOIN source_document_versions v ON v.id=r.document_version_id
       LEFT JOIN interview_experience_records e ON e.document_version_id=r.document_version_id
@@ -327,11 +390,14 @@ export const contentEditorial={
   },
   async seedReview(userId:string){
     await reviewerFor(userId);
-    return (await query(`SELECT q.id AS question_version_id,q.question_text,q.content_hash,q.category,q.difficulty,
+    return (await query(`SELECT q.id AS question_version_id,q.question_text,q.content_hash,q.category,q.difficulty,c.id AS candidate_id,
       ready.publication_class,COALESCE((SELECT count(*)::int FROM question_technical_references tr
         WHERE tr.question_version_id=q.id AND tr.state='approved'),0) AS reviewed_reference_count,
-      (SELECT rv.content_hash FROM rubric_versions rv WHERE rv.question_version_id=q.id ORDER BY rv.version DESC LIMIT 1) AS scoring_packet_hash
+      (SELECT rv.content_hash FROM rubric_versions rv WHERE rv.question_version_id=q.id ORDER BY rv.version DESC LIMIT 1) AS scoring_packet_hash,
+      (SELECT jsonb_build_object('id',p.id,'version',p.version,'hash',p.packet_hash,'createdAt',p.created_at,'packet',p.packet)
+        FROM candidate_ai_review_packets p WHERE p.candidate_id=c.id AND p.content_hash=c.content_hash ORDER BY p.version DESC LIMIT 1) AS ai_review
       FROM question_versions q JOIN content_question_readiness ready ON ready.question_version_id=q.id
+      JOIN ingestion_candidates c ON c.question_version_id=q.id AND c.state='published'
       WHERE q.status='published' AND EXISTS(SELECT 1 FROM ingestion_candidates c JOIN ingestion_records r ON r.id=c.record_id
         JOIN sources s ON s.id=r.source_id WHERE c.question_version_id=q.id AND c.state='published' AND r.state='published'
           AND r.input_hash=$1 AND s.source_type='authored')

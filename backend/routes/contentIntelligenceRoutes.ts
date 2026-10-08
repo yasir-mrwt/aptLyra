@@ -87,6 +87,9 @@ router.get(
   "/review/candidates",
   handle((req) => contentEditorial.candidateQueue(userId(req))),
 );
+router.post("/review/candidates/:id/ai-review",handle(req=>contentEditorial.reviewCandidate(
+  userId(req),String(req.params.id),String(req.body?.expectedHash||""),
+)));
 router.post("/review/records/:id/approve",handle(req=>contentEditorial.approveSourceRecord(userId(req),String(req.params.id),String(req.body?.expectedHash||""),req.body?.duplicateDecision)));
 router.post("/review/records/:id/publish",handle(req=>contentEditorial.publishSourceRecord(userId(req),String(req.params.id))));
 router.post(

@@ -44,6 +44,7 @@ const cli=fileURLToPath(new URL('../dist/ingestion/cli.js',import.meta.url));
 const migration=fileURLToPath(new URL('../dist/database/migrate-cli.js',import.meta.url));
 const execute=promisify(execFile);
 const env={DATABASE_URL:connection+database,DATABASE_SSL:'false',NODE_ENV:'test'};
+process.env.REDIS_URL='redis://127.0.0.1:16379/14';
 const invoke=async(args)=>JSON.parse((await execute(process.execPath,[cli,...args],{cwd:directory,env})).stdout.trim().split('\n').at(-1));
 let db,apiPool;
 try {
@@ -83,6 +84,22 @@ try {
   const cookie=`jwt=${jwt.sign({id:reviewerUser},process.env.JWT_SECRET)}`;
   const seedReview=await request(app).get('/api/content-intelligence/seed-review').set('Cookie',cookie).expect(200);
   assert.equal(seedReview.body.length,48,'trusted hash review must find the 48 historical-alias seeds');
+  assert.ok(seedReview.body.every(row=>row.candidate_id&&row.ai_review===null),'each seed must be actionable through the same AI-review workflow');
+  const {aiService}=await import('../dist/services/aiService.js');
+  const originalReview=aiService.reviewEditorialCandidate;
+  aiService.reviewEditorialCandidate=async input=>({contractVersion:'editorial-review-v1',relevance:'relevant',verdict:'recommend-approve',
+    taxonomy:input.allowedCompetencies[0],category:input.allowedCategories[0],difficulty:'standard',duplicateWarning:false,wordingIssues:[],
+    correctedQuestion:null,technicalCorrectness:'uncertain',expectedConcepts:['Explain the central concept'],evidenceStatus:'missing',
+    evidenceSummary:'No technical reference has been reviewed yet.',rubricGuidance:['Check correctness and trade-offs.'],confidence:'medium',flags:['weak-evidence','needs-human-review']});
+  try{
+    const firstSeed=seedReview.body[0];
+    const proposal=await request(app).post(`/api/content-intelligence/review/candidates/${firstSeed.candidate_id}/ai-review`)
+      .set('Cookie',cookie).send({expectedHash:firstSeed.content_hash}).expect(200);
+    assert.equal(proposal.body.aiApproved,false);assert.equal(proposal.body.version,1);
+    assert.equal(proposal.body.packet.referenceStatus,'no-reviewed-reference');
+    assert.equal((await db.query('SELECT state FROM ingestion_candidates WHERE id=$1',[firstSeed.candidate_id])).rows[0].state,'published');
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM content_scoring_review_events')).rows[0].n,0);
+  }finally{aiService.reviewEditorialCandidate=originalReview;}
   const publishedQuestions=await request(app).get('/api/content-intelligence/published').set('Cookie',cookie);
   assert.equal(publishedQuestions.status,200,JSON.stringify(publishedQuestions.body));
   assert.equal(publishedQuestions.body.length,48,'published endpoint must expose published questions with readiness');
