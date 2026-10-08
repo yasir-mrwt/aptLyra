@@ -23,7 +23,8 @@ function validate(value:any){
   const evidenceHash=digest(JSON.stringify({sourceType:value.sourceType,baseUrl:u.toString(),termsUrl:terms.toString(),permissionBasis:value.permissionBasis.trim(),permissionEvidence:value.permissionEvidence.trim(),attribution:value.attribution||null,scope,fullTextStorage:value.fullTextStorage,derivedDataStorage:value.derivedDataStorage,modelProcessingAllowed:value.modelProcessingAllowed,intervalMinutes:value.intervalMinutes,rawRetentionDays:value.rawRetentionDays??7,permissionExpiresAt}));
   return { ...value, permissionExpiresAt, name:value.name.trim(), baseUrl:u.toString(),termsUrl:terms.toString(),permissionBasis:value.permissionBasis.trim(),permissionEvidence:value.permissionEvidence.trim(),scope,evidenceHash };
 }
-async function reviewer(userId:string){const r=(await query("SELECT id,display_name FROM ingestion_reviewers WHERE user_id=$1 AND kind='human' AND enabled",[userId])).rows[0];if(!r)throw new Error("reviewer-not-authorized");return r;}
+async function reviewer(userId:string){const r=(await query(`SELECT r.id,r.display_name,u.app_role FROM ingestion_reviewers r JOIN users u ON u.id=r.user_id
+  WHERE r.user_id=$1 AND r.kind='human' AND r.enabled AND u.app_role IN ('owner','admin')`,[userId])).rows[0];if(!r)throw new Error("reviewer-not-authorized");return r;}
 const sourceSelect=`SELECT s.id,s.title AS name,s.source_type,s.origin AS base_url,s.terms_url,s.permission_basis,s.permission_status,s.review_status,s.permission_evidence,
   s.attribution,s.reviewed_by,s.reviewed_at,s.state,s.allowed_scope,s.full_text_storage,s.derived_facts_storage,s.model_processing_allowed,s.raw_retention,
   s.collection_interval_minutes,s.last_collection_at,s.last_success_at,s.last_failure_code,s.last_failure_category,s.next_due_at,s.collection_cursor,s.source_health,s.withdrawn_at,s.withdrawal_reason,

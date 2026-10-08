@@ -25,6 +25,7 @@ import ResumeAnalyzer from "./pages/ResumeAnalyzer";
 import AnalyticsDashboard from "./pages/AnalyticsDashboard";
 import ShareInterviewExperience from "./pages/ShareInterviewExperience";
 import ContentEditorialConsole from "./pages/ContentEditorialConsole";
+import AdminTeamManagement from "./pages/AdminTeamManagement";
 
 function App() {
   useSocket();
@@ -95,6 +96,7 @@ function App() {
                   <Route path="/analytics" element={<AnalyticsDashboard />} />
                   <Route path="/share-interview-experience" element={<ShareInterviewExperience />} />
                   <Route path="/content-editorial" element={<ContentEditorialConsole />} />
+                  <Route path="/admin/team" element={<AdminTeamManagement />} />
                   <Route path="/interview/:sessionId" element={<InterviewRunner />} />
                   <Route path="/review/:sessionId" element={<SessionReview />} />
                 </Route>

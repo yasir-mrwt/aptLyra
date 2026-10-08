@@ -23,7 +23,7 @@ before(async()=>{
   ({aiService}=await import('../dist/services/aiService.js'));
   ({sessionRepository}=await import('../dist/models/Session.js'));
   originalExtract=aiService.extractInterviewExperience;originalDraft=aiService.draftRubric;
-  await query('INSERT INTO users(id,name,email) VALUES($1,$2,$3)',[userId,'Disposable editorial fixture','editorial-fixture@example.invalid']);
+  await query("INSERT INTO users(id,name,email,app_role) VALUES($1,$2,$3,'reviewer')",[userId,'Disposable editorial fixture','editorial-fixture@example.invalid']);
   await query("INSERT INTO ingestion_reviewers(id,display_name,kind,user_id) VALUES($1,'Disposable human reviewer','human',$2)",[reviewerId,userId]);
 });
 

@@ -62,7 +62,8 @@ export const contentSubmissions = {
     });
   },
   async reviewerFor(userId: string) {
-    return (await q("SELECT id,display_name FROM ingestion_reviewers WHERE user_id=$1 AND kind='human' AND enabled", [userId]))[0] || null;
+    return (await q(`SELECT r.id,r.display_name,u.app_role FROM ingestion_reviewers r JOIN users u ON u.id=r.user_id
+      WHERE r.user_id=$1 AND r.kind='human' AND r.enabled AND u.app_role IN ('owner','admin','reviewer')`, [userId]))[0] || null;
   },
   async reviewQueue(userId: string) {
     const reviewer = await this.reviewerFor(userId);

@@ -10,6 +10,7 @@ import { knowledgeRepository } from "../repositories/knowledgeRepository.js";
 import { jaccard } from "../ingestion/localAdapter.js";
 import { EmbeddingClient } from "../retrieval/embeddingClient.js";
 import { MODEL } from "../retrieval/contracts.js";
+import { REVIEWED_SEED_INPUT_HASH } from "../retrieval/contracts.js";
 import type { Embedder } from "../retrieval/contracts.js";
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -173,7 +174,7 @@ export const contentEditorial={
     await reviewerFor(userId);
     return (await query(`SELECT q.id AS question_version_id,q.question_id,q.question_text,q.category,q.difficulty,q.content_hash,q.status,
       COALESCE((SELECT jsonb_agg(jsonb_build_object('id',tr.id,'chunkId',tr.chunk_id,'state',tr.state,'hash',tr.source_version_hash,'text',e.text,
-        'sourceTitle',d.title,'sourceId',s.id,'licenseId',s.license_id,'permissionHash',tr.permission_hash,'documentVersionId',dv.id,
+        'sourceTitle',dv.title,'sourceId',s.id,'licenseId',s.license_id,'permissionHash',tr.permission_hash,'documentVersionId',dv.id,
         'version',dv.version,'chunkHash',c.content_hash,'startOffset',c.start_offset,'endOffset',c.end_offset)
         ORDER BY tr.reviewed_at) FROM question_technical_references tr JOIN retrieval_entities e ON e.entity_id=tr.chunk_id AND e.purpose='technical-grounding'
         JOIN source_chunks c ON c.id=tr.chunk_id JOIN source_document_versions dv ON dv.id=c.document_version_id
@@ -190,7 +191,7 @@ export const contentEditorial={
   },
   async technicalReferenceOptions(userId:string){
     await reviewerFor(userId);
-    return (await query(`SELECT e.entity_id AS chunk_id,e.text,e.content_hash,d.title AS source_title,s.origin,s.license_id,v.version,
+    return (await query(`SELECT e.entity_id AS chunk_id,e.text,e.content_hash,v.title AS source_title,s.origin,s.license_id,v.version,
       v.id AS document_version_id,s.permission_evidence_hash
       FROM retrieval_entities e JOIN source_chunks c ON c.id=e.entity_id
       JOIN source_document_versions v ON v.id=c.document_version_id JOIN source_documents d ON d.id=v.document_id
@@ -333,7 +334,7 @@ export const contentEditorial={
       FROM question_versions q JOIN content_question_readiness ready ON ready.question_version_id=q.id
       WHERE q.status='published' AND EXISTS(SELECT 1 FROM ingestion_candidates c JOIN ingestion_records r ON r.id=c.record_id
         JOIN sources s ON s.id=r.source_id WHERE c.question_version_id=q.id AND c.state='published' AND r.state='published'
-          AND s.stable_key='techvera-junior-se-seed-v1')
-      ORDER BY q.version,q.id LIMIT 48`)).rows;
+          AND r.input_hash=$1 AND s.source_type='authored')
+      ORDER BY q.version,q.id LIMIT 48`,[REVIEWED_SEED_INPUT_HASH])).rows;
   },
 };

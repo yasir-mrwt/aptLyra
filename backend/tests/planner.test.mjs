@@ -20,6 +20,7 @@ before(async()=>{
  // Make only eight isolated questions scoring-ready with explicitly fictional fixture review data.
  const reviewerId='planner-test-reviewer',sourceId=randomUUID(),documentId=randomUUID(),versionId=randomUUID(),chunkId=randomUUID(),recordId=randomUUID();
  await f.query("INSERT INTO ingestion_reviewers(id,display_name,kind,user_id) VALUES($1,'Fictional planner test reviewer','human',$2)",[reviewerId,owner]);
+ await f.query("UPDATE users SET app_role='reviewer' WHERE id=$1",[owner]);
  const permissionHash=createHash('sha256').update('fictional planner fixture permission').digest('hex');
  await f.query(`INSERT INTO sources(id,stable_key,source_type,title,license_id,terms_revision,policy_revision,permission_status,permission_evidence,
    attribution,review_status,state,reviewed_by,reviewed_at,adapter_name,permission_basis,permission_evidence_hash)

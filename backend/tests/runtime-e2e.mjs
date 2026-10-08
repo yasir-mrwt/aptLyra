@@ -17,6 +17,7 @@ try{
  // This runtime flow uses only three explicitly fictional scoring-ready questions in the disposable fixture.
  // The reviewed seed packet proves question review; this test reviewer separately supplies synthetic rubric approval.
  await f.query('UPDATE ingestion_reviewers SET user_id=$2 WHERE id=$1',[f.actor,f.owner]);
+ await f.query("UPDATE users SET app_role='reviewer' WHERE id=$1",[f.owner]);
  const {contentEditorial}=await import('../dist/contentIntelligence/editorial.js');
  const selected=[...(await f.query("SELECT entity_id FROM retrieval_entities WHERE purpose='question-selection' AND primary_competency LIKE 'dsa.%' AND category='conceptual-oral' ORDER BY entity_id LIMIT 2")).rows,
   ...(await f.query("SELECT entity_id FROM retrieval_entities WHERE purpose='question-selection' AND primary_competency LIKE 'programming.%' AND category='conceptual-oral' ORDER BY entity_id LIMIT 1")).rows];

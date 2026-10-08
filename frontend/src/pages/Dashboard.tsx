@@ -34,12 +34,16 @@ const Dashboard = () => {
         sessionId: '',
     })
     const [isContentReviewer, setIsContentReviewer] = useState(false)
+    const [appRole, setAppRole] = useState("user")
 
     useEffect(() => {
         let active = true
-        void apiClient.get("/content-intelligence/reviewer").then(response => {
-            if (active) setIsContentReviewer(Boolean(response.data?.reviewer))
-        }).catch(() => { if (active) setIsContentReviewer(false) })
+        void apiClient.get("/admin/me").then(response => {
+            if (active) {
+                setAppRole(response.data?.role || "user")
+                setIsContentReviewer(["owner", "admin", "reviewer"].includes(response.data?.role))
+            }
+        }).catch(() => { if (active) { setAppRole("user"); setIsContentReviewer(false) } })
         return () => { active = false }
     }, [])
 
@@ -168,6 +172,8 @@ const Dashboard = () => {
             <div className="-mt-10 flex justify-end">
                 {isContentReviewer && <button type="button" onClick={() => navigate("/content-editorial")}
                     className="mr-2 rounded-lg border border-cyan-300/30 px-4 py-2 text-sm text-cyan-100 hover:border-cyan-300/60">Editorial review</button>}
+                {["owner", "admin"].includes(appRole) && <button type="button" onClick={() => navigate("/admin/team")}
+                    className="mr-2 rounded-lg border border-violet-300/30 px-4 py-2 text-sm text-violet-100 hover:border-violet-300/60">Team access</button>}
                 <button type="button" onClick={() => navigate("/share-interview-experience")}
                     className="rounded-lg border border-white/15 px-4 py-2 text-sm text-surface-200 hover:border-cyan-300/50 hover:text-cyan-200">
                     Share an interview experience

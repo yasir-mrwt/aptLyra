@@ -11,24 +11,31 @@ type Trend = {topic:string;role:string;company:string|null;round:string|null;win
 type Tab="sources"|"collections"|"trends"|"review"|"submissions"|"scoring"|"published"|"seeds";
 
 export default function ContentEditorialConsole(){
-  const [tab,setTab]=useState<Tab>("review"),[candidates,setCandidates]=useState<Candidate[]>([]),[submissions,setSubmissions]=useState<Submission[]>([]),[scoring,setScoring]=useState<ScoringItem[]>([]),[seeds,setSeeds]=useState<ScoringItem[]>([]),[references,setReferences]=useState<Reference[]>([]),[sources,setSources]=useState<Source[]>([]),[trends,setTrends]=useState<Trend[]>([]),[history,setHistory]=useState<Record<string,unknown>[]>([]),[days,setDays]=useState(90),[message,setMessage]=useState(""),[busy,setBusy]=useState(false);
+  const [tab,setTab]=useState<Tab>("review"),[candidates,setCandidates]=useState<Candidate[]>([]),[submissions,setSubmissions]=useState<Submission[]>([]),[scoring,setScoring]=useState<ScoringItem[]>([]),[seeds,setSeeds]=useState<ScoringItem[]>([]),[references,setReferences]=useState<Reference[]>([]),[sources,setSources]=useState<Source[]>([]),[trends,setTrends]=useState<Trend[]>([]),[history,setHistory]=useState<Record<string,unknown>[]>([]),[days,setDays]=useState(90),[message,setMessage]=useState(""),[busy,setBusy]=useState(false),[appRole,setAppRole]=useState("user"),[loadErrors,setLoadErrors]=useState<string[]>([]);
   const load=useCallback(async()=>{
-    const [c,s,p,r,seed,queue,sourceRows,trendRows]=await Promise.all([
-      apiClient.get("/content-intelligence/review/candidates"),apiClient.get("/content-intelligence/scoring-queue"),
+    const canManageSources=["owner","admin"].includes(appRole);
+    const requests=[
+      apiClient.get("/admin/me"),apiClient.get("/content-intelligence/review/candidates"),apiClient.get("/content-intelligence/scoring-queue"),
       apiClient.get("/content-intelligence/published"),apiClient.get("/content-intelligence/technical-references"),
       apiClient.get("/content-intelligence/seed-review"),apiClient.get("/content-intelligence/review-queue"),
-      apiClient.get("/content-intelligence/sources"),apiClient.get(`/content-intelligence/trends?days=${days}`),
-    ]);
-    setCandidates(c.data);setScoring(s.data);setReferences(r.data);setSeeds(seed.data);setSubmissions(queue.data);setSources(sourceRows.data);setTrends(trendRows.data);setPublished(p.data);
-  },[days]);
+      canManageSources?apiClient.get("/content-intelligence/sources"):Promise.resolve({data:[]}),
+      apiClient.get(`/content-intelligence/trends?days=${days}`),
+    ];
+    const results=await Promise.allSettled(requests),errors:string[]=[];
+    const data=(index:number,label:string)=>{const result=results[index];if(result.status==="fulfilled")return result.value.data;errors.push(`${label} could not be loaded.`);return [];};
+    const identity=data(0,"Account role");if(identity.role)setAppRole(identity.role);
+    setCandidates(data(1,"Question review"));setScoring(data(2,"Scoring queue"));setPublished(data(3,"Published questions"));setReferences(data(4,"Technical references"));
+    setSeeds(data(5,"Seed review"));setSubmissions(data(6,"Submission queue"));setSources(data(7,"Source registry"));setTrends(data(8,"Trends"));setLoadErrors(errors);
+  },[appRole,days]);
   const [published,setPublished]=useState<ScoringItem[]>([]);
   useEffect(()=>{void load().catch(()=>setMessage("This console is available only to an enabled human reviewer linked to your account."));},[load]);
   const act=async(work:()=>Promise<unknown>,success:string)=>{setBusy(true);setMessage("");try{await work();await load();setMessage(success);}catch(error){const status=(error as {response?:{data?:{code?:string}}})?.response?.data?.code;setMessage(status==="review-hash-mismatch"||status==="rubric_hash_mismatch"?"The item changed after this review was opened. Reload and review the current hash.":"The review action could not be completed.");}finally{setBusy(false);}};
-  const tabs=useMemo(()=>[{id:"sources" as const,label:`Sources (${sources.length})`},{id:"collections" as const,label:"Collection History"},{id:"trends" as const,label:"Trends"},{id:"review" as const,label:`Question Review (${candidates.length})`},{id:"submissions" as const,label:`Submission Queue (${submissions.length})`},{id:"scoring" as const,label:"Scoring Queue"},{id:"published" as const,label:"Published Questions"},{id:"seeds" as const,label:`Seed Review (${seeds.length})`}], [candidates.length,submissions.length,seeds.length,sources.length]);
+  const tabs=useMemo(()=>[...(appRole==="owner"||appRole==="admin"?[{id:"sources" as const,label:`Sources (${sources.length})`},{id:"collections" as const,label:"Collection History"}]:[]),{id:"trends" as const,label:"Trends"},{id:"review" as const,label:`Question Review (${candidates.length})`},{id:"submissions" as const,label:`Submission Queue (${submissions.length})`},{id:"scoring" as const,label:"Scoring Queue"},{id:"published" as const,label:"Published Questions"},{id:"seeds" as const,label:`Seed Review (${seeds.length})`}], [appRole,candidates.length,submissions.length,seeds.length,sources.length]);
   return <section className="mx-auto max-w-6xl space-y-6 text-surface-100">
-    <header><p className="text-sm uppercase tracking-wider text-cyan-300">Protected editorial tools</p><h1 className="mt-2 text-3xl font-semibold">Interview content review</h1><p className="mt-2 text-surface-300">Human approval is required at each stage. Every review action is bound to the exact content hash.</p></header>
+    <header><p className="text-sm uppercase tracking-wider text-cyan-300">Protected editorial tools</p><h1 className="mt-2 text-3xl font-semibold">Interview content review</h1><p className="mt-2 text-surface-300">Role: <span className="capitalize">{appRole}</span>. Human approval is required at each stage. Every review action is bound to the exact content hash.</p></header>
     <nav aria-label="Editorial sections" className="flex flex-wrap gap-2">{tabs.map(item=><button key={item.id} onClick={()=>setTab(item.id)} aria-pressed={tab===item.id} className={`rounded-lg border px-3 py-2 text-sm ${tab===item.id?"border-cyan-300 text-cyan-100":"border-white/15 text-surface-300"}`}>{item.label}</button>)}</nav>
     {message&&<p role="status" className="rounded-lg border border-cyan-300/30 p-3 text-sm">{message}</p>}
+    {loadErrors.map(error=><p key={error} role="alert" className="rounded-lg border border-amber-300/30 p-3 text-sm text-amber-100">{error} Other sections remain available.</p>)}
     {tab==="sources"&&<SourceRegistry sources={sources} busy={busy} act={act} onHistory={async id=>{const result=await apiClient.get(`/content-intelligence/sources/${id}/collections`);setHistory(result.data);setTab("collections");}}/>}
     {tab==="collections"&&<div className="space-y-3">{history.length?history.map((row,index)=><pre key={String(row.id||index)} className="overflow-auto rounded border border-white/10 p-3 text-xs">{JSON.stringify(row,null,2)}</pre>):<p className="text-sm text-surface-400">Select a source’s collection history to inspect safe run counts and error categories.</p>}</div>}
     {tab==="trends"&&<div className="space-y-4"><label className="text-sm">Window <select value={days} onChange={event=>setDays(Number(event.target.value))} className="ml-2 rounded bg-slate-800 p-2"><option value={30}>30 days</option><option value={90}>90 days</option><option value={180}>180 days</option></select></label>{trends.map((trend,index)=><article key={`${trend.topic}-${index}`} className="rounded-xl border border-white/15 p-4"><h2 className="font-semibold">{trend.topic} · {trend.trendLabel}</h2><p className="mt-1 text-sm">{trend.role} · {trend.company||"company not reported"} · {trend.round||"round unknown"}</p><p className="mt-1 text-xs text-surface-400">{trend.distinctRecords} distinct reviewed records · {trend.independentSources} sources · {trend.questionFamilies} question families · {trend.metadataConfidence}</p></article>)}{!trends.length&&<p className="text-sm text-surface-400">No reviewed trend evidence in this window.</p>}</div>}

@@ -10,6 +10,10 @@ import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import pg from 'pg';
+import express from 'express';
+import cookieParser from 'cookie-parser';
+import jwt from 'jsonwebtoken';
+import request from 'supertest';
 
 for (const key of ['DATABASE_URL','NEON_DATABASE_URL','REDIS_URL','UPSTASH_REDIS_URL']) {
   if (process.env[key]) throw new Error(`Unset ${key}: seed publication uses disposable localhost only`);
@@ -41,7 +45,7 @@ const migration=fileURLToPath(new URL('../dist/database/migrate-cli.js',import.m
 const execute=promisify(execFile);
 const env={DATABASE_URL:connection+database,DATABASE_SSL:'false',NODE_ENV:'test'};
 const invoke=async(args)=>JSON.parse((await execute(process.execPath,[cli,...args],{cwd:directory,env})).stdout.trim().split('\n').at(-1));
-let db;
+let db,apiPool;
 try {
   await admin.query(`CREATE DATABASE ${database}`);
   await execute(process.execPath,[migration],{cwd:directory,env});
@@ -50,7 +54,7 @@ try {
   assert.deepEqual(config.approvedInputHashes,[linkedInputHash]); assert.equal(config.fixture,false);
   config.allowedInputs=[seedPath]; // Path portability does not broaden approved bytes.
   const configPath=join(directory,'contract.json'); await writeFile(configPath,JSON.stringify(config));
-  const {sourceId}=await invoke(['register-source','techvera-junior-se-seed-v1','TechVera original reviewed seed',configPath]);
+  const {sourceId}=await invoke(['register-source','techvera-junior-se-v1','TechVera original reviewed seed',configPath]);
   const summary=await invoke(['inspect-source',sourceId]);
   await invoke(['approve-source',sourceId,attestation.reviewer.id,summary.contractHash]);
   const {recordIds}=await invoke(['ingest',sourceId,seedPath]); assert.equal(recordIds.length,48);
@@ -64,12 +68,36 @@ try {
   db=new pg.Pool({connectionString:connection+database,ssl:false});
   const audits=await db.query('SELECT reviewed_by,reviewed_at FROM question_versions WHERE status=$1',['published']);
   assert.ok(audits.rows.every(v=>v.reviewed_by===attestation.reviewer.id && v.reviewed_at));
+  const reviewerUser=randomUUID();
+  await db.query("INSERT INTO users(id,name,email,app_role) VALUES($1,$2,$3,'reviewer')",[reviewerUser,attestation.reviewer.name,'reviewer@example.invalid']);
+  await db.query('UPDATE ingestion_reviewers SET user_id=$2 WHERE id=$1',[attestation.reviewer.id,reviewerUser]);
+  process.env.DATABASE_URL=connection+database;process.env.DATABASE_SSL='false';process.env.NODE_ENV='test';
+  process.env.JWT_SECRET='phase9-seed-fixture-secret';
+  ({pool:apiPool}=await import('../dist/config/db.js'));
+  const {embedCorpus}=await import('../dist/retrieval/corpus.js');
+  const {MODEL}=await import('../dist/retrieval/contracts.js');
+  const embedding=await embedCorpus({async embed(texts){return {...MODEL,processingMs:0,vectors:texts.map(()=>[1,...Array(383).fill(0)])};}});
+  assert.equal(embedding.embedded,48,'the disposable fixture creates a compatible local embedding generation only');
+  const {default:contentRoutes}=await import('../dist/routes/contentIntelligenceRoutes.js');
+  const app=express();app.use(express.json());app.use(cookieParser());app.use('/api/content-intelligence',contentRoutes);
+  const cookie=`jwt=${jwt.sign({id:reviewerUser},process.env.JWT_SECRET)}`;
+  const seedReview=await request(app).get('/api/content-intelligence/seed-review').set('Cookie',cookie).expect(200);
+  assert.equal(seedReview.body.length,48,'trusted hash review must find the 48 historical-alias seeds');
+  const publishedQuestions=await request(app).get('/api/content-intelligence/published').set('Cookie',cookie);
+  assert.equal(publishedQuestions.status,200,JSON.stringify(publishedQuestions.body));
+  assert.equal(publishedQuestions.body.length,48,'published endpoint must expose published questions with readiness');
+  assert.ok(publishedQuestions.body.every(row=>row.publication_class==='fresh/provisional'),JSON.stringify(publishedQuestions.body.slice(0,3).map(row=>({id:row.question_version_id,publication_class:row.publication_class}))));
+  assert.equal((await db.query("SELECT count(*)::int AS n FROM question_technical_references WHERE state='approved'")).rows[0].n,0);
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM rubric_drafts')).rows[0].n,0);
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM content_scoring_review_events')).rows[0].n,0);
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM question_versions WHERE status=\'published\'')).rows[0].n,48);
   assert.equal((await db.query('SELECT count(*)::int AS n FROM interview_experience_records')).rows[0].n,0);
   assert.equal((await db.query('SELECT count(*)::int AS n FROM rubric_versions')).rows[0].n,0);
   await writeFile('/tmp/techvera-phase4-reviewed-manifest.json',JSON.stringify({reviewArtifactHash:approvedPacketHash,inputHash:linkedInputHash,
     reviewer:attestation.reviewer,validation:'Real CLI, fresh disposable PostgreSQL; no production import',manifest},null,2)+'\n');
-  console.log('PASS: actual approved 48-question corpus published through real CLI; all 8 roots / 24 children; zero fixtures, company reports or rubrics.');
+  console.log('PASS: 48 trusted-hash seeds surfaced through the historical source alias; published API reports fresh/provisional; no references, rubrics, or scoring approvals were fabricated.');
 } finally {
+  if(apiPool) await apiPool.end();
   if(db) await db.end();
   try {await admin.query(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`);} finally {await admin.end(); await rm(directory,{recursive:true,force:true});}
 }

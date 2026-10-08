@@ -18,6 +18,7 @@ export interface IUser {
   googleId?: string;
   avatarUrl?: string;
   preferredRole: string;
+  appRole: "owner" | "admin" | "reviewer" | "user";
   // --- Gamification fields (denormalized cache) ---
   // These fields mirror the Gamification record for quick access.
   // Updates MUST be handled alongside Gamification records (see gamificationService.ts).
@@ -39,6 +40,7 @@ const rowToUser = (row: any): IUser => ({
   googleId: row.google_id || undefined,
   avatarUrl: row.avatar_url || undefined,
   preferredRole: row.preferred_role,
+  appRole: row.app_role || "user",
   xp: row.xp,
   currentLevel: row.current_level,
   streakDays: row.streak_days,

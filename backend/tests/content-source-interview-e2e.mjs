@@ -39,6 +39,7 @@ try{
   await new Promise(resolve=>appServer.listen(0,'127.0.0.1',resolve));
   const port=appServer.address().port;
   await f.query('UPDATE ingestion_reviewers SET user_id=$2 WHERE id=$1',[f.actor,f.owner]);
+  await f.query("UPDATE users SET app_role='admin' WHERE id=$1",[f.owner]);
   const taxonomy=(await f.query("SELECT id FROM competencies WHERE taxonomy_version='junior-se-v1' AND kind='child' AND status='active' AND id LIKE 'dsa.%' ORDER BY id LIMIT 1")).rows[0]?.id;
   assert.ok(taxonomy,'fixture requires an existing DSA taxonomy child');
   const sourceInput={sourceType:'official_api',name:'Fictional integrated E2E source',baseUrl:'https://fixture.example.invalid/api/items',

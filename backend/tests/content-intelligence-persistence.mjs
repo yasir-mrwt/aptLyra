@@ -78,6 +78,7 @@ test('migration 009 applies and consented submissions remain quarantined and own
 test('source registry is linked-reviewer only and permission approval is bound to exact config evidence',async()=>{
   const {sourceRegistry}=await import('../dist/contentIntelligence/sourceRegistry.js');
   await query("INSERT INTO ingestion_reviewers(id,display_name,kind,user_id) VALUES('registry-human','Registry reviewer','human',$1)",[first]);
+  await query("UPDATE users SET app_role='admin' WHERE id=$1",[first]);
   const input={sourceType:'rss_atom',name:'Fictional fixture feed',baseUrl:'https://feed.example.invalid/rss',termsUrl:'https://feed.example.invalid/terms',
     permissionBasis:'written test fixture grant',permissionEvidence:'fictional deterministic test source; no network request is made',attribution:'Aptlyra test fixture',
     allowedHosts:['feed.example.invalid'],allowedPaths:['/rss'],intervalMinutes:60,rawRetentionDays:7,fullTextStorage:true,derivedDataStorage:true,modelProcessingAllowed:false};

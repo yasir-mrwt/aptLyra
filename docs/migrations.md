@@ -158,3 +158,7 @@ Validate schema, persistence, planner, retrieval, ingestion, evaluation, smoke, 
 ## Phase 8.5B migration — 010
 
 `010_source_collection.sql` adds source interval/cursor/health/permission-review identity, safe collection run counts, and partial indexes that prevent overlapping source jobs. It depends on Phase 8 durable operations and Phase 8.5A additions in 009. It is forward-only and passed migration/persistence checks in temporary databases on the disposable Compose PostgreSQL service. It was not applied to a configured manual, staging, production, or cloud database; apply only through the explicit migration CLI after target review.
+
+## Phase 9 migration — 012
+
+`012_admin_rbac.sql` adds the `users.app_role` role contract, preserves enabled linked human reviewers, creates the single-owner guard and an append-only role-change audit. It never promotes a first registered account; initial ownership is a separate explicit operator action. Migrations 001–011 are unchanged. Migration 012 was validated only on temporary databases created by the disposable Compose PostgreSQL fixture; it was not applied to any configured or cloud database. See [admin RBAC](admin-rbac.md).
