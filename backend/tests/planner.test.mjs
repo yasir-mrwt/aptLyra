@@ -1,7 +1,7 @@
 /** Disposable actual pgvector/persistence/auth APIs. Encoder is a deterministic fixture, not a relevance measurement. */
 import assert from 'node:assert/strict';
 import {before,after,test} from 'node:test';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {fixture} from './retrieval-fixture.mjs';
 import {allocate} from '../dist/planner/allocate.js';
 import {validateSetup,adjacent,estimateMinutes} from '../dist/planner/contracts.js';
@@ -16,6 +16,41 @@ before(async()=>{
  f=await fixture({sourceKey:'techvera-junior-se-v1'});process.env.JWT_SECRET='phase6-auth-fixture-only';process.env.REDIS_URL='redis://127.0.0.1:16379/15';
  for(const id of [owner,other])await f.query('INSERT INTO users(id,name,email) VALUES($1,$2,$3)',[id,'Planner fixture',id+'@example.invalid']);
  const {embedCorpus}=await import('../dist/retrieval/corpus.js');await embedCorpus(fake);
+ // The seed artifact has question-content review, but no reviewed technical references or scoring packets.
+ // Make only eight isolated questions scoring-ready with explicitly fictional fixture review data.
+ const reviewerId='planner-test-reviewer',sourceId=randomUUID(),documentId=randomUUID(),versionId=randomUUID(),chunkId=randomUUID(),recordId=randomUUID();
+ await f.query("INSERT INTO ingestion_reviewers(id,display_name,kind,user_id) VALUES($1,'Fictional planner test reviewer','human',$2)",[reviewerId,owner]);
+ const permissionHash=createHash('sha256').update('fictional planner fixture permission').digest('hex');
+ await f.query(`INSERT INTO sources(id,stable_key,source_type,title,license_id,terms_revision,policy_revision,permission_status,permission_evidence,
+   attribution,review_status,state,reviewed_by,reviewed_at,adapter_name,permission_basis,permission_evidence_hash)
+   VALUES($1,'fixture:planner-reference','licensed-reference','Fictional planner reference','fixture-license','fixture-terms-v1','fixture-policy-v1',
+   'permitted','Fictional disposable permission; no external source','Disposable test fixture','approved','enabled',$2,now(),'operator-import','fixture-only',$3)`,
+ [sourceId,reviewerId,permissionHash]);
+ await f.query("INSERT INTO ingestion_adapters(source_id,adapter_id,adapter_version,contract) VALUES($1,'operator-import','1','{\"fixture\":false}')",[sourceId]);
+ await f.query('INSERT INTO source_documents(id,source_id,external_key) VALUES($1,$2,$3)',[documentId,sourceId,'planner-reference-v1']);
+ const referenceText='Fictional reference text for deterministic planner readiness tests.';
+ const referenceHash=createHash('sha256').update(referenceText).digest('hex');
+ await f.query(`INSERT INTO source_document_versions(id,document_id,version,title,fetched_at,reviewed_at,reviewed_by,content_hash,normalized_text,
+   policy_revision,permission_status,review_status,quality,pii_status,confidentiality_status,status)
+   VALUES($1,$2,1,'Fictional planner reference',now(),now(),$3,$4,$5,'fixture-policy-v1','permitted','approved','technical-reference','clear','clear','published')`,
+ [versionId,documentId,reviewerId,referenceHash,referenceText]);
+ await f.query(`INSERT INTO source_chunks(id,document_version_id,chunk_index,excerpt,content_hash,chunker_version,section,start_offset,end_offset,status)
+   VALUES($1,$2,0,$3,$4,'fixture-v1','Planner tests',0,char_length($3),'active')`,[chunkId,versionId,referenceText,referenceHash]);
+ await f.query(`INSERT INTO ingestion_records(id,source_id,document_version_id,input_hash,state,reviewed_by,reviewed_at)
+   VALUES($1,$2,$3,$4,'published',$5,now())`,[recordId,sourceId,versionId,referenceHash,reviewerId]);
+ const dsa=(await f.query(`SELECT entity_id FROM retrieval_entities WHERE purpose='question-selection' AND primary_competency LIKE 'dsa.%' ORDER BY category,difficulty,entity_id LIMIT 4`)).rows;
+ const programming=(await f.query(`SELECT entity_id FROM retrieval_entities WHERE purpose='question-selection' AND primary_competency LIKE 'programming.%' ORDER BY category,difficulty,entity_id LIMIT 4`)).rows;
+ const ready=[...dsa,...programming];
+ assert.equal(ready.length,8);
+ const {contentEditorial}=await import('../dist/contentIntelligence/editorial.js');
+ const {aiService}=await import('../dist/services/aiService.js');const originalDraft=aiService.draftRubric;
+ aiService.draftRubric=async(_question,refs)=>({concepts:[{key:'fixture-mechanism',label:'Fixture mechanism',description:'Fictional deterministic planner fixture',importance:100,required:true,sourceIds:[refs[0].id]}]});
+ for(const q of ready){
+   await contentEditorial.addTechnicalReference(owner,q.entity_id,chunkId);
+   const draft=await contentEditorial.draftScoringPacket(owner,q.entity_id);
+   await contentEditorial.approveScoringPacket(owner,draft.id,draft.hash);
+ }
+ aiService.draftRubric=originalDraft;
  const {RetrievalService}=await import('../dist/retrieval/service.js'),{PlannerService,plannerService}=await import('../dist/planner/service.js');
  const retriever=new RetrievalService(fake);service=new PlannerService(retriever);
  // Actual authenticated router with controlled embedding computation only.
@@ -110,9 +145,11 @@ test('retrieval model outage uses only unchanged reviewed approved templates wit
  const similarities=(await f.query('SELECT similarity FROM retrieval_results WHERE retrieval_id=ANY($1::uuid[])',[p.items.map(i=>i.retrievalId)])).rows;
  assert.ok(similarities.every(r=>r.similarity===null));assert.ok(p.shortages.includes('reviewed_fallback_used'));
 });
-test('adjacent and reviewed-seed fallback explicitly record reasons and actual difficulty shortfall',async()=>{
+test('difficulty fallback records reasons and never admits a published seed without scoring readiness',async()=>{
  const p=await service.preview(owner,setup({competencies:['dsa'],mode:'oral',difficulty:'standard',count:5}));
- assert.ok(p.items.some(i=>i.selectionReason==='adjacent_difficulty'));assert.ok(p.items.some(i=>i.selectionReason==='reviewed_seed'));assert.ok(p.shortages.includes('difficulty_target_shortage'));
+ assert.ok(p.items.some(i=>i.selectionReason==='adjacent_difficulty'));
+ assert.ok(p.items.every(i=>i.publicationClass==='reviewed/scoring-ready'));
+ assert.ok(p.shortages.includes('difficulty_target_shortage'));
 });
 test('count/time/mode shortages preserve minimum competency coverage and cannot confirm an impossible plan',async()=>{
  const p=await service.preview(owner,setup({mode:'coding',count:4,minutes:15}));assert.equal(p.canConfirm,false);assert.equal(p.effectiveCount,0);assert.ok(p.shortages.includes('time_or_mode_coverage_shortage'));

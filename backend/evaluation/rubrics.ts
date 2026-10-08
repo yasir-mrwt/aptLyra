@@ -4,14 +4,27 @@ import {knowledgeRepository} from "../repositories/knowledgeRepository.js";
 import {POLICY,WEIGHTS,EvaluationError,type Rubric} from "./contracts.js";
 export const canonical=(value:any):string=>Array.isArray(value)?`[${value.map(canonical).join(',')}]`:value && typeof value==="object"?`{${Object.keys(value).sort().map(k=>`${JSON.stringify(k)}:${canonical(value[k])}`).join(',')}}`:JSON.stringify(value);
 export const hash=(value:any)=>createHash("sha256").update(canonical(value)).digest("hex");
-export interface Draft {questionVersionId:string; concepts:{key:string;label:string;description:string;importance:number;required:boolean;sourceIds:string[]}[]}
+export interface Draft {questionVersionId:string; concepts:{key:string;label:string;description:string;importance:number;required:boolean;sourceIds:string[]}[]; evidenceIndicators?:{conceptKey:string;supportedEvidence:string[];missingEvidence:string[];sourceIds:string[]}[]; misconceptions?:{conceptKey:string;description:string;sourceIds:string[]}[]; dimensionGuidance?:{dimension:string;guidance:string;sourceIds:string[]}[]; followUpConcepts?:{key:string;label:string;description:string;sourceIds:string[]}[]; codingObjectiveEvidence?:{objective:string;successEvidence:string[];sourceIds:string[]}|null}
 export function validateDraft(value:any):Draft {
   const fail=():never=>{throw new EvaluationError("invalid_rubric_draft");};
-  if(!value || Object.keys(value).sort().join()!==["concepts","questionVersionId"].sort().join() || !/^[0-9a-f-]{36}$/i.test(value.questionVersionId) || !Array.isArray(value.concepts) || !value.concepts.length || value.concepts.length>20)fail();
+  const requiredKeys=["concepts","questionVersionId"],optionalKeys=["evidenceIndicators","misconceptions","dimensionGuidance","followUpConcepts","codingObjectiveEvidence"];
+  if(!value || requiredKeys.some(key=>!(key in value)) || Object.keys(value).some(key=>![...requiredKeys,...optionalKeys].includes(key)) ||
+    !/^[0-9a-f-]{36}$/i.test(value.questionVersionId) || !Array.isArray(value.concepts) || !value.concepts.length || value.concepts.length>20)fail();
   const keys=new Set();for(const c of value.concepts){if(!c || Object.keys(c).sort().join()!==["key","label","description","importance","required","sourceIds"].sort().join() || typeof c.key!=="string" || !/^[a-z0-9-]{1,100}$/.test(c.key) || keys.has(c.key))fail();keys.add(c.key);
     for(const [k,max] of [["label",500],["description",4000]] as const)if(typeof c[k]!=="string" || !c[k].trim() || c[k].length>max)fail();
     if(typeof c.importance!=="number" || !Number.isFinite(c.importance) || c.importance<=0 || c.importance>100 || typeof c.required!=="boolean" || !Array.isArray(c.sourceIds) || c.sourceIds.length>10 || new Set(c.sourceIds).size!==c.sourceIds.length || c.sourceIds.some((id:any)=>typeof id!=="string" || !/^[0-9a-f-]{36}$/i.test(id)))fail();
-  }return value;
+  }
+  const ids=(item:any)=>Array.isArray(item?.sourceIds)&&item.sourceIds.length>0&&item.sourceIds.length<=10&&new Set(item.sourceIds).size===item.sourceIds.length&&item.sourceIds.every((id:any)=>typeof id==="string"&&/^[0-9a-f-]{36}$/i.test(id));
+  const boundedStrings=(items:any,limit:number)=>Array.isArray(items)&&items.length<=limit&&items.every((item:any)=>typeof item==="string"&&item.trim().length>0&&item.length<=1200);
+  for(const [name,limit] of [["evidenceIndicators",40],["misconceptions",40],["dimensionGuidance",25],["followUpConcepts",20]] as const)
+    if(value[name]!==undefined&&(!Array.isArray(value[name])||value[name].length>limit))fail();
+  for(const item of value.evidenceIndicators||[])if(!item||Object.keys(item).sort().join()!==["conceptKey","supportedEvidence","missingEvidence","sourceIds"].sort().join()||!keys.has(item.conceptKey)||!ids(item)||!boundedStrings(item.supportedEvidence,5)||!boundedStrings(item.missingEvidence,5))fail();
+  for(const item of value.misconceptions||[])if(!item||Object.keys(item).sort().join()!==["conceptKey","description","sourceIds"].sort().join()||!keys.has(item.conceptKey)||typeof item.description!=="string"||!item.description.trim()||item.description.length>1200||!ids(item))fail();
+  for(const item of value.dimensionGuidance||[])if(!item||Object.keys(item).sort().join()!==["dimension","guidance","sourceIds"].sort().join()||!Object.prototype.hasOwnProperty.call(WEIGHTS,item.dimension)||typeof item.guidance!=="string"||!item.guidance.trim()||item.guidance.length>1600||!ids(item))fail();
+  for(const item of value.followUpConcepts||[])if(!item||Object.keys(item).sort().join()!==["key","label","description","sourceIds"].sort().join()||typeof item.key!=="string"||!/^[a-z0-9-]{1,100}$/.test(item.key)||typeof item.label!=="string"||!item.label.trim()||item.label.length>300||typeof item.description!=="string"||!item.description.trim()||item.description.length>1200||!ids(item))fail();
+  if(new Set((value.followUpConcepts||[]).map((item:any)=>item.key)).size!==(value.followUpConcepts||[]).length)fail();
+  if(value.codingObjectiveEvidence!==undefined&&value.codingObjectiveEvidence!==null){const item=value.codingObjectiveEvidence;if(!item||Object.keys(item).sort().join()!==["objective","successEvidence","sourceIds"].sort().join()||typeof item.objective!=="string"||!item.objective.trim()||item.objective.length>1200||!boundedStrings(item.successEvidence,5)||!item.successEvidence.length||!ids(item))fail();}
+  return value;
 }
 const anchors={0:"Absent/incorrect",1:"Major gaps",2:"Partially sound",3:"Mostly correct",4:"Correct and justified"};
 export const rubricEditor={

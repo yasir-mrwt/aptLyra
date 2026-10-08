@@ -23,6 +23,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useLocation } from "react-router-dom";
 import ResumeAnalyzer from "./pages/ResumeAnalyzer";
 import AnalyticsDashboard from "./pages/AnalyticsDashboard";
+import ShareInterviewExperience from "./pages/ShareInterviewExperience";
+import ContentEditorialConsole from "./pages/ContentEditorialConsole";
 
 function App() {
   useSocket();
@@ -91,6 +93,8 @@ function App() {
                   <Route path="/plans/:planId" element={<InterviewPlan />} />
                   <Route path="/resume-analyzer" element={<ResumeAnalyzer />} />
                   <Route path="/analytics" element={<AnalyticsDashboard />} />
+                  <Route path="/share-interview-experience" element={<ShareInterviewExperience />} />
+                  <Route path="/content-editorial" element={<ContentEditorialConsole />} />
                   <Route path="/interview/:sessionId" element={<InterviewRunner />} />
                   <Route path="/review/:sessionId" element={<SessionReview />} />
                 </Route>

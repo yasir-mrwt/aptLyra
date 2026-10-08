@@ -116,3 +116,23 @@ def test_generated_drafts_cannot_invent_references(client, monkeypatch):
     assert client.post("/internal/rubrics/draft", json=body).status_code == 502
     concept["sourceIds"] = ["ref1"]
     assert client.post("/internal/rubrics/draft", json=body).status_code == 200
+
+
+def test_editorial_guidance_is_bounded_and_reference_grounded(client, monkeypatch):
+    concept = {"key": "fifo", "label": "FIFO", "description": "Describe removal order", "importance": 1, "required": True, "sourceIds": ["ref1"]}
+    draft = {
+        "concepts": [concept],
+        "evidenceIndicators": [{"conceptKey": "fifo", "supportedEvidence": ["Explains ordering"], "missingEvidence": [], "sourceIds": ["ref1"]}],
+        "misconceptions": [{"conceptKey": "fifo", "description": "Confuses FIFO and LIFO", "sourceIds": ["ref1"]}],
+        "dimensionGuidance": [{"dimension": "reasoning", "guidance": "Look for a causal explanation", "sourceIds": ["ref1"]}],
+        "followUpConcepts": [{"key": "queue-operations", "label": "Queue operations", "description": "Explain enqueue and dequeue", "sourceIds": ["ref1"]}],
+        "codingObjectiveEvidence": {"objective": "Implement dequeue", "successEvidence": ["Returns oldest item"], "sourceIds": ["ref1"]},
+    }
+    body = {"question": "Queues", "references": [{"id": "ref1", "text": "FIFO"}]}
+    monkeypatch.setattr(rubric, "call_groq", lambda *a, **kw: json.dumps(draft))
+    response = client.post("/internal/rubrics/draft", json=body)
+    assert response.status_code == 200
+    assert response.json()["misconceptions"][0]["conceptKey"] == "fifo"
+    draft["dimensionGuidance"][0]["sourceIds"] = ["invented"]
+    monkeypatch.setattr(rubric, "call_groq", lambda *a, **kw: json.dumps(draft))
+    assert client.post("/internal/rubrics/draft", json=body).status_code == 502

@@ -14,6 +14,18 @@ async function child(){
 async function stop(c,signal='SIGTERM'){if(c.exitCode!==null || c.signalCode)return;c.kill(signal);await new Promise(r=>c.once('exit',r));}
 try{
  await embedCorpus(new EmbeddingClient());
+ // This runtime flow uses only three explicitly fictional scoring-ready questions in the disposable fixture.
+ // The reviewed seed packet proves question review; this test reviewer separately supplies synthetic rubric approval.
+ await f.query('UPDATE ingestion_reviewers SET user_id=$2 WHERE id=$1',[f.actor,f.owner]);
+ const {contentEditorial}=await import('../dist/contentIntelligence/editorial.js');
+ const selected=[...(await f.query("SELECT entity_id FROM retrieval_entities WHERE purpose='question-selection' AND primary_competency LIKE 'dsa.%' AND category='conceptual-oral' ORDER BY entity_id LIMIT 2")).rows,
+  ...(await f.query("SELECT entity_id FROM retrieval_entities WHERE purpose='question-selection' AND primary_competency LIKE 'programming.%' AND category='conceptual-oral' ORDER BY entity_id LIMIT 1")).rows];
+ assert.equal(selected.length,3);
+ for(const row of selected){
+  await contentEditorial.addTechnicalReference(f.owner,row.entity_id,f.reference);
+  const draft=await f.editor.createDraft({questionVersionId:row.entity_id,concepts:[{key:'fixture-mechanism',label:'Fixture mechanism',description:'Explain the mechanism with a concrete example',importance:1,required:true,sourceIds:[f.reference]}]});
+  await f.editor.publish(draft.id,draft.hash,f.actor);
+ }
  const express=(await import('express')).default,cookies=(await import('cookie-parser')).default,app=express();app.use(express.json());app.use(cookies());
  app.use('/api/interview-plans',(await import('../dist/routes/plannerRoutes.js')).default);app.use('/api/sessions',(await import('../dist/routes/sessionRoutes.js')).default);
  app.use((error,req,res,next)=>{void req;void next;res.status(error.status || 500).json({message:'Fixture API error'});});
@@ -25,8 +37,6 @@ try{
  }
  const setup={role:'Software Engineer',level:'junior',taxonomyVersion:'junior-se-v1',competencies:['dsa','programming'],difficulty:'standard',mode:'oral',count:3,minutes:30,language:'en',codeLanguage:'javascript',modifiers:{}};
  const preview=await request('/interview-plans/preview',{method:'POST',body:setup});assert.equal(preview.status,201);const plan=preview.data;assert.equal(plan.canConfirm,true);assert.equal(plan.effectiveCount,3);
- // Exact-hash FICTIONAL rubric approvals live only in this disposable database.
- for(const item of plan.items){const draft=await f.editor.createDraft({questionVersionId:item.questionVersionId,concepts:[{key:'fixture-mechanism',label:'Fixture mechanism',description:'Explain the mechanism with a concrete example',importance:1,required:true,sourceIds:[f.reference]}]});await f.editor.publish(draft.id,draft.hash,f.actor);}
  assert.equal((await request('/interview-plans/confirm',{method:'POST',owner:other,body:{planId:plan.id,revision:plan.revision}})).status,404);
  const confirmation=await request('/interview-plans/confirm',{method:'POST',body:{planId:plan.id,revision:plan.revision}});assert.equal(confirmation.status,200);
  const id=plan.sessionId;let c1=await child();f.state.mode='missing';f.state.gate=new Promise(r=>{release=r;});const calls=f.state.calls;

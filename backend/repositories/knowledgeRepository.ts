@@ -237,7 +237,7 @@ export const knowledgeRepository = {
       const id = randomUUID();
       await query(`INSERT INTO durable_operations(id,session_id,user_id,operation_type,idempotency_key,payload_hash,session_revision,deadline)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, [id,input.sessionId,userId,input.type,input.idempotencyKey,input.payloadHash,input.sessionRevision,nullable(input.deadline)]);
-      await query(`INSERT INTO transactional_outbox(id,session_id,user_id,aggregate_revision,event_type,payload) VALUES($1,$2,$3,$4,$5,$6)`,
+      await query(`INSERT INTO transactional_outbox(id,session_id,user_id,aggregate_revision,event_type,payload,scope_type,scope_id) VALUES($1,$2,$3,$4,$5,$6,'session',$2)`,
         [randomUUID(),input.sessionId,userId,input.sessionRevision,input.eventType,json(input.eventPayload)]);
       return id;
     });

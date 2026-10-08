@@ -8,6 +8,7 @@ export function allocate(setup: Setup, candidates: Candidate[]): Allocation {
   let nodes=0;
   const find=(count: number, strictDifficulty: boolean): Candidate[] | null => {
     const target=Math.round(count*0.6), adj=adjacent(setup.difficulty);
+    const recentLimit=setup.includeRecentTrends?Math.floor(count*0.3):0;
     if(setup.mode==="mixed" && (!candidates.some(c=>isCode(c.hit.category!)) || !candidates.some(c=>!isCode(c.hit.category!))))return null;
     let minimumRequested=0,maximumRequested=0;
     for(const root of setup.competencies) {
@@ -26,12 +27,14 @@ export function allocate(setup: Setup, candidates: Candidate[]): Allocation {
       const groups=new Set(items.map(c=>c.group)), families=new Set(items.map(c=>c.hit.familyKey));
       const desired=Math.round((items.length+1)*0.6)>Math.round(items.length*0.6)?setup.difficulty:adj;
       const pool=[...pools.get(root)!].sort((a,b)=>Number(b.hit.difficulty===desired)-Number(a.hit.difficulty===desired)
-        || ["filtered_retrieval","adjacent_difficulty","reviewed_seed","approved_template"].indexOf(a.reason)
-          -["filtered_retrieval","adjacent_difficulty","reviewed_seed","approved_template"].indexOf(b.reason)
+        || Number(a.publicationClass==="fresh/provisional")-Number(b.publicationClass==="fresh/provisional")
+        || ["core_reviewed","filtered_retrieval","difficulty","adjacent_difficulty","coverage","reviewed_seed","fallback","approved_template","recent_signal"].indexOf(a.reason)
+          -["core_reviewed","filtered_retrieval","difficulty","adjacent_difficulty","coverage","reviewed_seed","fallback","approved_template","recent_signal"].indexOf(b.reason)
         || a.minutes-b.minutes || (b.hit.similarity ?? 0)-(a.hit.similarity ?? 0)
         || a.hit.questionVersionId!.localeCompare(b.hit.questionVersionId!));
       for(const c of pool) {
         if(groups.has(c.group) || families.has(c.hit.familyKey) || minutes+c.minutes>usable
+          || (c.publicationClass==="fresh/provisional"&&items.filter(i=>i.publicationClass==="fresh/provisional").length>=recentLimit)
           || (c.hit.category==="system-design-lite" && items.some(i=>i.hit.category==="system-design-lite")))continue;
         const nextRequested=requested+Number(c.hit.difficulty===setup.difficulty);
         if(strictDifficulty && (nextRequested>target || c.hit.difficulty!==setup.difficulty && c.hit.difficulty!==adj
@@ -62,6 +65,8 @@ export function allocate(setup: Setup, candidates: Candidate[]): Allocation {
   if(items.length && items.length<setup.count)shortages.push("count_reduced_for_time_or_evidence");
   if(items.length && difficultyDistribution[setup.difficulty]!==Math.round(items.length*0.6))shortages.push("difficulty_target_shortage");
   if(items.some(c=>c.reason==="reviewed_seed" || c.reason==="approved_template"))shortages.push("reviewed_fallback_used");
+  if(setup.includeRecentTrends&&items.some(c=>c.publicationClass==="fresh/provisional"))shortages.push("recent_signal_provisional_selected");
+  if(setup.includeRecentTrends&&candidates.some(c=>c.publicationClass==="fresh/provisional")&&!items.some(c=>c.publicationClass==="fresh/provisional"))shortages.push("recent_signal_not_selected_within_30_percent_cap");
   if(setup.modifiers.company || setup.modifiers.occurredAfter || setup.modifiers.occurredBefore)
     if(!items.length)shortages.push("company_date_evidence_unavailable_constraints_preserved");
   return {items,coverage,difficultyDistribution,timeBudget:{setupWrapMinutes:2,probeReserveMinutes:4,questionMinutes,slackMinutes:setup.minutes-totalMinutes,totalMinutes},

@@ -10,5 +10,5 @@ export class SessionStateError extends Error {
   constructor(message: string, public status = 409) { super(message); }
 }
 export class RuntimeFailure extends Error {
-  constructor(public code: string, public retryable = false) { super(code); }
+  constructor(public code: string, public retryable = false, public retryAfterMs?:number) { super(code); }
 }

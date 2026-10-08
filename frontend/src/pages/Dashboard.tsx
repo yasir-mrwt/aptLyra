@@ -14,6 +14,7 @@ import NewInterviewForm from "../components/NewInterviewForm"
 import { ResumeHistoryWidget } from "../features/resume/components/ResumeHistoryWidget"
 import { GamificationWidget } from "../features/gamification/components/GamificationWidget"
 import { motion } from "framer-motion"
+import apiClient from "../services/apiClient"
 
 /**
  * Dashboard Component
@@ -32,6 +33,15 @@ const Dashboard = () => {
         isOpen: false,
         sessionId: '',
     })
+    const [isContentReviewer, setIsContentReviewer] = useState(false)
+
+    useEffect(() => {
+        let active = true
+        void apiClient.get("/content-intelligence/reviewer").then(response => {
+            if (active) setIsContentReviewer(Boolean(response.data?.reviewer))
+        }).catch(() => { if (active) setIsContentReviewer(false) })
+        return () => { active = false }
+    }, [])
 
     useEffect(() => {
         dispatch(getSession())
@@ -154,6 +164,15 @@ const Dashboard = () => {
                     )}
                 </div>
             </motion.div>
+
+            <div className="-mt-10 flex justify-end">
+                {isContentReviewer && <button type="button" onClick={() => navigate("/content-editorial")}
+                    className="mr-2 rounded-lg border border-cyan-300/30 px-4 py-2 text-sm text-cyan-100 hover:border-cyan-300/60">Editorial review</button>}
+                <button type="button" onClick={() => navigate("/share-interview-experience")}
+                    className="rounded-lg border border-white/15 px-4 py-2 text-sm text-surface-200 hover:border-cyan-300/50 hover:text-cyan-200">
+                    Share an interview experience
+                </button>
+            </div>
 
             {/* New Interview Card */}
             <motion.div

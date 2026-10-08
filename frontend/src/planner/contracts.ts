@@ -5,6 +5,7 @@ export interface PlannerSetup {
   difficulty:"easy"|"standard"|"stretch"; mode:"oral"|"coding"|"mixed";count:number;minutes:number;
   language:"en";codeLanguage:"python"|"javascript";
   modifiers:{company?:string;occurredAfter?:string;occurredBefore?:string;designLite?:boolean};
+  includeRecentTrends?:boolean;
 }
 export interface PlanPreviewData {
   id:string;sessionId:string;revision:number;status:string;role:string;mode:string;setup:PlannerSetup;
@@ -12,7 +13,7 @@ export interface PlanPreviewData {
   coverage:Record<string,number>;difficultyDistribution:Record<string,number>;
   timeBudget:{setupWrapMinutes:number;probeReserveMinutes:number;questionMinutes:number;slackMinutes:number};
   shortages:string[];canConfirm:boolean;confirmedAt:string|null;evaluationMode:"legacy"|"rubric-v1";
-  items:{id:string;position:number;competency:string;category:string;difficulty:string;selectionReason:string;estimatedMinutes:number;available:boolean}[];
+  items:{id:string;position:number;competency:string;category:string;difficulty:string;selectionReason:string;publicationClass?:string;estimatedMinutes:number;available:boolean}[];
 }
 export function setupError(s:PlannerSetup):string|null {
   if(s.competencies.length<1 || s.competencies.length>4)return "Choose between one and four competencies.";

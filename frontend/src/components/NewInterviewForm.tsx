@@ -6,7 +6,7 @@ import type { NewInterviewFormProps } from "../types/forms";
 
 export default function NewInterviewForm({preferredRole,onCreated}:NewInterviewFormProps) {
   const [setup,setSetup]=useState<PlannerSetup>({role:PLANNER_ROLES.includes(preferredRole || "")?preferredRole!:PLANNER_ROLES[0],level:"junior",taxonomyVersion:"junior-se-v1",
-    competencies:["dsa","programming"],difficulty:"standard",mode:"mixed",count:5,minutes:30,language:"en",codeLanguage:"javascript",modifiers:{}});
+    competencies:["dsa","programming"],difficulty:"standard",mode:"mixed",count:5,minutes:30,language:"en",codeLanguage:"javascript",modifiers:{},includeRecentTrends:false});
   const [companies,setCompanies]=useState<string[]>([]),[pending,setPending]=useState(false),[error,setError]=useState<string|null>(null);
   const inFlight=useRef(false);
   useEffect(()=>{let alive=true;getPlannerCapabilities().then(data=>{if(alive)setCompanies(data.companies);}).catch(()=>undefined);return()=>{alive=false;};},[]);
@@ -31,6 +31,7 @@ export default function NewInterviewForm({preferredRole,onCreated}:NewInterviewF
       <label>Coding language<select className={field} value={setup.codeLanguage} onChange={e=>patch({codeLanguage:e.target.value as PlannerSetup["codeLanguage"]})}><option value="javascript">JavaScript</option><option value="python">Python</option></select></label></div>
       <fieldset><legend>Choose 1–4 competencies</legend><div className="grid gap-3 sm:grid-cols-2 mt-3">{Object.entries(ROOT_LABELS).map(([id,label])=><label key={id} className="flex gap-3 items-center"><input type="checkbox" checked={setup.competencies.includes(id)} onChange={e=>patch({competencies:e.target.checked?[...setup.competencies,id]:setup.competencies.filter(c=>c!==id)})}/>{label}</label>)}</div></fieldset>
       <label className="flex gap-3"><input type="checkbox" disabled={setup.mode!=="mixed"} checked={!!setup.modifiers.designLite} onChange={e=>patch({modifiers:{...setup.modifiers,designLite:e.target.checked}})}/>Allow one design-lite exercise (mixed mode)</label>
+      <label className="flex gap-3 items-center"><input type="checkbox" checked={!!setup.includeRecentTrends} onChange={e=>patch({includeRecentTrends:e.target.checked})}/>Include recent interview trends (up to 30% fresh/provisional; reviewed core stays first)</label>
       {companies.length>0?<div className="grid gap-4 sm:grid-cols-3"><label>Company preference<select className={field} value={setup.modifiers.company || ""} onChange={e=>patch({modifiers:{...setup.modifiers,company:e.target.value || undefined}})}><option value="">Core practice</option>{companies.map(c=><option key={c}>{c}</option>)}</select></label>
         <label>Occurred on or after<input type="date" className={field} value={setup.modifiers.occurredAfter || ""} onChange={e=>patch({modifiers:{...setup.modifiers,occurredAfter:e.target.value || undefined}})}/></label>
         <label>Occurred on or before<input type="date" className={field} value={setup.modifiers.occurredBefore || ""} onChange={e=>patch({modifiers:{...setup.modifiers,occurredBefore:e.target.value || undefined}})}/></label></div>:<p>Company/date focus is unavailable: there are no eligible dated reports. Core practice uses the reviewed local corpus.</p>}

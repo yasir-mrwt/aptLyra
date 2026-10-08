@@ -11,6 +11,7 @@ Aptlyra is an AI technical interview preparation platform for final-year student
 - Deterministic retrieval-backed planning across 1–4 selected competency roots. Plans preserve coverage, difficulty targets, estimated duration, stable item IDs, provenance and explicit shortages.
 - A persisted plan preview before confirmation. The server selects questions; confirmation starts practice through the existing runner. Confirm retries are idempotent.
 - Permission-aware ingestion, withdrawal and an exact-hash human-reviewed corpus of 48 locally authored/AI-assisted questions. Editorial provenance is labeled accurately; no company interview-bank authenticity is claimed.
+- Protected source registry with permission-hash review, disable/withdraw controls, bounded REST/JSON and RSS/Atom collectors, durable collection scheduling, quarantine import and cautious reviewed trend summaries. No real third-party source is currently enabled.
 - Internal semantic retrieval using pinned local CPU embeddings and PostgreSQL/pgvector. Source availability, model compatibility and corpus completeness are checked before use.
 - Lyra, the SVG interviewer, with cloud/browser voice, code and diagram tools, legacy technical/delivery feedback and PDF reports. Provider-dependent features require configuration.
 
@@ -18,9 +19,9 @@ Planning is evidence-backed. Newly confirmed interviews use **rubric evaluation 
 
 The current corpus has no eligible company reports or reviewed technical-reference/rubric bank. Company/date choices appear only when supporting evidence exists. Resume/JD personalization is unavailable in the planner; design-lite is optional in mixed mode. Coding coverage varies by competency, so setup may need correction. Existing sessions retain their legacy behavior.
 
-## PLANNED
+## IN PROGRESS
 
-Durable interview operations and recovery; complete evidence-linked reports; final interviewer/UI polish; release security, research evaluation and deployment hardening. See the [implementation roadmap](docs/implementation-roadmap.md). These capabilities are not claimed as implemented.
+Phase 8.5 source-to-interview database E2E, operator workflow completion and full disposable-store regression remain to be verified. No live provider permission or source was fabricated. Phase 9 remains unstarted. See the [implementation roadmap](docs/implementation-roadmap.md).
 
 ## Architecture and stack
 

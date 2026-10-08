@@ -11,7 +11,11 @@ import {aiService,AIServiceError} from "../services/aiService.js";
 import {gamificationService} from "../services/gamificationService.js";
 import {bumpRevision,insertOperation,requestFinish} from "./operations.js";
 import {RUNTIME,RuntimeFailure} from "./contracts.js";
+import {CONTENT_RUNTIME,contentOperations,type ContentOperationType} from "./contentOperations.js";
 import {readStagedAudio,removeStagedAudio,cleanOrphanMedia} from "./media.js";
+import {ingestionRepository} from "../repositories/ingestionRepository.js";
+import {collectSource,CollectorError} from "../contentIntelligence/collectors.js";
+import {scheduleDueSources} from "../contentIntelligence/sourceRegistry.js";
 
 const QUEUE="aptlyra-interview-operations";
 type Operation=Record<string,any>;
@@ -21,6 +25,7 @@ export interface RuntimeOptions {
   beforeCommit?:(op:Operation)=>Promise<void>;
   buildReport?:(session:ISession)=>Promise<void>;
   publish?:(id:string)=>Promise<void>;
+  contentHandlers?:Partial<Record<ContentOperationType,(operation:Operation)=>Promise<unknown>>>;
 }
 function safeFailure(error:unknown) {
   if(error instanceof RuntimeFailure)return error;
@@ -49,6 +54,7 @@ export class InterviewRuntime {
   private ticking=false;
   private stopping=false;
   private lastCleanup=0;
+  private lastContentSchedule=0;
   private publishing=new Set<string>();
   private leaseMs:number;
   private retryMs:number;
@@ -75,9 +81,21 @@ export class InterviewRuntime {
   async tick() {
     if(this.ticking || this.stopping)return;this.ticking=true;
     try {
+      if(Date.now()-this.lastContentSchedule>=60000){this.lastContentSchedule=Date.now();await scheduleDueSources().catch(()=>{});}
       const expired=(await query("SELECT *,deadline<=now() AS deadline_due FROM durable_operations WHERE runtime_version=$1 AND status IN ('queued','running','retryable_failed') AND ((status='running' AND lease_expires_at<=now()) OR (deadline<=now() AND (status<>'retryable_failed' OR next_retry_at IS NOT NULL)))",[RUNTIME])).rows;
       for(const op of expired)await this.expire(op);
-      const ready=(await query("SELECT * FROM durable_operations WHERE runtime_version=$1 AND deadline>now() AND (status='queued' OR (status='retryable_failed' AND next_retry_at<=now() AND attempts<max_attempts)) ORDER BY created_at LIMIT 50",[RUNTIME])).rows;
+      const contentExpired=(await query(`SELECT *,deadline<=now() AS deadline_due FROM durable_operations WHERE runtime_version=$1 AND status IN ('queued','running','retryable_failed')
+        AND ((status='running' AND lease_expires_at<=now()) OR (deadline<=now() AND (status<>'retryable_failed' OR next_retry_at IS NOT NULL)))`,[CONTENT_RUNTIME])).rows;
+      for(const op of contentExpired){
+        const terminal=op.deadline_due || Number(op.attempts)>=Number(op.max_attempts);
+        await query(`UPDATE durable_operations SET status=$2,error_code=$3,next_retry_at=CASE WHEN $2='retryable_failed' THEN now()+interval '1 second' ELSE NULL END,
+          lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=$1 AND runtime_version=$4`,
+        [op.id,terminal?'terminal_failed':'retryable_failed',terminal?'content_operation_expired':'content_worker_recovered',CONTENT_RUNTIME]);
+        await query("UPDATE transactional_outbox SET status=$2,published_at=NULL,updated_at=now() WHERE operation_id=$1",[op.id,terminal?'failed':'pending']);
+        if(op.operation_type==="source_collection")await query(`UPDATE source_collection_runs SET status=$2,completed_at=CASE WHEN $2='retryable_failed' THEN NULL ELSE now() END,
+          safe_error_category=CASE WHEN $2='terminal_failed' THEN 'network_failure' ELSE NULL END WHERE operation_id=$1 AND status IN ('queued','running')`,[op.id,terminal?'terminal_failed':'retryable_failed']);
+      }
+      const ready=(await query("SELECT * FROM durable_operations WHERE runtime_version IN ($1,$2) AND deadline>now() AND (status='queued' OR (status='retryable_failed' AND next_retry_at<=now() AND attempts<max_attempts)) ORDER BY created_at LIMIT 50",[RUNTIME,CONTENT_RUNTIME])).rows;
       for(const op of ready){
         if(this.stopping)break;
         // Stable BullMQ IDs deduplicate concurrent publishers. Never hold a SQL lock over Redis I/O.
@@ -154,6 +172,8 @@ export class InterviewRuntime {
     this.notify(op,saved,saved.questions[op.question_index]?.processingState || "running");
   }
   async process(id:string) {
+    const version=(await query("SELECT runtime_version FROM durable_operations WHERE id=$1",[id])).rows[0]?.runtime_version;
+    if(version===CONTENT_RUNTIME){await this.processContent(id);return;}
     const op=await this.claim(id);if(!op)return;
     const heartbeat=setInterval(()=>{
       if(!this.stopping)void query("UPDATE durable_operations SET lease_expires_at=least(deadline,now()+($4*interval '1 millisecond')) WHERE id=$1 AND status='running' AND lease_owner=$2 AND lease_token=$3 AND lease_expires_at>now()",[id,this.owner,op.lease_token,this.leaseMs]).catch(()=>{});
@@ -173,6 +193,65 @@ export class InterviewRuntime {
       await this.fail(op,reported).catch(()=>{/* Expired SQL leases are recovered later. */});
     }
     finally{clearInterval(heartbeat);}
+  }
+  private async processContent(id:string) {
+    const operation=(await query("SELECT * FROM durable_operations WHERE id=$1 AND runtime_version=$2",[id,CONTENT_RUNTIME])).rows[0];
+    if(!operation || !(operation.status==="queued" || operation.status==="retryable_failed"))return;
+    const handler=this.options.contentHandlers?.[operation.operation_type as ContentOperationType];
+    if(!handler){
+      await query("UPDATE durable_operations SET status='terminal_failed',error_code='content_handler_unavailable',updated_at=now() WHERE id=$1 AND runtime_version=$2 AND status IN ('queued','retryable_failed')",[id,CONTENT_RUNTIME]);
+      await query("UPDATE transactional_outbox SET status='failed',updated_at=now() WHERE operation_id=$1",[id]);return;
+    }
+    const token=randomUUID();
+    const claimed=(await query(`UPDATE durable_operations SET status='running',attempts=attempts+1,total_attempts=total_attempts+1,
+      lease_owner=$2,lease_token=$3,lease_expires_at=least(deadline,now()+($4*interval '1 millisecond')),
+      next_retry_at=NULL,error_code=NULL,updated_at=now() WHERE id=$1 AND runtime_version=$5 AND deadline>now()
+      AND (status='queued' OR (status='retryable_failed' AND next_retry_at<=now())) AND attempts<max_attempts RETURNING *`,
+    [id,this.owner,token,this.leaseMs,CONTENT_RUNTIME])).rows[0];
+    if(!claimed)return;
+    const heartbeat=setInterval(()=>{
+      if(!this.stopping)void query(`UPDATE durable_operations SET lease_expires_at=least(deadline,now()+($4*interval '1 millisecond'))
+        WHERE id=$1 AND status='running' AND lease_owner=$2 AND lease_token=$3 AND lease_expires_at>now()`,
+      [id,this.owner,token,this.leaseMs]).catch(()=>{});
+    },Math.max(25,Math.floor(this.leaseMs/3)));heartbeat.unref();
+    try{
+      if(claimed.source_id)await this.assertContentSourceActive(claimed.source_id);
+      const result=await handler(claimed);
+      if(Buffer.byteLength(JSON.stringify(result ?? null))>65_536)throw new RuntimeFailure("content_result_too_large");
+      await withDatabaseLock("content-operation:commit:v1",async()=>{
+        if(claimed.source_id)await this.assertContentSourceActive(claimed.source_id);
+        const row=(await query(`UPDATE durable_operations SET status='succeeded',result=$4,committed_revision=0,
+          lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,next_retry_at=NULL,error_code=NULL,updated_at=now()
+          WHERE id=$1 AND status='running' AND lease_owner=$2 AND lease_token=$3 AND lease_expires_at>now() AND deadline>now()
+          RETURNING id`,[id,this.owner,token,JSON.stringify(result ?? null)])).rows[0];
+        if(!row)throw new RuntimeFailure("stale_content_result");
+        await query("UPDATE transactional_outbox SET status='published',published_at=now(),updated_at=now() WHERE operation_id=$1",[id]);
+      });
+    }catch(error){
+      const code=error instanceof RuntimeFailure?error.code:"content_operation_failed";
+      const retryable=error instanceof RuntimeFailure && error.retryable;
+      if(operation.operation_type==="source_collection"&&typeof operation.payload?.runId==="string"){
+        const source=(await query("SELECT state,withdrawn_at FROM sources WHERE id=$1",[operation.source_id])).rows[0];
+        const category=source?.withdrawn_at?"source_withdrawn":!source||source.state!=="enabled"?"source_disabled":null;
+        if(category)await query("UPDATE source_collection_runs SET status='cancelled',completed_at=now(),safe_error_category=$2 WHERE id=$1 AND status IN ('queued','running')",[operation.payload.runId,category]).catch(()=>{});
+      }
+      const retryDelay=error instanceof RuntimeFailure&&error.retryAfterMs?Math.min(3600000,Math.max(this.retryMs*Math.pow(2,Math.max(0,claimed.attempts-1)),error.retryAfterMs)):this.retryMs*Math.pow(2,Math.max(0,claimed.attempts-1));
+      await query(`UPDATE durable_operations SET status=CASE WHEN $6 AND attempts<max_attempts THEN 'retryable_failed' ELSE 'terminal_failed' END,
+        error_code=$4,next_retry_at=CASE WHEN $6 AND attempts<max_attempts THEN now()+($5*interval '1 millisecond') ELSE NULL END,
+        lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,updated_at=now()
+        WHERE id=$1 AND status='running' AND lease_owner=$2 AND lease_token=$3`,
+      [id,this.owner,token,code,retryDelay,retryable]).catch(()=>{});
+      await query("UPDATE transactional_outbox SET status=$2,published_at=NULL,updated_at=now() WHERE operation_id=$1",
+        [id,retryable?'pending':'failed']).catch(()=>{});
+    }finally{clearInterval(heartbeat);}
+  }
+  private async assertContentSourceActive(sourceId:string) {
+    const source=(await query(`SELECT state,withdrawn_at,permission_expires_at,permission_status,review_status,permission_basis,
+      permission_evidence,permission_evidence_hash,reviewed_by,reviewed_at FROM sources WHERE id=$1 FOR SHARE`,[sourceId])).rows[0];
+    if(!source || source.state!=="enabled" || source.withdrawn_at || source.permission_status!=="permitted" ||
+      source.review_status!=="approved" || (source.permission_expires_at&&new Date(source.permission_expires_at).getTime()<=Date.now()) || !source.permission_basis || !source.permission_evidence ||
+      !source.permission_evidence_hash || !source.reviewed_by || !source.reviewed_at)
+      throw new RuntimeFailure("source_permission_required");
   }
   private async evaluate(op:Operation) {
     let answer=(await query("SELECT * FROM answer_attempts WHERE id=$1",[op.answer_attempt_id])).rows[0];
@@ -292,8 +371,85 @@ export class InterviewRuntime {
   }
 }
 
-export async function startInterviewRuntime(io?:Server) {
+export async function startInterviewRuntime(io?:Server,contentHandlers?:RuntimeOptions["contentHandlers"]) {
   const installed=(await query("SELECT to_regclass('interview_reports') IS NOT NULL AS installed")).rows[0].installed;
   if(!installed)return null; // Baseline-only consumers remain supported; release applies 008 explicitly.
-  const runtime=new InterviewRuntime({io});await runtime.start();return runtime;
+  const handlers:RuntimeOptions["contentHandlers"]={
+    source_collection:async op=>{
+      if(typeof op.payload?.runId==="string"){
+        const source=(await query(`SELECT s.*,a.adapter_id FROM sources s JOIN ingestion_adapters a ON a.source_id=s.id WHERE s.id=$1`,[op.source_id])).rows[0];
+        if(!source||!source.full_text_storage)throw new RuntimeFailure("collection_permission_required");
+        const startedAt=new Date().toISOString();
+        await query("UPDATE source_collection_runs SET status='running',started_at=COALESCE(started_at,now()) WHERE id=$1 AND source_id=$2 AND status IN ('queued','retryable_failed')",[op.payload.runId,op.source_id]);
+        try{
+          const scope=source.allowed_scope||{};
+          let imported=0,duplicates=0,quarantined=0;
+          const result=await collectSource({id:source.id,adapter:source.adapter_id==="rss-atom"?"rss-atom":"official-api",origin:source.origin,
+            allowedHosts:scope.allowedHosts||[],allowedPaths:scope.allowedPaths||[],allowedQueryKeys:scope.allowedQueryKeys||[],maxItems:scope.maxItems||100,maxPages:scope.maxPages||5},source.collection_cursor||{},async(pageItems,pageCursor)=>{
+            for(const item of pageItems){
+              const current=(await query(`SELECT state,withdrawn_at,permission_expires_at,permission_status,review_status,permission_basis,permission_evidence,permission_evidence_hash,permission_reviewed_hash,reviewed_by,reviewed_at
+                FROM sources WHERE id=$1`,[source.id])).rows[0];
+              if(!current||current.state!=="enabled"||current.withdrawn_at||(current.permission_expires_at&&new Date(current.permission_expires_at).getTime()<=Date.now())||current.permission_status!=="permitted"||current.review_status!=="approved"||
+                !current.permission_basis||!current.permission_evidence||!current.permission_evidence_hash||current.permission_evidence_hash!==current.permission_reviewed_hash||!current.reviewed_by||!current.reviewed_at)
+                throw new RuntimeFailure("source_permission_required");
+              const saved=await ingestionRepository.ingestCollectedItem(source.id,item);
+              if(saved.duplicate)duplicates++;else {
+                imported++;if(saved.quarantined)quarantined++;
+                if(saved.recordId&&source.model_processing_allowed){
+                  const consent=(await query(`SELECT r.input_hash,e.ai_processing_consent FROM ingestion_records r
+                    JOIN interview_experience_records e ON e.document_version_id=r.document_version_id WHERE r.id=$1`,[saved.recordId])).rows[0];
+                  const reviewer=(await query(`SELECT user_id FROM ingestion_reviewers WHERE id=$1 AND enabled AND kind='human' AND user_id IS NOT NULL`,[current.reviewed_by])).rows[0];
+                  if(consent?.ai_processing_consent&&reviewer?.user_id)await contentOperations.enqueue({type:"source_extraction",scopeType:"source",scopeId:source.id,
+                    sourceId:source.id,idempotencyKey:`extract:${saved.recordId}:${consent.input_hash}`,payload:{recordId:saved.recordId,inputHash:consent.input_hash},requestedBy:reviewer.user_id,maxAttempts:3});
+                }
+              }
+            }
+            const cursorSaved=(await query(`UPDATE sources SET collection_cursor=$2,updated_at=now() WHERE id=$1 AND state='enabled' AND withdrawn_at IS NULL
+              AND (permission_expires_at IS NULL OR permission_expires_at>now()) AND permission_status='permitted' AND review_status='approved'
+              AND permission_reviewed_hash=permission_evidence_hash RETURNING id`,[source.id,JSON.stringify(pageCursor)])).rows[0];
+            if(!cursorSaved)throw new RuntimeFailure("source_permission_required");
+          });
+          await query(`UPDATE sources SET collection_cursor=$2,last_collection_at=$3,last_success_at=now(),last_failure_code=NULL,last_failure_category=NULL,
+            source_health='healthy',next_due_at=now()+(collection_interval_minutes*interval '1 minute'),updated_at=now() WHERE id=$1`,[source.id,JSON.stringify(result.cursor),startedAt]);
+          await query(`UPDATE source_collection_runs SET status='succeeded',completed_at=now(),discovered_count=$2,imported_count=$3,duplicate_count=$4,quarantined_count=$5 WHERE id=$1`,[op.payload.runId,result.items.length,imported,duplicates,quarantined]);
+          return {discovered:result.items.length,imported,duplicates,quarantined,notModified:result.notModified};
+        }catch(error){
+          const category=error instanceof CollectorError?error.category:"network_failure";
+          const retryable=category==="network_failure"||category==="rate_limited";
+          await query(`UPDATE source_collection_runs SET status=$2,completed_at=now(),safe_error_category=$3 WHERE id=$1`,[op.payload.runId,retryable?"retryable_failed":"terminal_failed",category]).catch(()=>{});
+          await query(`UPDATE sources SET last_collection_at=now(),last_failure_code=$2,last_failure_category=$2,source_health='degraded',
+            next_due_at=now()+greatest(collection_interval_minutes*interval '1 minute',$3*interval '1 millisecond'),updated_at=now() WHERE id=$1`,
+          [source.id,category,error instanceof CollectorError?error.retryAfterMs||0:0]).catch(()=>{});
+          throw new RuntimeFailure(category,retryable,error instanceof CollectorError?error.retryAfterMs:undefined);
+        }
+      }
+      const path=op.payload?.path;
+      if(typeof path!=="string" || path.length>2048)throw new RuntimeFailure("invalid_collection_request");
+      return {recordIds:await ingestionRepository.ingestFile(op.source_id,path)};
+    },
+    source_extraction:async op=>{
+      const recordId=op.payload?.recordId,inputHash=op.payload?.inputHash;
+      if(typeof recordId!=="string"||typeof inputHash!=="string")throw new RuntimeFailure("invalid_extraction_request");
+      const row=(await query(`SELECT r.source_id,r.input_hash,e.ai_processing_consent,s.model_processing_allowed,s.reviewed_by,ir.user_id
+        FROM ingestion_records r JOIN sources s ON s.id=r.source_id JOIN interview_experience_records e ON e.document_version_id=r.document_version_id
+        LEFT JOIN ingestion_reviewers ir ON ir.id=s.reviewed_by AND ir.kind='human' AND ir.enabled
+        WHERE r.id=$1 AND r.source_id=$2`,[recordId,op.source_id])).rows[0];
+      if(!row)throw new RuntimeFailure("content_scope_mismatch");
+      if(row.input_hash!==inputHash||!row.ai_processing_consent||!row.model_processing_allowed||!row.user_id)
+        throw new RuntimeFailure("collection_permission_required");
+      const {contentEditorial}=await import("../contentIntelligence/editorial.js");
+      try{return await contentEditorial.extractSubmission(row.user_id,recordId,inputHash,"permission-authorized-worker");}
+      catch(error){
+        if(error instanceof AIServiceError&&["provider_rate_limited","provider_timeout","provider_unavailable"].includes(error.code))
+          throw new RuntimeFailure(error.code,true);
+        throw error;
+      }
+    },
+    retention_expiry:async op=>{
+      if(op.scope_type!=="maintenance")throw new RuntimeFailure("content_scope_mismatch");
+      return {expired:await ingestionRepository.expire()};
+    },
+    ...contentHandlers,
+  };
+  const runtime=new InterviewRuntime({io,contentHandlers:handlers});await runtime.start();return runtime;
 }

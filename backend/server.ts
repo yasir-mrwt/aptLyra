@@ -33,6 +33,7 @@ import codeRoutes from "./routes/codeRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import analyticsRoutes from "./routes/analyticsRoutes.js";
 import diagramRoutes from "./routes/diagramRoutes.js";
+import contentIntelligenceRoutes from "./routes/contentIntelligenceRoutes.js";
 
 import gamificationRoutes from "./routes/gamificationRoutes.js";
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
@@ -165,6 +166,7 @@ app.use("/api/code", codeRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/diagrams", diagramRoutes);
+app.use("/api/content-intelligence", contentIntelligenceRoutes);
 
 app.use("/api/gamification", gamificationRoutes);
 

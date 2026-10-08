@@ -4,6 +4,8 @@
 
 The main dashboard setup now previews an owned persisted `planner-v1` plan before starting practice. Express runs `deterministic-v1`; FastAPI supplies the existing Phase 5 embeddings. Confirmation projects selected reviewed questions into the existing JSONB runner. Evaluation, follow-ups and reports retain their legacy behavior, visibly labeled in preview and runner. This phase adds no scoring, confidence, adaptive-probe policy, durable worker or final character redesign.
 
+The Phase 8.5B setup adds an opt-in “Include recent interview trends” preference. Default plans exclude `fresh/provisional` publication class and prefer reviewed/scoring-ready questions. When enabled, reviewed questions remain first and fresh/provisional content is capped at floor(30% of effective plan count); the option, selection reason and source provenance are persisted. Preview labels provisional items as recent interview signals. Shortages and all Phase 6 coverage/time/mode/difficulty/family constraints remain explicit.
+
 ## Inputs and validation
 
 Roles: Software Engineer, Backend Developer, Full Stack Developer. Level: junior (0–2 years). English only. Select 1–4 distinct active roots in `junior-se-v1`: dsa, oop, dbms-sql, os, networks, backend-web, design-lite, programming. Request 3–10 originals (at least as many as selected roots), 15–60 minutes, easy/standard/stretch difficulty, oral/coding/mixed mode and Python/JavaScript coding language. SQL questions use SQL. Both form and server validate; the server rejects unknown fields and arbitrary question IDs.

@@ -84,12 +84,14 @@ def create_app() -> FastAPI:
     from app.api.speech import router as speech_router
     from app.api.embeddings import router as embeddings_router
     from app.api.rubric import router as rubric_router
+    from app.api.content_extraction import router as content_router
 
     app.include_router(interview_router, tags=["Interview"], dependencies=[Depends(verify_api_key)])
     app.include_router(v2_resume_router, dependencies=[Depends(verify_api_key)])
     app.include_router(speech_router, prefix="/speech", tags=["Speech"], dependencies=[Depends(verify_api_key)])
     app.include_router(embeddings_router, dependencies=[Depends(verify_api_key)])
     app.include_router(rubric_router, dependencies=[Depends(verify_api_key)])
+    app.include_router(content_router, dependencies=[Depends(verify_api_key)])
     from app.api.embedding_body_limit import EmbeddingBodyLimit
     app.add_middleware(EmbeddingBodyLimit)
 
@@ -100,7 +102,7 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request, exc):
-        if request.url.path == "/internal/embeddings" or request.url.path.startswith("/internal/rubrics/"):
+        if request.url.path == "/internal/embeddings" or request.url.path.startswith(("/internal/rubrics/","/internal/content/")):
             return JSONResponse(status_code=422, content={"detail": {"code": "invalid_input"}})
         return await request_validation_exception_handler(request, exc)
 

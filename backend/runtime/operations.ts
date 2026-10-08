@@ -19,11 +19,11 @@ export async function insertOperation(session:ISession,type:"evaluate"|"follow-u
   answer?:string,item?:string,index?:number) {
   const id=randomUUID();
   const row=(await query(`INSERT INTO durable_operations(id,session_id,user_id,operation_type,idempotency_key,payload_hash,session_revision,
-    runtime_version,answer_attempt_id,plan_item_id,question_index,payload,deadline)
-    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now()+interval '10 minutes') RETURNING *`,
+    runtime_version,answer_attempt_id,plan_item_id,question_index,payload,deadline,scope_type,scope_id)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now()+interval '10 minutes','session',$2) RETURNING *`,
     [id,session._id,session.user,type,key,payloadHash,session.revision || 0,RUNTIME,answer || null,item || null,index ?? null,JSON.stringify(payload)])).rows[0];
-  await query(`INSERT INTO transactional_outbox(id,session_id,user_id,aggregate_revision,event_type,payload,operation_id)
-    VALUES($1,$2,$3,$4,'interview.operation.queued',$5,$6)`,[randomUUID(),session._id,session.user,session.revision || 0,JSON.stringify({operationId:id}),id]);
+  await query(`INSERT INTO transactional_outbox(id,session_id,user_id,aggregate_revision,event_type,payload,operation_id,scope_type,scope_id)
+    VALUES($1,$2,$3,$4,'interview.operation.queued',$5,$6,'session',$2)`,[randomUUID(),session._id,session.user,session.revision || 0,JSON.stringify({operationId:id}),id]);
   return row;
 }
 export async function ownedOperations(sessionId:string,userId:string) {

@@ -52,7 +52,7 @@ before(async()=>{
 });
 after(async()=>{try{if(redis){await redis.del(`user:${owner}:xp_buffer`);redis.disconnect();}if(directory)await rm(directory,{recursive:true,force:true});}finally{if(f)await f.cleanup();}});
 test('migration 007 present; draft, provisional and hash-bound reviewed promotion stay distinct',async()=>{
- assert.equal((await q('SELECT count(*)::int AS n FROM schema_migrations')).rows[0].n,8);
+ assert.equal((await q('SELECT count(*)::int AS n FROM schema_migrations')).rows[0].n,11);
  const version=(await q("SELECT entity_id FROM retrieval_entities WHERE purpose='question-selection' LIMIT 1")).rows[0].entity_id;
  const d=await draft(version);assert.equal((await editor.inspect(d.id)).content_hash,d.hash);
  const oversized=await editor.createDraft({questionVersionId:version,concepts:['one','two'].map(key=>({key,label:key,description:'Bounded fixture',importance:1,required:true,sourceIds:Array.from({length:6},()=>randomUUID())}))});await assert.rejects(()=>editor.publish(oversized.id,oversized.hash),/rubric_reference_limit/);

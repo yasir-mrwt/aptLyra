@@ -8,7 +8,7 @@ class EmbeddingBodyLimit:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or (scope["path"] != "/internal/embeddings" and not scope["path"].startswith("/internal/rubrics/")):
+        if scope["type"] != "http" or (scope["path"] != "/internal/embeddings" and not scope["path"].startswith(("/internal/rubrics/","/internal/content/"))):
             await self.app(scope, receive, send)
             return
         body = bytearray()
