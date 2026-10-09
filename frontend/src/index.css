@@ -354,3 +354,31 @@ select::-webkit-scrollbar {
     transform: translateX(100%);
   }
 }
+
+.editorial-console button {
+  min-height: 44px;
+  max-width: 100%;
+  padding-inline: 0.9rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.editorial-console .editorial-primary-action {
+  font-weight: 650;
+}
+
+.editorial-console .editorial-section-nav button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .editorial-console button.editorial-primary-action {
+    width: 100%;
+    flex-basis: 100%;
+  }
+
+  .editorial-console .flex.flex-wrap.gap-2 > button:not(.editorial-primary-action) {
+    flex: 1 1 auto;
+  }
+}
