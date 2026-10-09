@@ -8,9 +8,14 @@ import AccountModal from "./AccountModal";
 import { Logo } from "./header/Logo";
 import { DesktopNav } from "./header/DesktopNav";
 import { MobileNav } from "./header/MobileNav";
+import type { AppRole } from "../features/auth/roleSlice";
 
 const Header = () => {
   const { user } = useSelector((state: RootState) => state.auth);
+  const roleState=useSelector((state:RootState)=>state.role);
+  const currentUserId=user?.id||user?._id;
+  const roleLoading=Boolean(user&&(!currentUserId||roleState.userId!==currentUserId||roleState.status==="idle"||roleState.status==="loading"));
+  const role=roleState.status==="ready"&&roleState.userId===currentUserId?roleState.role as AppRole|null:null;
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const location = useLocation();
 
@@ -46,6 +51,8 @@ const Header = () => {
               user={user}
               isActive={isActive}
               onOpenModal={() => setIsAccountModalOpen(true)}
+              role={role}
+              roleLoading={roleLoading}
             />
 
             {/* Mobile Menu Button + Navigation Dropdown */}
@@ -56,6 +63,8 @@ const Header = () => {
               onClose={() => setIsMenuOpen(false)}
               isActive={isActive}
               onOpenModal={() => setIsAccountModalOpen(true)}
+              role={role}
+              roleLoading={roleLoading}
             />
           </div>
         </div>

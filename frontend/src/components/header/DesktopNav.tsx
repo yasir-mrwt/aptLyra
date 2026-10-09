@@ -1,10 +1,13 @@
 import { Link } from "react-router-dom";
 import { UserProfileMenu } from "./UserProfileMenu";
+import { roleNavigation,type AppRole } from "../../features/auth/roleSlice";
 
 interface DesktopNavProps {
   user: { name: string } | null;
   isActive: (path: string) => boolean;
   onOpenModal: () => void;
+  role:AppRole|null;
+  roleLoading:boolean;
 }
 
 const NAV_LINKS = [
@@ -13,7 +16,8 @@ const NAV_LINKS = [
   { to: "/analytics", label: "Analytics" },
 ];
 
-export const DesktopNav = ({ user, isActive, onOpenModal }: DesktopNavProps) => {
+export const DesktopNav = ({ user, isActive, onOpenModal,role,roleLoading }: DesktopNavProps) => {
+  const restrictedLinks=roleNavigation(role);
   return (
     <nav className="hidden md:flex items-center gap-4">
       {user ? (
@@ -33,6 +37,8 @@ export const DesktopNav = ({ user, isActive, onOpenModal }: DesktopNavProps) => 
                 {link.label}
               </Link>
             ))}
+            {roleLoading&&<span aria-label="Loading account navigation" className="mx-2 h-7 w-24 animate-pulse rounded-full bg-white/10"/>}
+            {!roleLoading&&restrictedLinks.map(link=><Link key={link.to} to={link.to} className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.18em] transition-all duration-300 whitespace-nowrap ${isActive(link.to)?"bg-white text-black":"text-surface-400 hover:text-white hover:bg-white/5"}`}>{link.label}</Link>)}
           </div>
 
           <UserProfileMenu user={user} onOpenModal={onOpenModal} />

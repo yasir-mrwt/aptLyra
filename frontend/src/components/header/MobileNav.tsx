@@ -3,6 +3,7 @@ import { useDispatch } from "react-redux";
 import { logout } from "../../features/auth/authSlice";
 import { ProfileAvatar } from "./UserProfileMenu";
 import type { AppDispatch } from "../../app/store";
+import { roleNavigation,type AppRole } from "../../features/auth/roleSlice";
 
 interface MobileNavProps {
   user: { name: string } | null;
@@ -11,6 +12,8 @@ interface MobileNavProps {
   onClose: () => void;
   isActive: (path: string) => boolean;
   onOpenModal: () => void;
+  role:AppRole|null;
+  roleLoading:boolean;
 }
 
 export const MobileNav = ({
@@ -20,9 +23,12 @@ export const MobileNav = ({
   onClose,
   isActive,
   onOpenModal,
+  role,
+  roleLoading,
 }: MobileNavProps) => {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
+  const restrictedLinks=roleNavigation(role);
 
   const handleLogout = async () => {
     onClose();
@@ -84,6 +90,8 @@ export const MobileNav = ({
               >
                 Dashboard
               </Link>
+              {roleLoading&&<span aria-label="Loading account navigation" className="block h-8 w-40 animate-pulse rounded bg-white/10"/>}
+              {!roleLoading&&restrictedLinks.map(link=><Link key={link.to} to={link.to} onClick={onClose} className={`block py-3 text-sm font-black uppercase tracking-[0.2em] transition-colors ${isActive(link.to)?"text-primary-400":"text-surface-400 hover:text-white"}`}>{link.label}</Link>)}
               <Link
                 to="/resume-analyzer"
                 onClick={onClose}

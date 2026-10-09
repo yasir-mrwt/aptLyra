@@ -1,6 +1,9 @@
+import { useEffect } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import type { RootState } from "./app/store";
+import type { AppDispatch } from "./app/store";
+import { clearRole,fetchCurrentRole } from "./features/auth/roleSlice";
 import useSocket from "./hooks/useSocket";
 import { usePageMetadata } from "./hooks/usePageMetadata";
 import { ToastContainer, Slide } from 'react-toastify';
@@ -26,12 +29,16 @@ import AnalyticsDashboard from "./pages/AnalyticsDashboard";
 import ShareInterviewExperience from "./pages/ShareInterviewExperience";
 import ContentEditorialConsole from "./pages/ContentEditorialConsole";
 import AdminTeamManagement from "./pages/AdminTeamManagement";
+import EditorialErrorBoundary from "./components/EditorialErrorBoundary";
 
 function App() {
+  const dispatch=useDispatch<AppDispatch>();
   useSocket();
   const location = useLocation();
   usePageMetadata(location.pathname);
   const { user } = useSelector((state: RootState) => state.auth);
+  const userId=user?.id||user?._id||null;
+  useEffect(()=>{if(userId)void dispatch(fetchCurrentRole({userId}));else dispatch(clearRole());},[dispatch,userId]);
 
   // The landing page is a full-bleed experience with its own navbar —
   // rendered outside the app shell (Header + constrained <main>).
@@ -95,7 +102,7 @@ function App() {
                   <Route path="/resume-analyzer" element={<ResumeAnalyzer />} />
                   <Route path="/analytics" element={<AnalyticsDashboard />} />
                   <Route path="/share-interview-experience" element={<ShareInterviewExperience />} />
-                  <Route path="/content-editorial" element={<ContentEditorialConsole />} />
+                  <Route path="/content-editorial" element={<EditorialErrorBoundary><ContentEditorialConsole /></EditorialErrorBoundary>} />
                   <Route path="/admin/team" element={<AdminTeamManagement />} />
                   <Route path="/interview/:sessionId" element={<InterviewRunner />} />
                   <Route path="/review/:sessionId" element={<SessionReview />} />

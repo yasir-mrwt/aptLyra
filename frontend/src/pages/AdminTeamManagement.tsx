@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import type { AppDispatch, RootState } from "../app/store";
+import { fetchCurrentRole } from "../features/auth/roleSlice";
 import apiClient from "../services/apiClient";
 
 type Role = "owner" | "admin" | "reviewer" | "user";
 type Person = { id: string; name: string; email: string; role: Role; created_at?: string };
 
 export default function AdminTeamManagement() {
-  const [me, setMe] = useState<Person | null>(null);
+  const dispatch = useDispatch<AppDispatch>();
+  const { user } = useSelector((state: RootState) => state.auth);
+  const roleState = useSelector((state: RootState) => state.role);
+  const currentUserId = user?.id || user?._id || "";
+  const me = currentUserId && roleState.userId === currentUserId && roleState.status === "ready"
+    ? { id: currentUserId, name: user?.name || "", email: user?.email || "", role: roleState.role as Role }
+    : null;
   const [team, setTeam] = useState<Person[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -13,8 +22,7 @@ export default function AdminTeamManagement() {
   const [transferConfirmation, setTransferConfirmation] = useState("");
 
   const load = useCallback(async () => {
-    const [current, members] = await Promise.all([apiClient.get("/admin/me"), apiClient.get("/admin/team")]);
-    setMe(current.data);
+    const members = await apiClient.get("/admin/team");
     setTeam(members.data);
   }, []);
   useEffect(() => { void load().catch(() => setMessage("Team management is available to owners and admins.")); }, [load]);
@@ -24,6 +32,7 @@ export default function AdminTeamManagement() {
     try {
       await apiClient.patch(`/admin/team/${person.id}/role`, { role });
       await load();
+      await dispatch(fetchCurrentRole({ userId: currentUserId, force: true }));
       setMessage(`${person.email} is now ${role}.`);
     } catch (error) {
       const code = (error as { response?: { data?: { code?: string } } }).response?.data?.code;
@@ -39,6 +48,7 @@ export default function AdminTeamManagement() {
       await apiClient.post("/admin/owner/transfer", { targetUserId: target.id });
       setTransferId(""); setTransferConfirmation("");
       await load();
+      await dispatch(fetchCurrentRole({ userId: currentUserId, force: true }));
       setMessage(`Ownership transferred to ${target.email}.`);
     } catch { setMessage("Ownership transfer could not be completed."); }
     finally { setBusy(false); }

@@ -14,7 +14,6 @@ import NewInterviewForm from "../components/NewInterviewForm"
 import { ResumeHistoryWidget } from "../features/resume/components/ResumeHistoryWidget"
 import { GamificationWidget } from "../features/gamification/components/GamificationWidget"
 import { motion } from "framer-motion"
-import apiClient from "../services/apiClient"
 
 /**
  * Dashboard Component
@@ -33,19 +32,8 @@ const Dashboard = () => {
         isOpen: false,
         sessionId: '',
     })
-    const [isContentReviewer, setIsContentReviewer] = useState(false)
-    const [appRole, setAppRole] = useState("user")
-
-    useEffect(() => {
-        let active = true
-        void apiClient.get("/admin/me").then(response => {
-            if (active) {
-                setAppRole(response.data?.role || "user")
-                setIsContentReviewer(["owner", "admin", "reviewer"].includes(response.data?.role))
-            }
-        }).catch(() => { if (active) { setAppRole("user"); setIsContentReviewer(false) } })
-        return () => { active = false }
-    }, [])
+    const { role: appRole, status: roleStatus } = useSelector((state: RootState) => state.role)
+    const isContentReviewer = roleStatus === "ready" && ["owner", "admin", "reviewer"].includes(appRole || "")
 
     useEffect(() => {
         dispatch(getSession())
@@ -170,9 +158,10 @@ const Dashboard = () => {
             </motion.div>
 
             <div className="-mt-10 flex justify-end">
+                {roleStatus !== "ready" && <span aria-label="Loading account actions" className="mr-2 h-9 w-28 animate-pulse rounded-lg bg-white/10" />}
                 {isContentReviewer && <button type="button" onClick={() => navigate("/content-editorial")}
                     className="mr-2 rounded-lg border border-cyan-300/30 px-4 py-2 text-sm text-cyan-100 hover:border-cyan-300/60">Editorial review</button>}
-                {["owner", "admin"].includes(appRole) && <button type="button" onClick={() => navigate("/admin/team")}
+                {["owner", "admin"].includes(appRole || "") && <button type="button" onClick={() => navigate("/admin/team")}
                     className="mr-2 rounded-lg border border-violet-300/30 px-4 py-2 text-sm text-violet-100 hover:border-violet-300/60">Team access</button>}
                 <button type="button" onClick={() => navigate("/share-interview-experience")}
                     className="rounded-lg border border-white/15 px-4 py-2 text-sm text-surface-200 hover:border-cyan-300/50 hover:text-cyan-200">
