@@ -21,11 +21,13 @@ import json
 import logging
 import time
 import threading
+import re as _re
 from fastapi import HTTPException
 
 GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
 DEFAULT_TEXT_MODEL = "llama-3.3-70b-versatile"
 DEFAULT_VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+STRICT_JSON_SCHEMA_MODELS = {"openai/gpt-oss-20b", "openai/gpt-oss-120b", "qwen/qwen3.8-27b"}
 
 
 def _raise_provider_error(response, capability: str) -> None:
@@ -35,7 +37,7 @@ def _raise_provider_error(response, capability: str) -> None:
         provider_code = error.get("code") if isinstance(error, dict) else None
     except (ValueError, TypeError, AttributeError):
         provider_code = None
-    status, code, retryable = 502, "provider_unavailable", True
+    status, code, retryable = 503, "provider_unavailable", True
     if provider_code == "model_terms_required" and capability == "tts":
         status, code, retryable = 503, "tts_terms_required", False
     elif provider_code == "model_not_found" or response.status_code == 404:
@@ -44,6 +46,8 @@ def _raise_provider_error(response, capability: str) -> None:
         status, code = 503, "provider_authentication"
     elif response.status_code == 429:
         status, code = 429, "provider_rate_limited"
+    elif response.status_code < 500:
+        status, code = 503, "provider_configuration"
     logging.warning("Groq capability=%s status=%s code=%s", capability, response.status_code, code)
     raise HTTPException(status, {"code": code, "message": "AI capability unavailable. Please retry or use the available fallback.", "retryable": retryable})
 
@@ -72,8 +76,6 @@ MIN_CALL_INTERVAL = float(os.getenv("GROQ_MIN_CALL_INTERVAL", "1"))
 # Groq limits are per ORGANIZATION, so multiple keys from one account share
 # one pool.
 # ============================================================================
-
-import re as _re
 
 _key_lock = threading.RLock()
 _key_index = 0
@@ -208,6 +210,7 @@ def call_groq(
     api_key: str = None,
     temperature: float = 0.6,
     max_retries: int = 5,
+    json_schema: dict = None,
 ) -> str:
     """Shared helper to call the Groq chat completions API. Supports text and images.
 
@@ -216,12 +219,19 @@ def call_groq(
     """
     model_name = _resolve_model(image_base64)
 
+    response_format = None
+    if json_schema and model_name in STRICT_JSON_SCHEMA_MODELS:
+        response_format = {"type": "json_schema", "json_schema": {
+            "name": "editorial_review_v1", "strict": True, "schema": json_schema,
+        }}
+    elif as_json:
+        response_format = {"type": "json_object"}
     body = {
         "model": model_name,
         "messages": _build_messages(system_prompt, user_prompt, as_json, image_base64),
         "max_completion_tokens": 8192,
         "temperature": temperature,
-        **({"response_format": {"type": "json_object"}} if as_json else {}),
+        **({"response_format": response_format} if response_format else {}),
     }
 
     timeout = int(os.getenv("REQUEST_TIMEOUT", "60"))
@@ -286,12 +296,18 @@ def call_groq(
                 time.sleep(retry_delay)
                 retry_delay = int(retry_delay * 1.5)
                 continue
-        except requests.exceptions.RequestException as e:
+        except requests.exceptions.Timeout:
             if attempt < max_retries:
                 print("[RETRY] Provider network request failed. Retrying in 5s...")
                 time.sleep(5)
                 continue
             raise HTTPException(504, {"code": "provider_timeout", "message": "AI request timed out. Please retry.", "retryable": True}) from None
+        except requests.exceptions.RequestException:
+            if attempt < max_retries:
+                print("[RETRY] Provider connection failed. Retrying in 5s...")
+                time.sleep(5)
+                continue
+            raise HTTPException(503, {"code": "provider_unavailable", "message": "AI provider is unavailable. Please retry.", "retryable": True}) from None
 
         if not resp.ok:
             _raise_provider_error(resp, "chat")
@@ -299,15 +315,18 @@ def call_groq(
 
     if resp is None:
         raise HTTPException(
-            status_code=500, detail="No response received from AI service after retries"
+            status_code=503, detail={"code":"provider_unavailable","message":"AI provider is unavailable. Please retry.","retryable":True}
         )
 
-    data = resp.json()
+    try:
+        data = resp.json()
+    except (ValueError, requests.exceptions.JSONDecodeError):
+        raise HTTPException(502,{"code":"invalid_provider_response","message":"AI provider returned an invalid response."}) from None
 
     choices = data.get("choices", [])
     if not choices:
         raise HTTPException(
-            status_code=500, detail="Groq returned an empty response (no choices)"
+            status_code=502, detail={"code":"invalid_provider_response","message":"AI provider returned an invalid response."}
         )
 
     # Check for truncated responses
@@ -318,6 +337,111 @@ def call_groq(
         )
 
     return choices[0].get("message", {}).get("content", "") or ""
+
+
+def editorial_ai_settings() -> tuple[str, str]:
+    """Return the configured editorial provider and model without exposing secrets."""
+    default_provider = "ollama" if os.getenv("NODE_ENV", "production").strip().lower() == "development" else "groq"
+    provider = os.getenv("AI_PROVIDER", default_provider).strip().lower()
+    if provider not in {"ollama", "groq"}:
+        raise HTTPException(503, {"code": "provider_configuration", "message": "Editorial AI provider configuration is invalid."})
+    if provider == "ollama":
+        model = os.getenv("OLLAMA_MODEL", "").strip()
+        if not model:
+            raise HTTPException(503, {"code": "provider_configuration", "message": "Set OLLAMA_MODEL to an installed local model."})
+        return provider, model
+    return provider, _resolve_model()
+
+
+def editorial_ai_label() -> str:
+    """Safe provider/model label for validation diagnostics."""
+    try:
+        provider, model = editorial_ai_settings()
+        return f"provider={provider} model={model}"
+    except HTTPException:
+        return "provider=unconfigured model=unconfigured"
+
+
+def _call_ollama(
+    system_prompt: str,
+    user_prompt: str,
+    as_json: bool,
+    temperature: float,
+    json_schema: dict | None,
+) -> str:
+    provider, model = editorial_ai_settings()
+    if provider != "ollama":
+        raise HTTPException(503, {"code": "provider_configuration", "message": "Local AI provider configuration is invalid."})
+    base_url = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").strip().rstrip("/")
+    if not base_url.startswith(("http://", "https://")):
+        raise HTTPException(503, {"code": "provider_configuration", "message": "Local AI service URL must use HTTP or HTTPS."})
+    body = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "stream": False,
+        "options": {"temperature": temperature},
+        **({"format": json_schema} if json_schema else ({"format": "json"} if as_json else {})),
+    }
+    try:
+        response = requests.post(
+            f"{base_url}/api/chat",
+            json=body,
+            headers={"Content-Type": "application/json"},
+            timeout=int(os.getenv("REQUEST_TIMEOUT", "60")),
+        )
+    except requests.exceptions.Timeout:
+        raise HTTPException(504, {"code": "provider_timeout", "message": "Local AI timed out. Retry or explicitly enable the configured fallback."}) from None
+    except requests.exceptions.RequestException:
+        raise HTTPException(503, {"code": "provider_unavailable", "message": "Local AI is unavailable. Start Ollama or explicitly enable the configured fallback."}) from None
+    if not response.ok:
+        status, code = 503, "provider_unavailable"
+        if response.status_code == 404:
+            code = "provider_model_unavailable"
+        elif response.status_code in (401, 403):
+            code = "provider_authentication"
+        elif response.status_code == 429:
+            status, code = 429, "provider_rate_limited"
+        elif response.status_code < 500:
+            code = "provider_configuration"
+        logging.warning("editorial_ai.provider_failure provider=ollama model=%s status=%s code=%s", model, response.status_code, code)
+        raise HTTPException(status, {"code": code, "message": "Local AI could not complete this request. Check the model and Ollama service."})
+    try:
+        data = response.json()
+        content = data.get("message", {}).get("content")
+    except (ValueError, TypeError, AttributeError):
+        content = None
+    if not isinstance(content, str) or not content.strip():
+        raise HTTPException(502, {"code": "invalid_provider_response", "message": "Local AI returned an empty or invalid response."})
+    return content
+
+
+def call_editorial_ai(
+    system_prompt: str,
+    user_prompt: str,
+    as_json: bool = False,
+    temperature: float = 0.6,
+    max_retries: int = 0,
+    json_schema: dict | None = None,
+) -> str:
+    """Use local Ollama for editorial work; Groq is an explicit opt-in fallback."""
+    provider, _ = editorial_ai_settings()
+    if provider == "groq":
+        return call_groq(system_prompt, user_prompt, as_json=as_json, temperature=temperature,
+                         max_retries=max_retries, json_schema=json_schema)
+    try:
+        return _call_ollama(system_prompt, user_prompt, as_json, temperature, json_schema)
+    except HTTPException as error:
+        fallback_enabled = os.getenv("AI_FALLBACK_ENABLED", "false").strip().lower() in {"1", "true", "yes"}
+        fallback_provider = os.getenv("AI_FALLBACK_PROVIDER", "groq").strip().lower()
+        if not fallback_enabled or fallback_provider != "groq":
+            raise
+        detail = error.detail if isinstance(error.detail, dict) else {}
+        logging.warning("editorial_ai.fallback from=ollama to=groq code=%s", detail.get("code", "provider_unavailable"))
+        return call_groq(system_prompt, user_prompt, as_json=as_json, temperature=temperature,
+                         max_retries=max_retries, json_schema=json_schema)
 
 
 def parse_response(text_output: str):

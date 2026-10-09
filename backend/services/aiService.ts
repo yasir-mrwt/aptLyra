@@ -13,17 +13,19 @@ if (process.env.NODE_ENV !== "test") dotenv.config();
 
 const API_SERVICE_URL = process.env.AI_SERVICE_URL || "http://localhost:8000";
 
-const providerCodes = new Set(["provider_model_unavailable", "provider_authentication", "provider_rate_limited", "provider_timeout", "provider_unavailable", "tts_terms_required", "invalid_provider_audio"]);
+const providerCodes = new Set(["provider_model_unavailable", "provider_authentication", "provider_configuration", "provider_rate_limited", "provider_timeout", "provider_unavailable", "invalid_provider_response", "invalid_extraction_output", "extraction_schema_validation_failed", "extraction_semantic_validation_failed", "rubric_draft_schema_validation_failed", "rubric_draft_semantic_validation_failed", "invalid_review_output", "malformed_model_json", "editorial_schema_validation_failed", "editorial_semantic_validation_failed", "tts_terms_required", "invalid_provider_audio"]);
 export class AIServiceError extends Error {
-  constructor(public code: string, public upstreamStatus: number) { super("AI operation unavailable. Please retry."); }
+  constructor(public code: string, public upstreamStatus: number, public category?: string) { super("AI operation unavailable. Please retry."); }
 }
 async function providerError(response: any) {
-  let code = "provider_unavailable";
+  let code = response.status === 429 ? "provider_rate_limited" : response.status === 504 ? "provider_timeout" : "provider_unavailable";
+  let category: string | undefined;
   try {
     const detail = (await response.json()).detail;
     if (detail && typeof detail === "object" && providerCodes.has(detail.code)) code = detail.code;
+    if (detail && typeof detail === "object" && ["malformed_model_json","schema_validation","extraction_validation","semantic_validation","invalid_provider_response"].includes(detail.category)) category = detail.category;
   } catch { /* Do not expose untrusted upstream text. */ }
-  return new AIServiceError(code, response.status);
+  return new AIServiceError(code, response.status, category);
 }
 
 /**
@@ -77,16 +79,16 @@ export const aiService = {
     const response=await fetchWithRetry(`${API_SERVICE_URL}/internal/content/extract`,{method:"POST",headers:{"Content-Type":"application/json","X-API-Key":process.env.INTERNAL_API_KEY || ""},body:JSON.stringify(input)},1);
     if(!response.ok)throw await providerError(response);return response.json();
   },
-  async reviewEditorialCandidate(input: {question:string;allowedCompetencies:string[];allowedCategories:string[];evidenceText:string|null;similarQuestions:string[]}): Promise<unknown> {
-    const response=await fetchWithRetry(`${API_SERVICE_URL}/internal/content/review`,{method:"POST",headers:{"Content-Type":"application/json","X-API-Key":process.env.INTERNAL_API_KEY || ""},body:JSON.stringify(input)},1);
+  async reviewEditorialCandidate(input: {question:string;allowedCompetencies:string[];allowedCategories:string[];evidenceText:string|null;similarQuestions:string[]},requestId?:string): Promise<unknown> {
+    const response=await fetchWithRetry(`${API_SERVICE_URL}/internal/content/review`,{method:"POST",headers:{"Content-Type":"application/json","X-API-Key":process.env.INTERNAL_API_KEY || "",...(requestId?{"X-Request-ID":requestId}:{})},body:JSON.stringify(input)},1);
     if(!response.ok)throw await providerError(response);return response.json();
   },
   async evaluateRubric(input: import("../evaluation/contracts.js").EvaluationInput): Promise<unknown> {
     const response=await fetchWithRetry(`${API_SERVICE_URL}/internal/rubrics/evaluate`,{method:"POST",headers:{"Content-Type":"application/json","X-API-Key":process.env.INTERNAL_API_KEY || ""},body:JSON.stringify(input)},1);
     if(!response.ok)throw await providerError(response);return response.json();
   },
-  async draftRubric(question:string,references:import("../evaluation/contracts.js").Reference[]):Promise<unknown> {
-    const response=await fetchWithRetry(`${API_SERVICE_URL}/internal/rubrics/draft`,{method:"POST",headers:{"Content-Type":"application/json","X-API-Key":process.env.INTERNAL_API_KEY || ""},body:JSON.stringify({question,references})},1);
+  async draftRubric(question:string,references:import("../evaluation/contracts.js").Reference[],requestId?:string):Promise<unknown> {
+    const response=await fetchWithRetry(`${API_SERVICE_URL}/internal/rubrics/draft`,{method:"POST",headers:{"Content-Type":"application/json","X-API-Key":process.env.INTERNAL_API_KEY || "",...(requestId?{"X-Request-ID":requestId}:{})},body:JSON.stringify({question,references})},1);
     if(!response.ok)throw await providerError(response);return response.json();
   },
   /**

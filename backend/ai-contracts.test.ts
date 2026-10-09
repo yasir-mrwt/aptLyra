@@ -58,3 +58,13 @@ test("non-retryable model error never exposes upstream response text", async () 
   await expect(aiService.evaluateAnswer({ question: "Q", question_type: "oral", user_answer: "A", user_code: "", selected_language: "js", role: "Backend", level: "Junior", interview_type: "oral-only" })).rejects.toMatchObject({ code: "provider_unavailable", message: "AI operation unavailable. Please retry." });
   expect(mockedFetch).toHaveBeenCalledTimes(1);
 });
+test("editorial validation codes and request ID survive the AI-service boundary", async () => {
+  mockedFetch.mockResolvedValue({ ok: false, status: 502, json: async () => ({ detail: {
+    code: "editorial_schema_validation_failed", category: "schema_validation", message: "private validation body",
+  } }) } as any);
+  await expect(aiService.reviewEditorialCandidate({ question: "Explain binary search.", allowedCompetencies: ["dsa.search-sort"],
+    allowedCategories: ["conceptual-oral"], evidenceText: null, similarQuestions: [] }, "request-review-123"))
+    .rejects.toMatchObject({ code: "editorial_schema_validation_failed", category: "schema_validation", upstreamStatus: 502,
+      message: "AI operation unavailable. Please retry." });
+  expect(mockedFetch.mock.calls[0][1]?.headers).toMatchObject({ "X-Request-ID": "request-review-123" });
+});
