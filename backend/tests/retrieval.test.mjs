@@ -52,6 +52,18 @@ test('unchanged compatible embeddings skip; model/content/version affect the gen
   assert.notEqual(corpus.generationFingerprint([{...e[0],entity_id:randomUUID()},...e.slice(1)]),initial.corpusGeneration);
   const dry=await corpus.embedCorpus(fake,true);assert.equal(dry.wouldEmbed,0);
 });
+test('a corpus with retired vectors gets a fresh generation and can be rebuilt',async()=>{
+  await assert.rejects(()=>f.withDatabaseLock('test:retired-generation-recovery',async()=>{
+    await f.query("UPDATE embedding_metadata SET status='retired' WHERE corpus_generation=$1 AND status='active' AND purpose='question-selection'",[initial.corpusGeneration]);
+    const recovered=await corpus.embedCorpus(fake);
+    assert.equal(recovered.eligible,48);assert.equal(recovered.embedded,48);assert.equal(recovered.skipped,0);
+    assert.notEqual(recovered.corpusGeneration,initial.corpusGeneration);
+    assert.equal((await f.query("SELECT count(*)::int AS n FROM embedding_metadata WHERE corpus_generation=$1 AND status='active'",[recovered.corpusGeneration])).rows[0].n,48);
+    throw new Error('rollback generation recovery simulation');
+  }),/rollback generation recovery simulation/);
+  assert.equal((await f.query("SELECT id FROM embedding_generations WHERE status='active'")).rows[0].id,initial.corpusGeneration);
+  assert.equal((await f.query("SELECT count(*)::int AS n FROM embedding_metadata WHERE corpus_generation=$1 AND status='active'",[initial.corpusGeneration])).rows[0].n,48);
+});
 test('FastAPI client rejects batches and malformed/provider payloads without echoing them',async()=>{
   const {EmbeddingClient}=await import('../dist/retrieval/embeddingClient.js');const client=new EmbeddingClient();
   await assert.rejects(()=>client.embed(Array(17).fill('x'),'documents'),/invalid_input/);

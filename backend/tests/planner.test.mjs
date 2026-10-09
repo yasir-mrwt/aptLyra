@@ -16,8 +16,8 @@ before(async()=>{
  f=await fixture({sourceKey:'techvera-junior-se-v1'});process.env.JWT_SECRET='phase6-auth-fixture-only';process.env.REDIS_URL='redis://127.0.0.1:16379/15';
  for(const id of [owner,other])await f.query('INSERT INTO users(id,name,email) VALUES($1,$2,$3)',[id,'Planner fixture',id+'@example.invalid']);
  const {embedCorpus}=await import('../dist/retrieval/corpus.js');await embedCorpus(fake);
- // The seed artifact has question-content review, but no reviewed technical references or scoring packets.
- // Make only eight isolated questions scoring-ready with explicitly fictional fixture review data.
+ // The seed artifact has source approval only. Give eight isolated questions a complete, explicitly fictional
+ // AI proposal and hash-bound test reviewer decision, then add fixture evidence and scoring packets.
  const reviewerId='planner-test-reviewer',sourceId=randomUUID(),documentId=randomUUID(),versionId=randomUUID(),chunkId=randomUUID(),recordId=randomUUID();
  await f.query("INSERT INTO ingestion_reviewers(id,display_name,kind,user_id) VALUES($1,'Fictional planner test reviewer','human',$2)",[reviewerId,owner]);
  await f.query("UPDATE users SET app_role='reviewer' WHERE id=$1",[owner]);
@@ -44,14 +44,22 @@ before(async()=>{
  const ready=[...dsa,...programming];
  assert.equal(ready.length,8);
  const {contentEditorial}=await import('../dist/contentIntelligence/editorial.js');
- const {aiService}=await import('../dist/services/aiService.js');const originalDraft=aiService.draftRubric;
+ const {aiService}=await import('../dist/services/aiService.js');const originalDraft=aiService.draftRubric,originalReview=aiService.reviewEditorialCandidate;
+ aiService.reviewEditorialCandidate=async input=>({contractVersion:'editorial-review-v1',relevance:'relevant',verdict:'recommend-approve',
+   taxonomy:input.allowedCompetencies[0],category:input.allowedCategories[0],difficulty:'standard',duplicateWarning:false,wordingIssues:[],
+   correctedQuestion:null,technicalCorrectness:'uncertain',expectedConcepts:['Explain the central mechanism'],evidenceStatus:'missing',
+   evidenceSummary:'Fictional disposable planner fixture.',rubricGuidance:['Check correctness and trade-offs.'],confidence:'medium',flags:['needs-human-review']});
  aiService.draftRubric=async(_question,refs)=>({concepts:[{key:'fixture-mechanism',label:'Fixture mechanism',description:'Fictional deterministic planner fixture',importance:100,required:true,sourceIds:[refs[0].id]}]});
  for(const q of ready){
+   const seed=(await f.query(`SELECT c.id,c.content_hash FROM ingestion_candidates c WHERE c.question_version_id=$1 AND c.state='published'`,[q.entity_id])).rows[0];
+   assert.ok(seed,'planner fixture question must map to a published seed candidate');
+   const proposal=await contentEditorial.reviewCandidate(owner,seed.id,seed.content_hash);
+   await contentEditorial.approveSeedQuestion(owner,seed.id,seed.content_hash,proposal.packet_hash);
    await contentEditorial.addTechnicalReference(owner,q.entity_id,chunkId);
    const draft=await contentEditorial.draftScoringPacket(owner,q.entity_id);
    await contentEditorial.approveScoringPacket(owner,draft.id,draft.hash);
  }
- aiService.draftRubric=originalDraft;
+ aiService.draftRubric=originalDraft;aiService.reviewEditorialCandidate=originalReview;
  const {RetrievalService}=await import('../dist/retrieval/service.js'),{PlannerService,plannerService}=await import('../dist/planner/service.js');
  const retriever=new RetrievalService(fake);service=new PlannerService(retriever);
  // Actual authenticated router with controlled embedding computation only.
@@ -138,18 +146,29 @@ test('company/date constraints survive every fallback and produce a non-confirma
  assert.ok(evidence.length>0 && evidence.every(e=>e.filters.company==='No real company' && e.filters.occurredAfter==='2026-01-01'));
  await assert.rejects(()=>service.confirm(owner,{planId:p.id,revision:1}),e=>e.status===409);
 });
-test('retrieval model outage uses only unchanged reviewed approved templates with null semantic similarity',async()=>{
+test('retrieval model outage uses only unchanged hash-bound reviewed seed questions with null semantic similarity',async()=>{
  const {RetrievalService}=await import('../dist/retrieval/service.js'),{PlannerService}=await import('../dist/planner/service.js');
  const {RetrievalFailure}=await import('../dist/retrieval/contracts.js');
  const fallback=new PlannerService(new RetrievalService({embed:async()=>{throw new RetrievalFailure('model_unavailable');}}));
- const p=await fallback.preview(owner,setup({competencies:['dsa'],mode:'mixed',count:3}));assert.ok(p.canConfirm);assert.ok(p.items.every(i=>i.selectionReason==='approved_template'));
+ const p=await fallback.preview(owner,setup({competencies:['dsa'],mode:'mixed',count:3}));assert.ok(p.canConfirm);assert.ok(p.items.every(i=>i.selectionReason==='reviewed_seed'&&i.inventoryClass==='TRUSTED_BASELINE'));
  const similarities=(await f.query('SELECT similarity FROM retrieval_results WHERE retrieval_id=ANY($1::uuid[])',[p.items.map(i=>i.retrievalId)])).rows;
  assert.ok(similarities.every(r=>r.similarity===null));assert.ok(p.shortages.includes('reviewed_fallback_used'));
 });
-test('difficulty fallback records reasons and never admits a published seed without scoring readiness',async()=>{
+test('trusted seed fallback returns three exact starter questions when semantic retrieval has no useful hits',async()=>{
+ const {PlannerService}=await import('../dist/planner/service.js');
+ const calls=[],seedRetriever={retrieveQuestions:async request=>{
+   calls.push(request);
+   if(request.strategy==='structured-seed')return new (await import('../dist/retrieval/service.js')).RetrievalService(fake).retrieveQuestions(request);
+   return {operationId:randomUUID(),outcome:'no_match',reason:'no_relevant_hit',hits:[],corpusGeneration:(await f.query("SELECT id FROM embedding_generations WHERE status='active'")).rows[0].id,cacheHit:false,timings:{embeddingMs:0,databaseMs:0,totalMs:0}};
+ }};
+ const p=await new PlannerService(seedRetriever).preview(owner,setup({competencies:['programming'],mode:'coding',count:3}));
+ assert.equal(p.canConfirm,true);assert.equal(p.items.length,3);assert.ok(p.items.every(i=>i.inventoryClass==='TRUSTED_BASELINE'));
+ assert.ok(calls.some(c=>c.filters.reviewedSeed===true&&c.strategy==='structured-seed'));
+});
+test('difficulty fallback records reasons while the trusted baseline does not need dynamic scoring readiness',async()=>{
  const p=await service.preview(owner,setup({competencies:['dsa'],mode:'oral',difficulty:'standard',count:5}));
  assert.ok(p.items.some(i=>i.selectionReason==='adjacent_difficulty'));
- assert.ok(p.items.every(i=>i.publicationClass==='reviewed/scoring-ready'));
+ assert.ok(p.items.every(i=>i.inventoryClass==='TRUSTED_BASELINE'));
  assert.ok(p.shortages.includes('difficulty_target_shortage'));
 });
 test('count/time/mode shortages preserve minimum competency coverage and cannot confirm an impossible plan',async()=>{

@@ -1,15 +1,22 @@
-import { useEffect,useRef,useState,type SyntheticEvent } from "react";
+import { useCallback,useEffect,useRef,useState,type SyntheticEvent } from "react";
 import { ROOT_LABELS,PLANNER_ROLES,setupError,type PlannerSetup } from "../planner/contracts";
 import { getPlannerCapabilities,plannerMessage,previewPlan } from "../services/plannerApi";
 import AIInterviewer from "./AIInterviewer";
 import type { NewInterviewFormProps } from "../types/forms";
+import { useSelector } from "react-redux";
+import type { RootState } from "../app/store";
+import { Link } from "react-router-dom";
 
 export default function NewInterviewForm({preferredRole,onCreated}:NewInterviewFormProps) {
   const [setup,setSetup]=useState<PlannerSetup>({role:PLANNER_ROLES.includes(preferredRole || "")?preferredRole!:PLANNER_ROLES[0],level:"junior",taxonomyVersion:"junior-se-v1",
     competencies:["dsa","programming"],difficulty:"standard",mode:"mixed",count:5,minutes:30,language:"en",codeLanguage:"javascript",modifiers:{},includeRecentTrends:false});
-  const [companies,setCompanies]=useState<string[]>([]),[pending,setPending]=useState(false),[error,setError]=useState<string|null>(null);
+  const [companies,setCompanies]=useState<string[]>([]),[eligibleReviewed,setEligibleReviewed]=useState<number|null>(null),[provisionalCount,setProvisionalCount]=useState(0),[capabilityError,setCapabilityError]=useState(false),[pending,setPending]=useState(false),[error,setError]=useState<string|null>(null);
+  const roleState=useSelector((state:RootState)=>state.role);
+  const canReview=roleState.status==="ready"&&roleState.reviewerLinked&&["owner","admin","reviewer"].includes(roleState.role||"");
   const inFlight=useRef(false);
-  useEffect(()=>{let alive=true;getPlannerCapabilities().then(data=>{if(alive)setCompanies(data.companies);}).catch(()=>undefined);return()=>{alive=false;};},[]);
+  const applyCapabilities=useCallback((data:Awaited<ReturnType<typeof getPlannerCapabilities>>)=>{setCompanies(data.companies);setEligibleReviewed(data.eligibleReviewedQuestions);setProvisionalCount(data.provisionalQuestions);setCapabilityError(false);},[]);
+  useEffect(()=>{let alive=true;getPlannerCapabilities().then(data=>{if(alive)applyCapabilities(data);}).catch(()=>{if(alive)setCapabilityError(true);});return()=>{alive=false;};},[applyCapabilities]);
+  const retryCapabilities=()=>{setCapabilityError(false);void getPlannerCapabilities().then(applyCapabilities).catch(()=>setCapabilityError(true));};
   const patch=(value:Partial<PlannerSetup>)=>{setSetup(s=>({...s,...value}));setError(null);};
   const submit=async(e:SyntheticEvent)=>{
     e.preventDefault();if(inFlight.current)return;
@@ -36,6 +43,9 @@ export default function NewInterviewForm({preferredRole,onCreated}:NewInterviewF
         <label>Occurred on or after<input type="date" className={field} value={setup.modifiers.occurredAfter || ""} onChange={e=>patch({modifiers:{...setup.modifiers,occurredAfter:e.target.value || undefined}})}/></label>
         <label>Occurred on or before<input type="date" className={field} value={setup.modifiers.occurredBefore || ""} onChange={e=>patch({modifiers:{...setup.modifiers,occurredBefore:e.target.value || undefined}})}/></label></div>:<p>Company/date focus is unavailable: there are no eligible dated reports. Core practice uses the reviewed local corpus.</p>}
       <p>Resume and JD personalization are unavailable in this planner. Optional context never changes the core mode.</p>
+      {eligibleReviewed===null&&<div aria-label="Loading question availability" aria-busy="true" className="h-16 animate-pulse rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-transparent">Checking reviewed question availability</div>}
+      {capabilityError&&<p role="alert" className="rounded-xl border border-amber-300/25 bg-amber-950/20 p-4 text-sm">Question availability is temporarily unavailable. <button type="button" onClick={retryCapabilities} className="underline">Retry</button></p>}
+      {eligibleReviewed===0&&<div role="status" className="rounded-xl border border-amber-300/25 bg-amber-950/20 p-4 text-sm"><p>{canReview?"No reviewed questions are currently eligible for core practice. Starter questions become available only after the human question decision, approved technical evidence, exact reviewed rubric and compatible retrieval embedding are complete.":"Not enough reviewed questions are available for this setup yet."}</p>{canReview&&<Link to="/content-editorial" className="mt-2 inline-block text-cyan-200 underline">Open editorial review</Link>}{canReview&&provisionalCount>0&&<p className="mt-2 text-xs text-surface-400">{provisionalCount} starter or provisional questions exist; they are not interview-ready until every review and scoring requirement is complete.</p>}</div>}
       <p>We reserve 2 minutes for setup/wrap-up and 4 for probes. The preview explains count, difficulty and evidence shortages before you start.</p>
       {error && <p role="alert" className="text-rose-300">{error}</p>}
       <button className="btn-primary" type="submit" disabled={pending}>{pending?"Preparing plan…":error?"Retry preview":"Preview plan"}</button>

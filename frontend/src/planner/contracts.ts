@@ -30,4 +30,4 @@ export const shortageLabel=(code:string):string=>({
   reviewed_fallback_used:"Some questions use unchanged reviewed seed or approved template fallback.",
   company_date_evidence_unavailable_constraints_preserved:"No permitted evidence meets your company/date preferences. These constraints were preserved. Explicitly change your preferences to try core practice.",
   plan_stale_preview_again:"This plan's evidence or corpus changed. Create a fresh preview before starting."
-}[code] || (code.startsWith("competency_evidence_shortage:")?"No eligible questions for: "+code.split(":")[1]:code.startsWith("retrieval_unavailable:")?"Semantic retrieval was unavailable; reviewed fallback was attempted.":code));
+}[code] || (code.startsWith("competency_evidence_shortage:")?`No reviewed questions are currently available for ${ROOT_LABELS[code.split(":")[1]]||"one selected competency"}. ${code.split(":")[1] in ROOT_LABELS?"A reviewer can add grounded questions through editorial review.":"Change your competency selection or try again later."}`:code.startsWith("retrieval_unavailable:")?"Semantic retrieval was unavailable; reviewed fallback was attempted.":code));

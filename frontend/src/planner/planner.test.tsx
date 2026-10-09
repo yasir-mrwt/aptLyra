@@ -1,6 +1,8 @@
 import {act,cleanup,fireEvent,render,screen,waitFor} from "@testing-library/react";
 import {afterEach,beforeEach,describe,expect,it,vi} from "vitest";
 import {MemoryRouter,Route,Routes} from "react-router-dom";
+import {Provider} from "react-redux";
+import {store} from "../app/store";
 import NewInterviewForm from "../components/NewInterviewForm";
 import PlanPreview from "../components/PlanPreview";
 import InterviewPlan from "../pages/InterviewPlan";
@@ -8,15 +10,16 @@ import AIInterviewer from "../components/AIInterviewer";
 import {confirmPlan,getPlan,getPlannerCapabilities,previewPlan} from "../services/plannerApi";
 import {setupError,type PlanPreviewData,type PlannerSetup} from "./contracts";
 vi.mock("../services/plannerApi",()=>({previewPlan:vi.fn(),getPlan:vi.fn(),confirmPlan:vi.fn(),getPlannerCapabilities:vi.fn(),plannerMessage:()=>"Planning unavailable; retry."}));
+const renderForm=(props:React.ComponentProps<typeof NewInterviewForm>)=>render(<Provider store={store}><NewInterviewForm {...props}/></Provider>);
 const setup:PlannerSetup={role:"Software Engineer",level:"junior",taxonomyVersion:"junior-se-v1",competencies:["dsa","programming"],difficulty:"standard",mode:"mixed",count:5,minutes:30,language:"en",codeLanguage:"javascript",modifiers:{}};
 const plan:PlanPreviewData={id:"plan",sessionId:"session",revision:1,status:"ready",role:setup.role,mode:setup.mode,setup,effectiveCount:3,requestedCount:5,effectiveMinutes:23,requestedMinutes:30,
  coverage:{dsa:2,programming:1},difficultyDistribution:{easy:1,standard:2,stretch:0},timeBudget:{setupWrapMinutes:2,probeReserveMinutes:4,questionMinutes:17,slackMinutes:7},shortages:["count_reduced_for_time_or_evidence"],canConfirm:true,confirmedAt:null,evaluationMode:"legacy",
  items:[{id:"stable-item",position:0,competency:"dsa.structures",category:"coding",difficulty:"standard",selectionReason:"filtered_retrieval",estimatedMinutes:8,available:true}]};
-beforeEach(()=>{vi.clearAllMocks();vi.mocked(getPlannerCapabilities).mockResolvedValue({companies:[]});});
+beforeEach(()=>{vi.clearAllMocks();vi.mocked(getPlannerCapabilities).mockResolvedValue({companies:[],eligibleReviewedQuestions:4,provisionalQuestions:0});});
 afterEach(cleanup);
 describe("supported planner setup",()=>{
  it("shows junior scope, hides unsupported roles/resume context and only supported languages",async()=>{
-  render(<NewInterviewForm preferredRole="Architect" onCreated={vi.fn()}/>);
+  renderForm({preferredRole:"Architect",onCreated:vi.fn()});
   await waitFor(()=>expect(getPlannerCapabilities).toHaveBeenCalled());
   expect((screen.getByLabelText("Role") as HTMLSelectElement).value).toBe("Software Engineer");
   expect(screen.queryByRole("option",{name:"Architect"})).toBeNull();
@@ -24,7 +27,7 @@ describe("supported planner setup",()=>{
   expect(screen.getByRole("option",{name:"Python"})).toBeTruthy();expect(screen.queryByRole("option",{name:"Rust"})).toBeNull();
  });
  it("validates 1–4 topics and count/time before contacting server",async()=>{
-  render(<NewInterviewForm onCreated={vi.fn()}/>);
+  renderForm({onCreated:vi.fn()});
   fireEvent.click(screen.getByLabelText("Data Structures & Algorithms"));fireEvent.click(screen.getByLabelText("Programming / Coding"));
   fireEvent.click(screen.getByRole("button",{name:"Preview plan"}));
   expect(screen.getByRole("alert").textContent).toContain("one and four");expect(previewPlan).not.toHaveBeenCalled();
@@ -32,7 +35,7 @@ describe("supported planner setup",()=>{
  });
  it("preparing state follows the actual request, prevents duplicate previews and returns persisted plan ID",async()=>{
   let resolve:(p:PlanPreviewData)=>void=()=>{};vi.mocked(previewPlan).mockImplementation(()=>new Promise(r=>{resolve=r;}));const created=vi.fn();
-  render(<NewInterviewForm onCreated={created}/>);
+  renderForm({onCreated:created});
   fireEvent.click(screen.getByRole("button",{name:"Preview plan"}));expect(screen.getByRole("status").textContent).toBe("Preparing your plan");
   expect((screen.getByRole("button",{name:"Preparing plan…"}) as HTMLButtonElement).disabled).toBe(true);
   await act(async()=>resolve(plan));expect(previewPlan).toHaveBeenCalledTimes(1);expect(created).toHaveBeenCalledWith("plan");
@@ -40,15 +43,30 @@ describe("supported planner setup",()=>{
  });
  it("reports planning failure, allows retry and never claims a ready plan",async()=>{
   vi.mocked(previewPlan).mockRejectedValueOnce(new Error("fixture failure")).mockResolvedValueOnce(plan);const created=vi.fn();
-  render(<NewInterviewForm onCreated={created}/>);fireEvent.click(screen.getByRole("button",{name:"Preview plan"}));
+  renderForm({onCreated:created});fireEvent.click(screen.getByRole("button",{name:"Preview plan"}));
   await waitFor(()=>expect(screen.getByRole("alert").textContent).toContain("retry"));expect(screen.getByRole("status").textContent).toBe("Retry available");
   fireEvent.click(screen.getByRole("button",{name:"Retry preview"}));await waitFor(()=>expect(created).toHaveBeenCalledWith("plan"));
  });
  it("company/date availability uses actual capability response and modifiers leave core mode unchanged",async()=>{
-  vi.mocked(getPlannerCapabilities).mockResolvedValue({companies:["Permitted example"]});vi.mocked(previewPlan).mockResolvedValue(plan);
-  render(<NewInterviewForm onCreated={vi.fn()}/>);await waitFor(()=>expect(screen.getByLabelText("Company preference")).toBeTruthy());
+  vi.mocked(getPlannerCapabilities).mockResolvedValue({companies:["Permitted example"],eligibleReviewedQuestions:4,provisionalQuestions:0});vi.mocked(previewPlan).mockResolvedValue(plan);
+  renderForm({onCreated:vi.fn()});await waitFor(()=>expect(screen.getByLabelText("Company preference")).toBeTruthy());
   fireEvent.change(screen.getByLabelText("Company preference"),{target:{value:"Permitted example"}});fireEvent.click(screen.getByRole("button",{name:"Preview plan"}));
   await waitFor(()=>expect(previewPlan).toHaveBeenCalled());expect(vi.mocked(previewPlan).mock.calls[0][0].mode).toBe("mixed");expect(vi.mocked(previewPlan).mock.calls[0][0].modifiers.company).toBe("Permitted example");
+ });
+ it("explains empty reviewed readiness without treating provisional content as reviewed",async()=>{
+  vi.mocked(getPlannerCapabilities).mockResolvedValue({companies:[],eligibleReviewedQuestions:0,provisionalQuestions:2});
+  renderForm({onCreated:vi.fn()});
+  await waitFor(()=>expect(screen.getByText("Not enough reviewed questions are available for this setup yet.")).toBeTruthy());
+  expect(screen.queryByText(/provisional questions exist/)).toBeNull();
+  expect(screen.queryByRole("link",{name:"Open editorial review"})).toBeNull();
+ });
+ it("offers a retry when readiness metadata cannot load",async()=>{
+  vi.mocked(getPlannerCapabilities).mockRejectedValueOnce(new Error("fixture offline"));
+  renderForm({onCreated:vi.fn()});
+  await waitFor(()=>expect(screen.getByRole("alert").textContent).toContain("temporarily unavailable"));
+  vi.mocked(getPlannerCapabilities).mockResolvedValueOnce({companies:[],eligibleReviewedQuestions:3,provisionalQuestions:0});
+  fireEvent.click(screen.getByRole("button",{name:"Retry"}));
+  await waitFor(()=>expect(screen.queryByRole("alert")).toBeNull());
  });
 });
 describe("owned plan preview and confirmation",()=>{

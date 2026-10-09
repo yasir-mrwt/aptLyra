@@ -34,6 +34,7 @@ export interface IQuestion {
   parentEvaluationId?: string;
   planItemId?: string;
   questionVersionId?: string;
+  inventoryClass?: "TRUSTED_BASELINE" | "DYNAMIC_REVIEWED" | "DYNAMIC_PROVISIONAL";
   category?: string;
   evidenceUnavailable?: boolean;
   questionText: string;

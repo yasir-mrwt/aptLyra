@@ -293,7 +293,10 @@ export const sessionService = {
       pushSocketUpdate(io, userId, sessionId, "AI_EVALUATING", `Evaluating question ${questionIdx + 1}...`);
 
       let rubricView:EvaluationView|undefined;let rubricProvider:ProviderResult|null=null;
-      if(session.scoringVersion === "rubric-v1") {
+      // The exact, reviewed starter corpus predates rubric-v1 and has no
+      // approved per-question technical references or rubrics. Keep its
+      // existing live evaluator path; dynamic questions still require rubric-v1.
+      if(session.scoringVersion === "rubric-v1" && question.inventoryClass !== "TRUSTED_BASELINE") {
         prepared=await evaluationService.prepare(sessionId,userId,questionIdx,transcription,codeSubmission || "",diagramImageUrl);
         const computed=await evaluationService.compute(prepared);rubricView=computed.view;rubricProvider=computed.provider;
       }

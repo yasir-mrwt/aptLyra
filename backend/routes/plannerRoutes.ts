@@ -28,7 +28,17 @@ router.get("/capabilities",handle(async()=>{
   const companies=(await query(`SELECT DISTINCT p->>'company' AS label FROM retrieval_entities e,
     jsonb_array_elements(e.provenance) p WHERE e.purpose='question-selection' AND p->>'sourceType'='voluntary-experience'
       AND p->>'company' IS NOT NULL AND p->>'occurredOn' IS NOT NULL AND (p->>'occurredOn')::date<=CURRENT_DATE ORDER BY label LIMIT 100`)).rows.map(r=>r.label);
-  return {roles:ROLES,roots:ROOTS,companies,modifiers:{company:companies.length>0,resume:false,jd:false,designLite:true}};
+  const readiness=await query(`SELECT ready.inventory_class,count(DISTINCT ready.question_version_id)::int AS count
+    FROM content_question_readiness ready JOIN embedding_metadata metadata ON metadata.question_version_id=ready.question_version_id
+      AND metadata.purpose='question-selection' AND metadata.status='active'
+    JOIN embedding_vectors vector ON vector.metadata_id=metadata.id
+    WHERE ready.inventory_class IN ('TRUSTED_BASELINE','DYNAMIC_REVIEWED','DYNAMIC_PROVISIONAL')
+    GROUP BY ready.inventory_class`);
+  const counts=Object.fromEntries(readiness.rows.map(row=>[row.inventory_class,row.count]));
+  const starterQuestions=counts.TRUSTED_BASELINE||0,approvedNewQuestions=counts.DYNAMIC_REVIEWED||0;
+  return {roles:ROLES,roots:ROOTS,companies,starterQuestions,approvedNewQuestions,totalAvailable:starterQuestions+approvedNewQuestions,
+    eligibleReviewedQuestions:starterQuestions+approvedNewQuestions,provisionalQuestions:counts.DYNAMIC_PROVISIONAL||0,
+    modifiers:{company:companies.length>0,resume:false,jd:false,designLite:true}};
 }));
 router.post("/preview",previewLimiter,handle((id,req)=>plannerService.preview(id,req.body),201));
 router.post("/confirm",handle((id,req)=>plannerService.confirm(id,req.body)));

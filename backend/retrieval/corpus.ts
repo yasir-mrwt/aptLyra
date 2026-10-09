@@ -14,6 +14,18 @@ export async function eligibleEntities(): Promise<Entity[]> {
 export function generationFingerprint(entities:Entity[],model:Record<string,unknown>=MODEL) {
   return "corpus-"+digest(JSON.stringify({model,entities:entities.map(e=>[e.entity_id,e.purpose,e.content_hash])}));
 }
+async function writableGeneration(base:string):Promise<string> {
+  let candidate=base;
+  for(let attempt=0;attempt<100;attempt++) {
+    const row=(await query(`SELECT EXISTS(SELECT 1 FROM embedding_generations WHERE id=$1) AS exists,
+      EXISTS(SELECT 1 FROM embedding_metadata m WHERE m.corpus_generation=$1 AND m.status='retired'
+        AND EXISTS(SELECT 1 FROM retrieval_entities e WHERE e.entity_id=coalesce(m.question_version_id,m.chunk_id)
+          AND e.purpose=m.purpose)) AS has_retired_entities`,[candidate])).rows[0];
+    if(!row.exists || !row.has_retired_entities)return candidate;
+    candidate="corpus-"+digest(JSON.stringify({base,previous:candidate,reindexAttempt:attempt+1}));
+  }
+  throw new RetrievalFailure("generation_recovery_limit");
+}
 export function duplicateGroups(entities:Entity[]): Map<string,string> {
   const parent=new Map(entities.map(e=>[e.entity_id,e.entity_id]));
   const find=(id:string):string=>{const p=parent.get(id)!; if(p===id)return p; const root=find(p);parent.set(id,root);return root;};
@@ -32,7 +44,8 @@ export function duplicateGroups(entities:Entity[]): Map<string,string> {
 
 /** No network calls inside a database transaction. A failed run leaves the old generation active. */
 export async function embedCorpus(embedder:Embedder=new EmbeddingClient(),dryRun=false) {
-  const entities=await eligibleEntities(), generation=generationFingerprint(entities), groups=duplicateGroups(entities);
+  const entities=await eligibleEntities(), baseGeneration=generationFingerprint(entities),
+    generation=await writableGeneration(baseGeneration),groups=duplicateGroups(entities);
   const existing=(await query(`SELECT m.id,m.question_version_id,m.chunk_id,m.content_hash,m.model_id,m.model_revision,
       m.embedding_version,m.status,m.corpus_generation,v.value::text AS vector FROM embedding_metadata m JOIN embedding_vectors v ON v.metadata_id=m.id
       WHERE m.model_id=$1 AND m.model_revision=$2 AND m.embedding_version=$3 AND m.dimension=384 AND m.normalization='l2'
@@ -49,7 +62,7 @@ export async function embedCorpus(embedder:Embedder=new EmbeddingClient(),dryRun
       [generation,MODEL.modelId,MODEL.modelRevision,384,"l2",MODEL.embeddingVersion,entities.length]);
     const state=(await query("SELECT status FROM embedding_generations WHERE id=$1",[generation])).rows[0].status;
     if(state==="retired")throw new RetrievalFailure("retired_generation_requires_new_version");
-    if(generationFingerprint(await eligibleEntities())!==generation)throw new RetrievalFailure("corpus_changed_retry");
+    if(generationFingerprint(await eligibleEntities())!==baseGeneration)throw new RetrievalFailure("corpus_changed_retry");
     for(const e of entities) {
       const previous=reusable.get(e.entity_id);
       if(!previous || previous.content_hash!==e.content_hash || previous.corpus_generation===generation)continue;
@@ -68,7 +81,7 @@ export async function embedCorpus(embedder:Embedder=new EmbeddingClient(),dryRun
       const batch=needed.slice(offset,offset+16);
       const result=validateBatch(await embedder.embed(batch.map(e=>e.text),"documents"),batch.length);
       await withDatabaseLock("ingestion:editorial:v1",async()=>{
-        if(generationFingerprint(await eligibleEntities())!==generation)throw new RetrievalFailure("corpus_changed_retry");
+        if(generationFingerprint(await eligibleEntities())!==baseGeneration)throw new RetrievalFailure("corpus_changed_retry");
         for(let i=0;i<batch.length;i++) {
           const e=batch[i],id=randomUUID();
           const saved=await query(`INSERT INTO embedding_metadata(id,question_version_id,chunk_id,purpose,model_id,
@@ -83,7 +96,7 @@ export async function embedCorpus(embedder:Embedder=new EmbeddingClient(),dryRun
       counts.embedded+=batch.length;
     }
     await withDatabaseLock("ingestion:editorial:v1",async()=>{
-      if(generationFingerprint(await eligibleEntities())!==generation)throw new RetrievalFailure("corpus_changed_retry");
+      if(generationFingerprint(await eligibleEntities())!==baseGeneration)throw new RetrievalFailure("corpus_changed_retry");
       const n=(await query(`SELECT count(*)::int AS n FROM embedding_metadata m JOIN embedding_vectors v ON v.metadata_id=m.id
         WHERE m.corpus_generation=$1 AND m.status<>'retired'`,[generation])).rows[0].n;
       if(n!==entities.length)throw new RetrievalFailure("incomplete_generation");

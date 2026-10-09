@@ -30,7 +30,7 @@ async function generation(expected?: string) {
   return g.id as string;
 }
 async function availableItems(planId: string, corpus: string) {
-  const rows=(await query(`SELECT i.id,e.*,v.duplicate_group,ready.publication_class FROM plan_items i JOIN retrieval_entities e ON e.entity_id=i.question_version_id AND e.purpose='question-selection'
+  const rows=(await query(`SELECT i.id,e.*,v.duplicate_group,ready.publication_class,ready.inventory_class FROM plan_items i JOIN retrieval_entities e ON e.entity_id=i.question_version_id AND e.purpose='question-selection'
     AND i.provenance_refs @> e.provenance AND e.provenance @> i.provenance_refs
     JOIN embedding_metadata m ON m.question_version_id=e.entity_id AND m.status='active' AND m.corpus_generation=$2 AND m.content_hash=e.content_hash
     JOIN embedding_vectors v ON v.metadata_id=m.id JOIN content_question_readiness ready ON ready.question_version_id=e.entity_id
@@ -55,7 +55,7 @@ export class PlannerService {
           if(performance.now()-started>45000)throw new PlannerError("planning_timeout",503);
           const response=await this.retriever.retrieveQuestions({query:`Junior ${root} technical practice`,limit:5,candidatePool:20,
             expectedCorpusGeneration:corpus,expectedModelRevision:MODEL.modelRevision,ownership:{userId,sessionId:session._id},
-            strategy:stage.template?"structured-seed":"semantic",
+            strategy:stage.seed?"structured-seed":"semantic",
             filters:{taxonomyVersion:setup.taxonomyVersion,competencies:[root],role:setup.role,categories:categories(setup),
               difficulties:stage.difficulties,alreadySelectedIds:candidates.map(c=>c.hit.questionVersionId!),
               company:setup.modifiers.company,occurredAfter:setup.modifiers.occurredAfter,occurredBefore:setup.modifiers.occurredBefore,
@@ -65,19 +65,20 @@ export class PlannerService {
             throw new PlannerError("stale_retrieval",409);
           if(response.outcome==="unavailable")failures.push("retrieval_unavailable:"+stage.reason);
           const hits=response.hits.filter(hit=>hit.questionVersionId && hit.competency?.split('.')[0]===root && hit.provenanceAvailable && hit.provenance.length);
-          const rows=hits.length?(await query(`SELECT m.question_version_id,v.duplicate_group,ready.publication_class FROM embedding_metadata m JOIN embedding_vectors v ON v.metadata_id=m.id
+          const rows=hits.length?(await query(`SELECT m.question_version_id,v.duplicate_group,ready.publication_class,ready.inventory_class FROM embedding_metadata m JOIN embedding_vectors v ON v.metadata_id=m.id
             JOIN content_question_readiness ready ON ready.question_version_id=m.question_version_id
             WHERE m.question_version_id=ANY($1::uuid[]) AND m.purpose='question-selection' AND m.status='active' AND m.corpus_generation=$2`,[hits.map(h=>h.questionVersionId),corpus])).rows:[];
-          const groups=new Map<string,{group:string;publicationClass:string}>(rows.map(row=>[row.question_version_id,{group:row.duplicate_group,publicationClass:row.publication_class}]));
+          const groups=new Map<string,{group:string;publicationClass:string;inventoryClass:string|null}>(rows.map(row=>[row.question_version_id,{group:row.duplicate_group,publicationClass:row.publication_class,inventoryClass:row.inventory_class}]));
           for(const hit of hits) {
             const metadata=groups.get(hit.questionVersionId!);
             if(!metadata)throw new PlannerError("stale_retrieval",409);
-            const provisional=metadata.publicationClass==="fresh/provisional";
-            const plannerEligible=metadata.publicationClass==="reviewed/scoring-ready"||(setup.includeRecentTrends&&provisional);
+            const provisional=metadata.inventoryClass==="DYNAMIC_PROVISIONAL";
+            const trustedOrReviewed=metadata.inventoryClass==="TRUSTED_BASELINE"||metadata.inventoryClass==="DYNAMIC_REVIEWED";
+            const plannerEligible=trustedOrReviewed||(setup.includeRecentTrends&&provisional);
             if(!plannerEligible)continue;
             if(!candidates.some(c=>c.hit.questionVersionId===hit.questionVersionId))candidates.push({hit,root,group:metadata.group,
               reason:provisional?"recent_signal":setup.includeRecentTrends?(stage.reason==="filtered_retrieval"?"core_reviewed":stage.reason==="adjacent_difficulty"?"difficulty":stage.reason==="reviewed_seed"?"coverage":"fallback"):stage.reason,
-              publicationClass:metadata.publicationClass,minutes:estimateMinutes(hit.category!)});
+              publicationClass:metadata.publicationClass,inventoryClass:metadata.inventoryClass as Candidate["inventoryClass"],minutes:estimateMinutes(hit.category!)});
           }
         }
       }
@@ -102,9 +103,9 @@ export class PlannerService {
           void id;
         }
         await query("UPDATE retrieval_evidence SET plan_id=$1 WHERE id=ANY($2::uuid[]) AND user_id=$3 AND session_id=$4",[planId,operations,userId,session._id]);
-        const eligible=await availableItems(planId,corpus),eligibleClass=new Map(eligible.map(e=>[e.entity_id,e.publication_class]));
+        const eligible=await availableItems(planId,corpus),eligibleClass=new Map(eligible.map(e=>[e.entity_id,{publicationClass:e.publication_class,inventoryClass:e.inventory_class}]));
         if(eligible.length!==allocation.items.length || new Set(eligible.map(e=>e.duplicate_group)).size!==eligible.length||
-          allocation.items.some(c=>eligibleClass.get(c.hit.questionVersionId)!==c.publicationClass))throw new PlannerError("stale_retrieval",409);
+          allocation.items.some(c=>eligibleClass.get(c.hit.questionVersionId)?.publicationClass!==c.publicationClass||eligibleClass.get(c.hit.questionVersionId)?.inventoryClass!==c.inventoryClass))throw new PlannerError("stale_retrieval",409);
         await query("UPDATE interview_plans SET status=$2 WHERE id=$1",[planId,allocation.canConfirm?"ready":"failed"]);
         await query("UPDATE sessions SET interview_plan_id=$2,status=$3 WHERE id=$1 AND user_id=$4",[session._id,planId,allocation.canConfirm?"pending":"cancelled",userId]);
         return planId;
@@ -124,15 +125,15 @@ export class PlannerService {
     if(!uuid.test(id))throw new PlannerError("plan_not_found",404);
     const p=(await query("SELECT * FROM interview_plans WHERE id=$1 AND user_id=$2 AND contract_version=$3",[id,userId,CONTRACT_VERSION])).rows[0];
     if(!p)throw new PlannerError("plan_not_found",404);
-    const items=(await query(`SELECT i.*,q.question_id,q.status AS question_status,ready.publication_class FROM plan_items i JOIN question_versions q ON q.id=i.question_version_id
+    const items=(await query(`SELECT i.*,q.question_id,q.status AS question_status,ready.publication_class,ready.inventory_class FROM plan_items i JOIN question_versions q ON q.id=i.question_version_id
       LEFT JOIN content_question_readiness ready ON ready.question_version_id=q.id WHERE i.plan_id=$1 ORDER BY i.position`,[id])).rows;
     const available=(await query("SELECT entity_id FROM retrieval_entities WHERE entity_id=ANY($1::uuid[]) AND purpose='question-selection'",[items.map(i=>i.question_version_id)])).rows;
     const currentItems=p.status==="ready"?await availableItems(id,p.corpus_version):[];
-    const freshCount=currentItems.filter(item=>item.publication_class==="fresh/provisional").length;
+    const freshCount=currentItems.filter(item=>item.inventory_class==="DYNAMIC_PROVISIONAL").length;
     const stale=available.length!==items.length || (p.status==="ready" &&
       (await generation().catch(()=>null)!==p.corpus_version || currentItems.length!==items.length||
-        (!p.setup_snapshot?.includeRecentTrends&&currentItems.some(item=>item.publication_class!=="reviewed/scoring-ready"))||
-        (p.setup_snapshot?.includeRecentTrends&&currentItems.some(item=>!["reviewed/scoring-ready","fresh/provisional"].includes(item.publication_class)))||
+        (!p.setup_snapshot?.includeRecentTrends&&currentItems.some(item=>!["TRUSTED_BASELINE","DYNAMIC_REVIEWED"].includes(item.inventory_class)))||
+        (p.setup_snapshot?.includeRecentTrends&&currentItems.some(item=>!["TRUSTED_BASELINE","DYNAMIC_REVIEWED","DYNAMIC_PROVISIONAL"].includes(item.inventory_class)))||
         (p.setup_snapshot?.includeRecentTrends&&freshCount>Math.floor(Number(p.effective_count)*0.3))));
     return {id:p.id,sessionId:p.session_id,contractVersion:p.contract_version,plannerVersion:p.planner_version,taxonomyVersion:p.taxonomy_version,
       corpusGeneration:p.corpus_version,role:p.role,level:p.level,mode:p.mode,setup:p.setup_snapshot,revision:p.revision,status:p.status,
@@ -142,7 +143,7 @@ export class PlannerService {
       confirmedAt:p.confirmed_at,modifierAvailability:{company:"requires_permitted_dated_reports",resume:"unavailable",jd:"unavailable",designLite:"mixed_only"},
       evaluationMode:p.confirmed_at?(await sessionRepository.findByIdForUser(p.session_id,userId))?.scoringVersion || "legacy":"rubric-v1",items:items.map(i=>({id:i.id,position:i.position,questionVersionId:i.question_version_id,retrievalId:i.retrieval_id,
         competency:i.primary_competency,category:i.category,difficulty:i.difficulty,origin:i.origin,selectionReason:i.selection_reason,
-        publicationClass:i.publication_class||"unavailable",estimatedMinutes:Number(i.estimated_minutes),available:available.some(e=>e.entity_id===i.question_version_id),
+        publicationClass:i.publication_class||"unavailable",inventoryClass:i.inventory_class||"unavailable",estimatedMinutes:Number(i.estimated_minutes),available:available.some(e=>e.entity_id===i.question_version_id),
         provenance:available.some(e=>e.entity_id===i.question_version_id)?i.provenance_refs:[]}))};
   }
   async confirm(userId: string, value: unknown) {
@@ -165,7 +166,7 @@ export class PlannerService {
         await generation(p.corpus_version);
         const rows=await availableItems(id,p.corpus_version);
         if(rows.length!==p.effective_count || new Set(rows.map(r=>r.duplicate_group)).size!==rows.length)throw new PlannerError("stale_retrieval",409);
-        session.questions=rows.map(r=>({planItemId:r.id,questionVersionId:r.entity_id,category:r.category,primaryCompetency:r.primary_competency,
+        session.questions=rows.map(r=>({planItemId:r.id,questionVersionId:r.entity_id,inventoryClass:r.inventory_class,category:r.category,primaryCompetency:r.primary_competency,
           questionText:r.text,questionType:r.category==="coding" || r.category==="sql"?"coding":r.category==="system-design-lite"?"system-design":"oral",
           idealAnswer:"",language:r.category==="sql"?"sql":p.setup_snapshot.codeLanguage,isSubmitted:false,isEvaluated:false} as IQuestion));
         await query("UPDATE sessions SET scoring_version='rubric-v1',runtime_version='aptlyra-runtime-v1',runtime_state='active',runtime_revision=runtime_revision+1 WHERE id=$1",[session._id]);

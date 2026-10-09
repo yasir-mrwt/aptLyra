@@ -15,6 +15,7 @@ export interface Setup {
 export type SelectionReason = "filtered_retrieval" | "adjacent_difficulty" | "reviewed_seed" | "approved_template" | "core_reviewed" | "recent_signal" | "coverage" | "difficulty" | "fallback";
 export interface Candidate {
   hit: RetrievalHit; root: string; group: string; reason: SelectionReason; minutes: number; publicationClass?: string;
+  inventoryClass?: "TRUSTED_BASELINE" | "DYNAMIC_REVIEWED" | "DYNAMIC_PROVISIONAL";
 }
 export interface Allocation {
   items: Candidate[]; coverage: Record<string,number>; difficultyDistribution: Record<Difficulty,number>;
