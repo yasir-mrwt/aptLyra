@@ -13,7 +13,7 @@ describe('current product identity', () => {
   it('renders the current header identity and accessible logo', () => {
     render(<MemoryRouter><Logo /></MemoryRouter>);
     expect(screen.getByText('Aptlyra')).toBeTruthy();
-    expect(screen.getByAltText('Aptlyra')).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'Aptlyra' })).toBeTruthy();
     expect(INTERVIEWER_PROFILE.displayName).toBe('Lyra');
     expect(BRAND.initial).toBe('A');
   });

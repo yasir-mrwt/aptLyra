@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="title">
+  <title id="title">Aptlyra</title>
+  <defs><linearGradient id="aptlyra-mark" x1="6" y1="5" x2="43" y2="44" gradientUnits="userSpaceOnUse"><stop stop-color="#A5F3FC"/><stop offset=".52" stop-color="#67E8F9"/><stop offset="1" stop-color="#818CF8"/></linearGradient></defs>
+  <rect width="48" height="48" rx="12" fill="#111827"/>
+  <path d="M24 3.8 44.2 39H3.8L24 3.8Z" stroke="url(#aptlyra-mark)" stroke-width="2.8" stroke-linejoin="round"/>
+  <path d="m15.4 31.6 8.6-15 8.6 15M19.1 25.5h9.8" stroke="url(#aptlyra-mark)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="24" cy="39" r="2.1" fill="#A5F3FC"/>
+</svg>

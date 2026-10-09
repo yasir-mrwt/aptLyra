@@ -14,6 +14,7 @@ import {
   Zap,
 } from "lucide-react";
 import InterviewerAvatar from "../components/InterviewerAvatar";
+import AptlyraMark from "../components/AptlyraMark";
 
 /**
  * Aptlyra landing — pitch-black grid canvas, monochrome typography,
@@ -196,7 +197,7 @@ const Landing = () => {
       <header className="sticky top-0 z-50 border-b border-white/5 bg-[#050505]/80 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <Link to="/" className="flex items-center gap-2.5">
-            <img src="/logo.svg" alt={BRAND.name} className="h-8 w-8" />
+            <AptlyraMark className="h-8 w-8" />
             <span className="text-[17px] font-extrabold tracking-tight text-white">
               {BRAND.name}
             </span>
@@ -539,7 +540,7 @@ const Landing = () => {
             {/* Brand */}
             <div>
               <div className="flex items-center gap-2.5">
-                <img src="/logo.svg" alt={BRAND.name} className="h-9 w-9" />
+                <AptlyraMark className="h-9 w-9" />
                 <span className="text-xl font-extrabold tracking-tight text-white">{BRAND.name}</span>
               </div>
               <p className="mt-4 max-w-xs text-sm leading-relaxed text-zinc-500">
