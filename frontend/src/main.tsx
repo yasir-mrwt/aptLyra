@@ -8,19 +8,11 @@ import App from './App.tsx'
 import { store } from './app/store.ts'
 import './index.css'
 import { setupInterceptors } from './services/axiosSetup.ts'
-
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
+import { googleClientId, googleLoginConfigured } from './services/googleLoginConfig.ts'
 
 setupInterceptors(axios);
 
+const application = <Provider store={store}><Router><App /></Router></Provider>;
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-      <Provider store={store}>
-        <Router>
-          <App />
-        </Router>
-      </Provider>
-    </GoogleOAuthProvider>
-  </StrictMode>,
+  <StrictMode>{googleLoginConfigured ? <GoogleOAuthProvider clientId={googleClientId}>{application}</GoogleOAuthProvider> : application}</StrictMode>,
 )

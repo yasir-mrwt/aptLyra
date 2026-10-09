@@ -9,6 +9,7 @@ import { toast } from "react-toastify";
 import type { User } from "../types/user";
 import { GoogleLogin, type CredentialResponse } from "@react-oauth/google";
 import PasswordInput from "../components/PasswordInput";
+import { googleLoginConfigured } from "../services/googleLoginConfig";
 
 const RESEND_COOLDOWN = 60;
 
@@ -210,7 +211,7 @@ const Register = () => {
                         <p className="text-surface-400 text-sm font-medium">Join the next generation of top talent</p>
                     </div>
 
-                    <div className="w-full flex items-center justify-center relative z-10">
+                    {googleLoginConfigured&&<div className="w-full flex items-center justify-center relative z-10">
                         <GoogleLogin
                             onSuccess={handleGoogleSuccess}
                             onError={() => {
@@ -220,9 +221,9 @@ const Register = () => {
                             shape="pill"
                             size="large"
                             text="continue_with"
-                            width="100%"
+                            width={280}
                         />
-                    </div>
+                    </div>}{!googleLoginConfigured&&import.meta.env.DEV&&<p className="mb-4 text-center text-xs text-surface-500">Google sign-in is not configured. Use email and password.</p>}
 
                     <div className="my-8 flex items-center relative z-10">
                         <div className="grow border-t border-white/5"></div>
