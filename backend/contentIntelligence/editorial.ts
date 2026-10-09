@@ -5,7 +5,7 @@ import { rubricEditor, hash as rubricHash } from "../evaluation/rubrics.js";
 import { aiService } from "../services/aiService.js";
 import { embedCorpus } from "../retrieval/corpus.js";
 import { fail } from "../ingestion/localAdapter.js";
-import { categories, difficulties, normalize, screen, sha256 } from "../ingestion/localAdapter.js";
+import { categories, difficulties, normalize, screen, sha256, validateContract } from "../ingestion/localAdapter.js";
 import { knowledgeRepository } from "../repositories/knowledgeRepository.js";
 import { jaccard } from "../ingestion/localAdapter.js";
 import { EmbeddingClient } from "../retrieval/embeddingClient.js";
@@ -35,24 +35,42 @@ export const contentEditorial={
   async publishSourceRecord(userId:string,recordId:string){
     await reviewerFor(userId);return ingestionRepository.publishDocument(recordId);
   },
+  async rejectSourceRecord(userId:string,recordId:string,reason:string){
+    const reviewer=await reviewerFor(userId);return ingestionRepository.rejectDocument(recordId,reviewer.id,reason);
+  },
   async extractSubmission(userId:string,recordId:string,expectedHash:string,invocation:"reviewer"|"permission-authorized-worker"="reviewer"){
     const reviewer=await reviewerFor(userId);
     if(!uuid.test(recordId))fail("invalid-id");
-    const submission=(await query(`SELECT r.id,r.source_id,r.document_version_id,r.input_hash,r.state,r.expires_at,
+      const submission=(await query(`SELECT r.id,r.source_id,r.document_version_id,r.input_hash,r.state,r.expires_at,
         v.normalized_text,e.role,e.company_label,e.occurred_on,e.round_type,e.topics,e.ai_processing_consent,s.model_processing_allowed
         FROM ingestion_records r JOIN sources s ON s.id=r.source_id JOIN source_document_versions v ON v.id=r.document_version_id
         JOIN interview_experience_records e ON e.document_version_id=v.id WHERE r.id=$1`,[recordId])).rows[0];
       if(!submission||submission.state!=="review_required"||!submission.normalized_text||new Date(submission.expires_at)<=new Date())fail("submission-unavailable");
       if(submission.input_hash!==expectedHash)fail("review-hash-mismatch");
-      if(!submission.ai_processing_consent||!submission.model_processing_allowed)fail("ai-processing-consent-required");
+      if(!submission.ai_processing_consent)fail("ai-processing-consent-required");
+      if(!submission.model_processing_allowed)fail("source-ai-processing-disallowed");
       const priorCandidates=(await query("SELECT count(*)::int AS count FROM ingestion_candidates WHERE record_id=$1",[recordId])).rows[0].count;
       if(priorCandidates>0)await query(`INSERT INTO ingestion_review_events(id,source_id,record_id,reviewer_id,action,content_hash,reason_code,event_metadata)
         VALUES($1,$2,$3,$4,'re-extraction-requested',$5,'reviewer-requested',$6)`,[randomUUID(),submission.source_id,recordId,reviewer.id,submission.input_hash,
         JSON.stringify({priorCandidateCount:priorCandidates,aiApproved:false,invocation})]);
       const allowed=(await knowledgeRepository.listCompetencies("junior-se-v1")).filter(x=>x.kind==="child"&&x.status==="active").map(x=>x.id);
-      const proposal=await aiService.extractInterviewExperience({sourceText:submission.normalized_text,role:submission.role,company:submission.company_label,
-        occurredOn:submission.occurred_on?new Date(submission.occurred_on).toISOString().slice(0,10):null,datePrecision:submission.occurred_on?"day":"unknown",
-        roundType:submission.round_type,topics:submission.topics,allowedCompetencies:allowed}) as any;
+      let proposal:any;
+      try {
+        proposal=await aiService.extractInterviewExperience({sourceText:submission.normalized_text,role:submission.role,company:submission.company_label,
+          occurredOn:submission.occurred_on?new Date(submission.occurred_on).toISOString().slice(0,10):null,datePrecision:submission.occurred_on?"day":"unknown",
+          roundType:submission.round_type,topics:submission.topics,allowedCompetencies:allowed});
+      } catch(error) {
+        const upstreamCode=(error as {code?:unknown})?.code;
+        if(upstreamCode==="invalid_extraction_output"||upstreamCode==="extraction_schema_validation_failed"||upstreamCode==="extraction_semantic_validation_failed"||upstreamCode==="malformed_model_json"||upstreamCode==="invalid_provider_response"){
+          const category=(error as {category?:unknown})?.category;
+          const safeCode=["malformed_model_json","extraction_schema_validation_failed","extraction_semantic_validation_failed"].includes(String(upstreamCode))?String(upstreamCode):"invalid-ai-output";
+          fail(`${safeCode}:${typeof category==="string"&&/^[a-z0-9_-]{1,60}$/.test(category)?category:"invalid_provider_response"}`);
+        }
+        if(upstreamCode==="provider_authentication"||upstreamCode==="provider_configuration"||upstreamCode==="provider_model_unavailable")fail("ai-provider-configuration");
+        if(upstreamCode==="provider_rate_limited")fail("ai-provider-rate-limited");
+        if(upstreamCode==="provider_timeout")fail("ai-provider-timeout");
+        fail("ai-provider-unavailable");
+      }
       if(proposal?.contractVersion!=="interview-extraction-v1"||!Array.isArray(proposal.candidates)||proposal.candidates.length<1||proposal.candidates.length>10)fail("invalid-extraction-output");
       let proposalVectors:number[][]=[];
       try{proposalVectors=(await new EmbeddingClient().embed(proposal.candidates.map((candidate:any)=>String(candidate.question)),"documents")).vectors;}catch{/* Duplicate suggestions are best effort; publication still requires its own active embedding generation. */}
@@ -106,20 +124,26 @@ export const contentEditorial={
       return {recordId,candidateIds:created,aiApproved:false};
       });
   },
-  async reviewCandidate(userId:string,candidateId:string,expectedHash:string){
+  async reviewCandidate(userId:string,candidateId:string,expectedHash:string,requestId?:string){
     const reviewer=await reviewerFor(userId);
     if(!uuid.test(candidateId)||!/^[a-f0-9]{64}$/.test(expectedHash))fail("invalid-id");
     return withDatabaseLock(`candidate-ai-review:${candidateId}`,async()=>{
       const candidate=(await query(`SELECT c.id,c.state,c.specification,c.content_hash,c.duplicate_links,c.extraction_metadata,c.question_version_id,
           (SELECT ready.publication_class FROM content_question_readiness ready WHERE ready.question_version_id=c.question_version_id) AS publication_class,
-          r.id AS record_id,r.source_id,r.document_version_id,v.normalized_text,v.title AS source_title,
-          s.source_type,s.model_processing_allowed,e.ai_processing_consent
+          r.id AS record_id,r.source_id,r.document_version_id,r.input_hash,v.normalized_text,v.title AS source_title,
+          s.source_type,s.stable_key,s.model_processing_allowed,e.ai_processing_consent
         FROM ingestion_candidates c JOIN ingestion_records r ON r.id=c.record_id JOIN sources s ON s.id=r.source_id
         LEFT JOIN source_document_versions v ON v.id=r.document_version_id
         LEFT JOIN interview_experience_records e ON e.document_version_id=r.document_version_id
         WHERE c.id=$1 FOR UPDATE OF c,r,s`,[candidateId])).rows[0];
       if(!candidate||candidate.content_hash!==expectedHash)fail("review-hash-mismatch");
       if(!["review_required","approved","published"].includes(candidate.state))fail("candidate-not-reviewable");
+      if(candidate.source_type==="user_submission"&&!candidate.ai_processing_consent)fail("ai-processing-consent-required");
+      if(!candidate.model_processing_allowed){
+        if(candidate.source_type==="authored"&&["techvera-junior-se-v1","techvera-junior-se-seed-v1"].includes(candidate.stable_key)&&candidate.input_hash===REVIEWED_SEED_INPUT_HASH)
+          fail("seed-source-permission-not-enabled");
+        fail("source-ai-processing-disallowed");
+      }
       const question=String(candidate.specification?.text||"");
       if(!question||Buffer.byteLength(question)>1000)fail("candidate-not-reviewable");
       const eligibleReferences=candidate.question_version_id?(await query(`SELECT count(*)::int AS count FROM question_technical_references tr
@@ -132,14 +156,23 @@ export const contentEditorial={
           AND s.permission_evidence_hash=tr.permission_hash AND s.withdrawn_at IS NULL`,[candidate.question_version_id])).rows[0].count:0;
       const competencies=await knowledgeRepository.listCompetencies("junior-se-v1");
       const allowedCompetencies=competencies.filter((item:any)=>item.kind==="child"&&item.status==="active").map((item:any)=>item.id);
-      const duplicateLinks=Array.isArray(candidate.duplicate_links)?candidate.duplicate_links:[];
-      const similarIds=[...new Set<string>(duplicateLinks.map((link:any)=>String(link.candidateId||"")).filter((id:string)=>uuid.test(id)))].slice(0,10);
-      const similarRows=similarIds.length?(await query("SELECT id,specification FROM ingestion_candidates WHERE id=ANY($1::uuid[])",[similarIds])).rows:[];
       // Interview reports are not technical evidence. Only send explicitly model-permitted source excerpts.
       const evidenceText=candidate.model_processing_allowed&&candidate.ai_processing_consent
         ?String(candidate.extraction_metadata?.evidenceText||"").slice(0,1000)||null:null;
-      const packet=await aiService.reviewEditorialCandidate({question,allowedCompetencies,allowedCategories:[...categories],evidenceText,
-        similarQuestions:similarRows.map((row:any)=>String(row.specification?.text||"").slice(0,1000))}) as any;
+      let packet:any;
+      try{packet=await aiService.reviewEditorialCandidate({question,allowedCompetencies,allowedCategories:[...categories],evidenceText,
+        similarQuestions:[]},requestId) as any;}
+      catch(error){
+        const safeCode=(error as {code?:unknown})?.code;
+        if(safeCode==="malformed_model_json")fail("malformed_model_json:malformed_model_json");
+        if(safeCode==="editorial_schema_validation_failed")fail("editorial_schema_validation_failed:schema_validation");
+        if(safeCode==="editorial_semantic_validation_failed")fail("editorial_semantic_validation_failed:semantic_validation");
+        if(safeCode==="invalid_review_output"||safeCode==="invalid_provider_response")fail("invalid-review-output");
+        if(safeCode==="provider_authentication"||safeCode==="provider_configuration"||safeCode==="provider_model_unavailable")fail("ai-provider-configuration");
+        if(safeCode==="provider_rate_limited")fail("ai-provider-rate-limited");
+        if(safeCode==="provider_timeout")fail("ai-provider-timeout");
+        fail("ai-provider-unavailable");
+      }
       const flags=["irrelevant","ambiguous","duplicate","technically-suspicious","weak-evidence","needs-human-review"];
       if(packet?.contractVersion!=="editorial-review-v1"||!(["relevant","borderline","irrelevant"].includes(packet.relevance))||
         !(["recommend-approve","recommend-edit","recommend-reject"].includes(packet.verdict))||!allowedCompetencies.includes(packet.taxonomy)||
@@ -167,22 +200,184 @@ export const contentEditorial={
       return {...row,packet,aiApproved:false};
     });
   },
+  async manualReferenceQueue(userId:string){
+    await reviewerFor(userId);
+    return (await query(`SELECT r.id AS record_id,r.input_hash,v.content_hash,v.title,v.normalized_text,s.title AS source_name
+      FROM ingestion_records r JOIN sources s ON s.id=r.source_id JOIN source_document_versions v ON v.id=r.document_version_id
+      WHERE s.origin='aptlyra-reviewer-authored-reference-v1' AND r.state='review_required' AND v.status='quarantined'
+        AND r.expires_at>now() ORDER BY r.created_at LIMIT 50`)).rows;
+  },
+  async createManualReference(userId:string,value:unknown){
+    const reviewer=await reviewerFor(userId),input=value as Record<string,unknown>;
+    if(!input||typeof input!=="object"||Array.isArray(input)||Object.keys(input).some(key=>!['title','text','permissionEvidence','attribution','authorshipAttested'].includes(key))||
+      input.authorshipAttested!==true||typeof input.title!=="string"||!input.title.trim()||Buffer.byteLength(input.title)>200||
+      typeof input.text!=="string"||!input.text.trim()||Buffer.byteLength(input.text)>8000||typeof input.permissionEvidence!=="string"||
+      !input.permissionEvidence.trim()||Buffer.byteLength(input.permissionEvidence)>1200||
+      (input.attribution!==undefined&&(typeof input.attribution!=="string"||Buffer.byteLength(input.attribution)>1000)))fail("invalid-manual-reference");
+    const title=String(input.title).trim(),text=normalize(String(input.text)),signals=screen(text);
+    if(!text||Buffer.byteLength(text)>8000||signals.length)fail(signals.length?`manual-reference-screened:${signals[0]}`:"invalid-manual-reference");
+    const hash=sha256(text),sourceId=randomUUID(),documentId=randomUUID(),versionId=randomUUID(),chunkId=randomUUID(),recordId=randomUUID();
+    const permissionEvidence=String(input.permissionEvidence).trim();
+    const contract=validateContract({adapterId:"local-file",version:"1",sourceType:"authored",allowedInputs:[`/operator-authored/${recordId}.md`],
+      approvedInputHashes:[hash],permissionEvidence,licenseId:"aptlyra-reviewer-authored",termsRevision:"manual-reference-v1",
+      attribution:typeof input.attribution==="string"?input.attribution.trim():"Aptlyra reviewer-authored material",authentication:"operator-filesystem",
+      refresh:"manual",maxBytes:262144,timeoutMs:5000,maxDocuments:1,minIntervalMs:0,
+      timestampSemantics:"occurrence-explicit-fetch-observed",withdrawal:"retire-and-redact",retainRaw:false,fixture:false});
+    return withDatabaseLock("manual-technical-reference:v1",async()=>{
+      await query(`INSERT INTO sources(id,stable_key,source_type,title,origin,permission_status,license_id,terms_revision,policy_revision,permission_evidence,
+        attribution,review_status,state,adapter_name,permission_basis,allowed_scope,rate_limit,raw_retention,full_text_storage,derived_facts_storage,model_processing_allowed)
+        VALUES($1,$2,'authored',$3,'aptlyra-reviewer-authored-reference-v1','unknown',$4,'manual-reference-v1','content-policy-v1',$5,$6,
+          'proposed','disabled','local-file','reviewer-authorship-pending','{"scope":"manual-review"}','{}',interval '30 days',true,true,false)`,
+      [sourceId,`aptlyra-manual-reference:${sourceId}`,title,contract.licenseId,permissionEvidence,contract.attribution]);
+      await query("INSERT INTO ingestion_adapters(source_id,adapter_id,adapter_version,contract) VALUES($1,'local-file','1',$2)",[sourceId,JSON.stringify(contract)]);
+      await query("INSERT INTO source_documents(id,source_id,external_key) VALUES($1,$2,$3)",[documentId,sourceId,recordId]);
+      await query(`INSERT INTO source_document_versions(id,document_id,version,title,fetched_at,content_hash,normalized_text,permission_status,policy_revision,
+        review_status,quality,pii_status,confidentiality_status,status) VALUES($1,$2,1,$3,now(),$4,$5,'unknown','content-policy-v1',
+        'pending','unverified','pending','pending','quarantined')`,[versionId,documentId,title,hash,text]);
+      await query(`INSERT INTO source_chunks(id,document_version_id,chunk_index,excerpt,content_hash,chunker_version,section,start_offset,end_offset,status)
+        VALUES($1,$2,0,$3,$4,'manual-reference-v1','reviewer-authored technical reference',0,char_length($3),'staged')`,[chunkId,versionId,text,hash]);
+      await query(`INSERT INTO ingestion_records(id,source_id,document_version_id,input_hash,state,signals,draft_questions,duplicates)
+        VALUES($1,$2,$3,$4,'review_required','[]','[]','[]')`,[recordId,sourceId,versionId,hash]);
+      await query(`INSERT INTO ingestion_review_events(id,source_id,record_id,reviewer_id,action,content_hash,reason_code,event_metadata)
+        VALUES($1,$2,$3,$4,'received',$5,'manual-reference-created',$6),($7,$2,$3,$4,'review-required',$5,'human-review-required',$8)`,
+      [randomUUID(),sourceId,recordId,reviewer.id,hash,JSON.stringify({sourceType:"reviewer-authored",approved:false}),randomUUID(),JSON.stringify({approved:false})]);
+      return {recordId,contentHash:hash,state:"review_required",approved:false};
+    });
+  },
+  async approveManualReference(userId:string,recordId:string,expectedHash:string,embedder:Embedder=new EmbeddingClient()){
+    const reviewer=await reviewerFor(userId);
+    if(!uuid.test(recordId)||!/^[a-f0-9]{64}$/.test(expectedHash))fail("invalid-id");
+    return withDatabaseLock(`manual-reference-approval:${recordId}`,async()=>{
+      const item=(await query(`SELECT r.id,r.source_id,r.input_hash,r.state,v.content_hash,s.origin,s.state AS source_state,s.permission_evidence,
+        v.status AS document_status FROM ingestion_records r JOIN sources s ON s.id=r.source_id
+        JOIN source_document_versions v ON v.id=r.document_version_id WHERE r.id=$1 FOR UPDATE OF r,s,v`,[recordId])).rows[0];
+      if(!item||item.origin!=="aptlyra-reviewer-authored-reference-v1"||item.state!=="review_required"||item.document_status!=="quarantined"||
+        item.source_state!=="disabled"||item.input_hash!==expectedHash||item.content_hash!==expectedHash)fail("review-hash-mismatch");
+      const permissionHash=sha256(JSON.stringify({recordId,contentHash:expectedHash,permissionEvidence:item.permission_evidence}));
+      await query(`UPDATE sources SET permission_status='permitted',review_status='approved',state='enabled',reviewed_by=$2,reviewed_at=now(),
+        permission_basis='human-reviewed-authorship-attestation',permission_evidence_hash=$3,permission_reviewed_hash=$3 WHERE id=$1`,
+      [item.source_id,reviewer.id,permissionHash]);
+      await query(`INSERT INTO ingestion_review_events(id,source_id,record_id,reviewer_id,action,content_hash,reason_code,event_metadata)
+        VALUES($1,$2,$3,$4,'source-approved',$5,'manual-authorship-reviewed',$6)`,
+      [randomUUID(),item.source_id,recordId,reviewer.id,expectedHash,JSON.stringify({permissionHash,sourceType:"reviewer-authored",aiApproved:false})]);
+      await query("UPDATE source_document_versions SET permission_status='permitted' WHERE id=(SELECT document_version_id FROM ingestion_records WHERE id=$1)",[recordId]);
+      await ingestionRepository.approveTechnicalReference(recordId,reviewer.id,expectedHash);
+      await ingestionRepository.publishDocument(recordId);
+      let embeddingReady=true,errorCode:string|undefined;
+      try{await embedCorpus(embedder);}catch(error){embeddingReady=false;errorCode=(error as {code?:string})?.code||"embedding_unavailable";}
+      return {recordId,contentHash:expectedHash,state:"published",reviewedBy:reviewer.id,embeddingReady,...(errorCode?{errorCode}:{})};
+    });
+  },
   async candidateQueue(userId:string){
     await reviewerFor(userId);
     return (await query(`SELECT c.id AS candidate_id,c.state,c.specification,c.content_hash,c.derivation_type,c.extraction_contract,c.confidence,c.extraction_metadata,
       c.evidence_start,c.evidence_end,c.duplicate_links,c.duplicate_of,r.id AS record_id,r.state AS record_state,r.expires_at,
-      v.normalized_text,s.id AS source_id,s.title AS source_name,s.source_type,s.origin,s.permission_status,s.review_status,
-      e.company_label,e.role,e.occurred_on,e.round_type,e.topics,
+      v.normalized_text,s.id AS source_id,CASE WHEN s.stable_key IN ('techvera-junior-se-v1','techvera-junior-se-seed-v1')
+        THEN 'Aptlyra reviewed junior SE seed' ELSE s.title END AS source_name,s.source_type,s.origin,s.permission_status,s.review_status,
+      e.company_label,e.role,e.occurred_on,e.round_type,e.topics,e.ai_processing_consent,s.model_processing_allowed,
       (SELECT jsonb_build_object('id',p.id,'version',p.version,'hash',p.packet_hash,'createdAt',p.created_at,'packet',p.packet)
         FROM candidate_ai_review_packets p WHERE p.candidate_id=c.id AND p.content_hash=c.content_hash ORDER BY p.version DESC LIMIT 1) AS ai_review
       FROM ingestion_candidates c JOIN ingestion_records r ON r.id=c.record_id
       JOIN sources s ON s.id=r.source_id LEFT JOIN source_document_versions v ON v.id=r.document_version_id
       LEFT JOIN interview_experience_records e ON e.document_version_id=r.document_version_id
       WHERE c.state IN ('review_required','approved','published') AND r.expires_at>now() AND r.state NOT IN ('withdrawn','rejected')
-      ORDER BY r.created_at,c.id LIMIT 100`)).rows;
+        AND NOT (r.input_hash=$1 AND s.source_type='authored'
+          AND s.stable_key IN ('techvera-junior-se-v1','techvera-junior-se-seed-v1'))
+        AND NOT EXISTS(SELECT 1 FROM content_question_readiness ready
+          WHERE ready.question_version_id=c.question_version_id AND ready.inventory_class='DYNAMIC_REVIEWED')
+      ORDER BY r.created_at,c.id LIMIT 100`,[REVIEWED_SEED_INPUT_HASH])).rows;
+  },
+  async competencies(userId:string){
+    await reviewerFor(userId);
+    return (await knowledgeRepository.listCompetencies("junior-se-v1")).filter((item:any)=>item.kind==="child"&&item.status==="active")
+      .map((item:any)=>({id:item.id,label:item.display_name,parentId:item.parent_id}));
+  },
+  async createManualQuestion(userId:string,value:unknown){
+    const reviewer=await reviewerFor(userId),input=value as Record<string,unknown>;
+    const allowedKeys=["recordId","question","topic","mode","difficulty","sourceNote","authorshipAttested","allowAi"];
+    if(!input||typeof input!=="object"||Array.isArray(input)||Object.keys(input).some(key=>!allowedKeys.includes(key))||
+      typeof input.question!=="string"||!input.question.trim()||Buffer.byteLength(input.question)>2000||
+      typeof input.topic!=="string"||typeof input.mode!=="string"||!['coding','oral'].includes(input.mode)||
+      typeof input.difficulty!=="string"||!difficulties.includes(input.difficulty as typeof difficulties[number])||input.authorshipAttested!==true||
+      (input.recordId!==undefined&&(typeof input.recordId!=="string"||!uuid.test(input.recordId)))||
+      (input.sourceNote!==undefined&&(typeof input.sourceNote!=="string"||Buffer.byteLength(input.sourceNote)>1000))||
+      (input.allowAi!==undefined&&typeof input.allowAi!=="boolean"))fail("invalid-manual-question");
+    const question=normalize(String(input.question)),signals=screen(question),questionHash=sha256(question);
+    if(!question||Buffer.byteLength(question)>1000||signals.length)fail("unsafe-question");
+    const category=input.mode==="coding"?"coding":"conceptual-oral",difficulty=String(input.difficulty),topic=String(input.topic);
+    const competency=(await query("SELECT id FROM competencies WHERE taxonomy_version='junior-se-v1' AND id=$1 AND kind='child' AND status='active'",[topic])).rows[0];
+    if(!competency)fail("invalid-manual-question");
+    return withDatabaseLock("manual-question:v1",async()=>{
+      let recordId=typeof input.recordId==="string"?input.recordId:"",sourceId="",versionId="",chunkId="",normalizedText=question,sourceType="authored";
+      if(recordId){
+        const record=(await query(`SELECT r.id,r.source_id,r.document_version_id,r.input_hash,r.state,r.expires_at,v.normalized_text,
+            s.source_type,e.role,e.practice_consent,e.right_to_share,e.ai_processing_consent
+          FROM ingestion_records r JOIN sources s ON s.id=r.source_id
+          JOIN source_document_versions v ON v.id=r.document_version_id
+          JOIN interview_experience_records e ON e.document_version_id=v.id WHERE r.id=$1 FOR UPDATE OF r,s,v,e`,[recordId])).rows[0];
+        if(!record||record.state!=="review_required"||record.source_type!=="user_submission"||!record.practice_consent||!record.right_to_share||
+          !record.normalized_text||new Date(record.expires_at)<=new Date())fail("submission-unavailable");
+        sourceId=record.source_id;versionId=record.document_version_id;normalizedText=record.normalized_text;sourceType=record.source_type;
+        chunkId=(await query("SELECT id FROM source_chunks WHERE document_version_id=$1 AND status<>'retired' ORDER BY chunk_index LIMIT 1",[versionId])).rows[0]?.id;
+        if(!chunkId)fail("chunk-not-available");
+        if((await query("SELECT 1 FROM ingestion_candidates WHERE record_id=$1 AND content_hash=$2",[recordId,questionHash])).rows.length)
+          fail("duplicate-manual-question");
+      }else{
+        recordId=randomUUID();sourceId=randomUUID();versionId=randomUUID();chunkId=randomUUID();
+        const evidence=`Reviewer-authored question; authorship and right-to-share attested by ${reviewer.id}.`;
+        const permissionHash=sha256(evidence);
+        const contract=validateContract({adapterId:"local-file",version:"1",sourceType:"authored",allowedInputs:[`/reviewer-authored/${recordId}.md`],
+          approvedInputHashes:[questionHash],permissionEvidence:evidence,licenseId:"aptlyra-reviewer-authored",termsRevision:"manual-question-v1",
+          attribution:"Aptlyra reviewer-authored question",authentication:"operator-filesystem",refresh:"manual",maxBytes:262144,
+          timeoutMs:5000,maxDocuments:1,minIntervalMs:0,timestampSemantics:"occurrence-explicit-fetch-observed",withdrawal:"retire-and-redact",
+          retainRaw:false,fixture:false});
+        await query(`INSERT INTO sources(id,stable_key,source_type,title,origin,permission_status,license_id,terms_revision,policy_revision,permission_evidence,
+            attribution,review_status,state,adapter_name,permission_basis,allowed_scope,rate_limit,raw_retention,full_text_storage,derived_facts_storage,
+            model_processing_allowed,reviewed_by,reviewed_at,permission_evidence_hash,permission_reviewed_hash)
+          VALUES($1,$2,'authored','Reviewer-authored interview question','aptlyra-reviewer-authored-question-v1','permitted',$3,'manual-question-v1',
+            'content-policy-v1',$4,$5,'approved','enabled','local-file','human-authorship-attestation','{"scope":"single-reviewer-authored-question"}',
+            '{}',interval '30 days',false,true,$6,$7,now(),$8,$8)`,[sourceId,`aptlyra-manual-question:${sourceId}`,contract.licenseId,evidence,contract.attribution,
+          input.allowAi===true,reviewer.id,permissionHash]);
+        await query("INSERT INTO ingestion_adapters(source_id,adapter_id,adapter_version,contract) VALUES($1,'local-file','1',$2)",[sourceId,JSON.stringify(contract)]);
+        await query("INSERT INTO source_documents(id,source_id,external_key) VALUES($1,$2,$3)",[randomUUID(),sourceId,recordId]);
+        const documentId=(await query("SELECT id FROM source_documents WHERE source_id=$1 AND external_key=$2",[sourceId,recordId])).rows[0].id;
+        const documentHash=sha256(normalizedText);
+        await query(`INSERT INTO source_document_versions(id,document_id,version,title,fetched_at,content_hash,normalized_text,permission_status,policy_revision,
+            review_status,quality,pii_status,confidentiality_status,status)
+          VALUES($1,$2,1,'Reviewer-authored interview question',now(),$3,$4,'permitted','content-policy-v1','pending','unverified','clear','clear','quarantined')`,
+          [versionId,documentId,documentHash,normalizedText]);
+        await query(`INSERT INTO source_chunks(id,document_version_id,chunk_index,excerpt,content_hash,chunker_version,section,start_offset,end_offset,status)
+          VALUES($1,$2,0,$3,$4,'reviewer-question-v1','reviewer-authored question',0,char_length($3),'staged')`,[chunkId,versionId,normalizedText,documentHash]);
+        await query(`INSERT INTO ingestion_records(id,source_id,document_version_id,input_hash,state,signals,draft_questions,duplicates)
+          VALUES($1,$2,$3,$4,'review_required','[]','[]','[]')`,[recordId,sourceId,versionId,documentHash]);
+        await query(`INSERT INTO ingestion_review_events(id,source_id,record_id,reviewer_id,action,content_hash,reason_code,event_metadata)
+          VALUES($1,$2,$3,$4,'source-approved',$5,'reviewer-authorship-attested',$6)`,
+          [randomUUID(),sourceId,recordId,reviewer.id,documentHash,JSON.stringify({humanReviewed:true,authoredQuestion:true,aiProcessingAllowed:input.allowAi===true})]);
+      }
+      const start=normalizedText.indexOf(question),evidenceStart=start>=0?start:0,evidenceEnd=start>=0?start+question.length:normalizedText.length;
+      const specification={text:question,category,difficulty,primary:topic,secondary:[],roles:["Software Engineer","Backend Developer","Full Stack Developer"]};
+      const candidateId=randomUUID();
+      await query(`INSERT INTO ingestion_candidates(id,record_id,chunk_id,specification,content_hash,evidence_start,evidence_end,extraction_method,
+          derivation_type,extraction_contract,confidence,extraction_metadata)
+        VALUES($1,$2,$3,$4,$5,$6,$7,'structured-local-v1','topic-derived','manual-review-v1',NULL,$8)`,
+        [candidateId,recordId,chunkId,JSON.stringify(specification),questionHash,evidenceStart,evidenceEnd,
+          JSON.stringify({manual:true,sourceNote:typeof input.sourceNote==="string"?input.sourceNote.trim():null,sourceType,aiApproved:false})]);
+      await query(`INSERT INTO ingestion_review_events(id,source_id,record_id,candidate_id,reviewer_id,action,content_hash,reason_code,event_metadata)
+        VALUES($1,$2,$3,$4,$5,'manual-question-added',$6,'human-authored-question',$7)`,
+        [randomUUID(),sourceId,recordId,candidateId,reviewer.id,questionHash,JSON.stringify({manual:true,aiApproved:false,fromSubmission:Boolean(input.recordId)})]);
+      return {candidateId,recordId,contentHash:questionHash,state:"review_required",aiApproved:false};
+    });
   },
   async approveQuestion(userId:string,id:string,expectedHash:string,decision?:string){
-    const reviewer=await reviewerFor(userId);return ingestionRepository.approveQuestion(id,reviewer.id,expectedHash,decision);
+    const reviewer=await reviewerFor(userId);
+    const lineage=(await query(`SELECT c.record_id,r.input_hash,s.origin FROM ingestion_candidates c
+      JOIN ingestion_records r ON r.id=c.record_id JOIN sources s ON s.id=r.source_id WHERE c.id=$1`,[id])).rows[0];
+    const approved=await ingestionRepository.approveQuestion(id,reviewer.id,expectedHash,decision);
+    if(lineage?.origin==="aptlyra-reviewer-authored-question-v1"){
+      await ingestionRepository.approveDocument(lineage.record_id,reviewer.id,lineage.input_hash);
+      await ingestionRepository.publishDocument(lineage.record_id);
+    }
+    return approved;
   },
   async editApproveQuestion(userId:string,id:string,expectedHash:string,specification:unknown,derivation:"paraphrased"|"topic-derived"="paraphrased"){
     const reviewer=await reviewerFor(userId);return ingestionRepository.editAndApproveQuestion(id,reviewer.id,expectedHash,specification,derivation);
@@ -235,7 +430,7 @@ export const contentEditorial={
   },
   async scoringQueue(userId:string){
     await reviewerFor(userId);
-    return (await query(`SELECT q.id AS question_version_id,q.question_id,q.question_text,q.category,q.difficulty,q.content_hash,q.status,
+    return (await query(`SELECT q.id AS question_version_id,q.question_id,q.question_text,q.category,q.difficulty,q.content_hash,q.status,candidate.id AS candidate_id,
       COALESCE((SELECT jsonb_agg(jsonb_build_object('id',tr.id,'chunkId',tr.chunk_id,'state',tr.state,'hash',tr.source_version_hash,'text',e.text,
         'sourceTitle',dv.title,'sourceId',s.id,'licenseId',s.license_id,'permissionHash',tr.permission_hash,'documentVersionId',dv.id,
         'version',dv.version,'chunkHash',c.content_hash,'startOffset',c.start_offset,'endOffset',c.end_offset)
@@ -248,9 +443,35 @@ export const contentEditorial={
       (SELECT rd.content FROM rubric_versions rv JOIN rubric_drafts rd ON rd.id=rv.draft_id WHERE rv.question_version_id=q.id AND rv.status IN ('reviewed','provisional') ORDER BY rv.version DESC LIMIT 1) AS rubric_content,
       COALESCE((SELECT jsonb_agg(jsonb_build_object('id',d.id,'hash',d.content_hash,'content',d.content)
         ORDER BY d.created_at DESC) FROM rubric_drafts d WHERE d.question_version_id=q.id),'[]'::jsonb) AS drafts,
-      ready.publication_class
+      ready.publication_class,ready.inventory_class
       FROM question_versions q JOIN content_question_readiness ready ON ready.question_version_id=q.id
-      WHERE q.status='published' ORDER BY ready.publication_class,q.created_at DESC LIMIT 200`)).rows;
+      LEFT JOIN ingestion_candidates candidate ON candidate.question_version_id=q.id AND candidate.state='published'
+      WHERE q.status='published' AND ready.inventory_class IS DISTINCT FROM 'TRUSTED_BASELINE'
+        AND ready.inventory_class IS DISTINCT FROM 'DYNAMIC_REVIEWED'
+      ORDER BY ready.publication_class,q.created_at DESC LIMIT 200`)).rows;
+  },
+  async interviewBank(userId:string){
+    await reviewerFor(userId);
+    const rows=(await query(`SELECT q.id AS question_version_id,q.question_text,q.category,q.difficulty,q.primary_competency,
+        competency.display_name AS topic,ready.inventory_class,
+        CASE WHEN ready.inventory_class='TRUSTED_BASELINE' THEN 'Aptlyra starter'
+          WHEN EXISTS(SELECT 1 FROM question_provenance provenance JOIN source_document_versions version ON version.id=provenance.document_version_id
+            JOIN source_documents document ON document.id=version.document_id JOIN sources source ON source.id=document.source_id
+            WHERE provenance.question_version_id=q.id AND source.source_type='user_submission') THEN 'User submitted'
+          WHEN EXISTS(SELECT 1 FROM question_provenance provenance JOIN source_document_versions version ON version.id=provenance.document_version_id
+            JOIN source_documents document ON document.id=version.document_id JOIN sources source ON source.id=document.source_id
+            WHERE provenance.question_version_id=q.id AND source.origin LIKE 'aptlyra-reviewer-%') THEN 'User submitted'
+          ELSE 'Research/import' END AS origin,
+        'Ready for interviews' AS display_status
+      FROM question_versions q JOIN content_question_readiness ready ON ready.question_version_id=q.id
+      JOIN competencies competency ON competency.taxonomy_version=q.taxonomy_version AND competency.id=q.primary_competency
+      WHERE q.status='published' AND ready.inventory_class IN ('TRUSTED_BASELINE','DYNAMIC_REVIEWED')
+        AND EXISTS(SELECT 1 FROM embedding_metadata metadata JOIN embedding_vectors vector ON vector.metadata_id=metadata.id
+          WHERE metadata.question_version_id=q.id AND metadata.purpose='question-selection' AND metadata.status='active')
+      ORDER BY CASE ready.inventory_class WHEN 'TRUSTED_BASELINE' THEN 0 ELSE 1 END,competency.display_name,q.difficulty,q.question_text`)).rows;
+    return {starterQuestions:rows.filter(row=>row.inventory_class==='TRUSTED_BASELINE').length,
+      approvedNewQuestions:rows.filter(row=>row.inventory_class==='DYNAMIC_REVIEWED').length,
+      totalAvailable:rows.length,questions:rows};
   },
   async technicalReferenceOptions(userId:string){
     await reviewerFor(userId);
@@ -301,7 +522,7 @@ export const contentEditorial={
       return {questionVersionId,chunkId,state:"withdrawn"};
     });
   },
-  async draftScoringPacket(userId:string,questionVersionId:string){
+  async draftScoringPacket(userId:string,questionVersionId:string,requestId?:string){
     await reviewerFor(userId);
     const q=(await query("SELECT question_text FROM question_versions WHERE id=$1 AND status='published'",[questionVersionId])).rows[0];
     if(!q)fail("question-unavailable");
@@ -315,7 +536,16 @@ export const contentEditorial={
         AND s.state='enabled' AND s.permission_status='permitted' AND s.review_status='approved'
         AND s.permission_evidence_hash=tr.permission_hash AND s.withdrawn_at IS NULL ORDER BY tr.chunk_id LIMIT 10`,[questionVersionId])).rows;
     if(!refs.length)fail("approved_reference_required");
-    const result=await aiService.draftRubric(q.question_text,refs) as any;
+    let result:any;
+    try{result=await aiService.draftRubric(q.question_text,refs,requestId) as any;}
+    catch(error){
+      const code=(error as {code?:unknown})?.code;
+      if(["malformed_model_json","rubric_draft_schema_validation_failed","rubric_draft_semantic_validation_failed"].includes(String(code)))fail(String(code));
+      if(code==="provider_authentication"||code==="provider_configuration"||code==="provider_model_unavailable")fail("ai-provider-configuration");
+      if(code==="provider_rate_limited")fail("ai-provider-rate-limited");
+      if(code==="provider_timeout")fail("ai-provider-timeout");
+      fail("ai-provider-unavailable");
+    }
     const allowed=new Set(refs.map((r:any)=>r.id));
     const content={questionVersionId,concepts:result?.concepts,evidenceIndicators:result?.evidenceIndicators||[],misconceptions:result?.misconceptions||[],
       dimensionGuidance:result?.dimensionGuidance||[],followUpConcepts:result?.followUpConcepts||[],codingObjectiveEvidence:result?.codingObjectiveEvidence??null};
@@ -391,6 +621,10 @@ export const contentEditorial={
   async seedReview(userId:string){
     await reviewerFor(userId);
     return (await query(`SELECT q.id AS question_version_id,q.question_text,q.content_hash,q.category,q.difficulty,c.id AS candidate_id,
+      true AS is_seed,EXISTS(SELECT 1 FROM seed_question_review_approvals a JOIN candidate_ai_review_packets p
+        ON p.candidate_id=a.candidate_id AND p.content_hash=a.content_hash AND p.packet_hash=a.ai_packet_hash
+        WHERE a.candidate_id=c.id AND a.question_version_id=q.id AND a.content_hash=c.content_hash AND a.action='approved'
+          AND p.version=(SELECT max(latest.version) FROM candidate_ai_review_packets latest WHERE latest.candidate_id=c.id AND latest.content_hash=c.content_hash)) AS seed_question_approved,
       ready.publication_class,COALESCE((SELECT count(*)::int FROM question_technical_references tr
         WHERE tr.question_version_id=q.id AND tr.state='approved'),0) AS reviewed_reference_count,
       (SELECT rv.content_hash FROM rubric_versions rv WHERE rv.question_version_id=q.id ORDER BY rv.version DESC LIMIT 1) AS scoring_packet_hash,
@@ -402,5 +636,27 @@ export const contentEditorial={
         JOIN sources s ON s.id=r.source_id WHERE c.question_version_id=q.id AND c.state='published' AND r.state='published'
           AND r.input_hash=$1 AND s.source_type='authored')
       ORDER BY q.version,q.id LIMIT 48`,[REVIEWED_SEED_INPUT_HASH])).rows;
+  },
+  async approveSeedQuestion(userId:string,candidateId:string,expectedHash:string,expectedPacketHash:string){
+    const reviewer=await reviewerFor(userId);
+    if(!uuid.test(candidateId)||! /^[a-f0-9]{64}$/.test(expectedHash)||! /^[a-f0-9]{64}$/.test(expectedPacketHash))fail("invalid-id");
+    return withDatabaseLock(`seed-question-review:${candidateId}`,async()=>{
+      const item=(await query(`SELECT c.id,c.state,c.content_hash,c.question_version_id,r.id AS record_id,r.source_id,r.input_hash,
+        s.stable_key,p.packet_hash,p.version FROM ingestion_candidates c JOIN ingestion_records r ON r.id=c.record_id
+        JOIN sources s ON s.id=r.source_id LEFT JOIN candidate_ai_review_packets p ON p.candidate_id=c.id AND p.content_hash=c.content_hash
+        WHERE c.id=$1 ORDER BY p.version DESC NULLS LAST LIMIT 1 FOR UPDATE OF c,r,s`,[candidateId])).rows[0];
+      if(!item||item.input_hash!==REVIEWED_SEED_INPUT_HASH||!['techvera-junior-se-v1','techvera-junior-se-seed-v1'].includes(item.stable_key))fail("seed-question-not-found");
+      if(item.content_hash!==expectedHash)fail("review-hash-mismatch");
+      if(item.state!=="published"||!item.question_version_id)fail("candidate-not-reviewable");
+      if(!item.packet_hash)fail("seed-ai-review-required");
+      if(item.packet_hash!==expectedPacketHash)fail("review-hash-mismatch");
+      await query(`INSERT INTO seed_question_review_approvals(id,candidate_id,question_version_id,content_hash,ai_packet_hash,reviewer_id,action)
+        VALUES($1,$2,$3,$4,$5,$6,'approved')`,[randomUUID(),candidateId,item.question_version_id,expectedHash,expectedPacketHash,reviewer.id]);
+      await query(`INSERT INTO ingestion_review_events(id,source_id,record_id,candidate_id,reviewer_id,action,content_hash,reason_code,event_metadata)
+        VALUES($1,$2,$3,$4,$5,'seed-question-approved',$6,'human-approved-ai-proposal',$7)`,[randomUUID(),item.source_id,item.record_id,candidateId,reviewer.id,expectedHash,JSON.stringify({aiPacketHash:expectedPacketHash,aiApproved:false})]);
+      const readiness=(await query("SELECT publication_class FROM content_question_readiness WHERE question_version_id=$1",[item.question_version_id])).rows[0];
+      return {candidateId,questionVersionId:item.question_version_id,contentHash:expectedHash,aiPacketHash:expectedPacketHash,
+        questionApproved:true,publicationClass:readiness?.publication_class||"approved-not-retrieval-ready"};
+    });
   },
 };

@@ -26,7 +26,8 @@ function validate(value:any){
 async function reviewer(userId:string){const r=(await query(`SELECT r.id,r.display_name,u.app_role FROM ingestion_reviewers r JOIN users u ON u.id=r.user_id
   WHERE r.user_id=$1 AND r.kind='human' AND r.enabled AND u.app_role IN ('owner','admin')`,[userId])).rows[0];if(!r)throw new Error("reviewer-not-authorized");return r;}
 const sourceSelect=`SELECT s.id,s.title AS name,s.source_type,s.origin AS base_url,s.terms_url,s.permission_basis,s.permission_status,s.review_status,s.permission_evidence,
-  s.attribution,s.reviewed_by,s.reviewed_at,s.state,s.allowed_scope,s.full_text_storage,s.derived_facts_storage,s.model_processing_allowed,s.raw_retention,
+  s.attribution,s.reviewed_by,s.reviewed_at,s.state,s.allowed_scope,s.full_text_storage,s.derived_facts_storage,s.model_processing_allowed,
+  floor(extract(epoch FROM s.raw_retention))::int AS raw_retention_seconds,
   s.collection_interval_minutes,s.last_collection_at,s.last_success_at,s.last_failure_code,s.last_failure_category,s.next_due_at,s.collection_cursor,s.source_health,s.withdrawn_at,s.withdrawal_reason,
   s.permission_evidence_hash,s.permission_reviewed_hash,s.permission_expires_at,a.adapter_id,
   (SELECT jsonb_build_object('status',r.status,'discovered',r.discovered_count,'imported',r.imported_count,'duplicates',r.duplicate_count,

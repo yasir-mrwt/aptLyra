@@ -86,6 +86,9 @@ test('source registry is linked-reviewer only and permission approval is bound t
   const created=await sourceRegistry.create(first,input);
   assert.equal(created.state,'disabled');
   const source=await sourceRegistry.get(first,created.id);
+  assert.equal(typeof source.raw_retention_seconds,'number','PostgreSQL interval is normalized before reaching the API');
+  assert.equal(source.raw_retention_seconds,7*24*60*60);
+  assert.doesNotThrow(()=>JSON.stringify(source),'source rows must remain JSON-safe for the Sources screen');
   await assert.rejects(()=>sourceRegistry.setEnabled(first,created.id,true),/source-permission-required/);
   await assert.rejects(()=>sourceRegistry.reviewPermission(first,created.id,'f'.repeat(64)),/permission-hash-mismatch/);
   await sourceRegistry.reviewPermission(first,created.id,source.permission_evidence_hash);

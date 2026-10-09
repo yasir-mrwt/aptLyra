@@ -93,10 +93,10 @@ after(async () => {
 });
 
 test('clean database, history, repeated and concurrent migration no-ops', async () => {
-  assert.equal(initialMigrations.applied.length,13);
+  assert.deepEqual(initialMigrations.applied,initialMigrations.current);
   assert.deepEqual(secondMigrations.applied,[]);
   const history = (await query('SELECT * FROM schema_migrations ORDER BY name')).rows;
-  assert.equal(history.length,13); assert.ok(history.every(r => /^[a-f0-9]{64}$/.test(r.checksum) && r.applied_at));
+  assert.deepEqual(history.map(r=>r.name),initialMigrations.current); assert.ok(history.every(r => /^[a-f0-9]{64}$/.test(r.checksum) && r.applied_at));
   const runs = await Promise.all([runMigrations(pool),runMigrations(pool)]);
   assert.ok(runs.every(r => !r.applied.length));
 });
@@ -108,7 +108,7 @@ test('compiled migration CLI runs twice and requires explicit production apply',
   try {
     for (let n=0;n<2;n++) {
       const result=await execute(process.execPath,[cli],{cwd:directory,env});
-      assert.match(result.stdout,/Migrations current: 13; applied: none/);
+      assert.match(result.stdout,new RegExp(`Migrations current: ${initialMigrations.current.length}; applied: none`));
     }
     await assert.rejects(()=>execute(process.execPath,[cli],{cwd:directory,env:{...env,NODE_ENV:'production'}}),
       e=>e.code===1 && e.stderr.includes('require explicit --apply') && !e.stderr.includes(fixtureUrl));
@@ -135,14 +135,15 @@ test('legacy bootstrap remains compatible before and after migration adoption', 
 });
 test('migration failure rolls back DDL/history and a corrected unapplied file can resume', async () => {
   const directory=await mkdtemp(join(tmpdir(),'techvera-migrations-'));
+  const failureMigration=`${String(initialMigrations.current.length+1).padStart(3,'0')}_failure.sql`;
   try {
     for (const name of initialMigrations.current) await cp(join(migrationDirectory,name),join(directory,name));
-    await writeFile(join(directory,'014_failure.sql'),'CREATE TABLE rollback_marker(id integer); SELECT deliberately_missing_function();');
-    await assert.rejects(() => runMigrations(adoption,directory),/014_failure.sql rolled back/);
+    await writeFile(join(directory,failureMigration),'CREATE TABLE rollback_marker(id integer); SELECT deliberately_missing_function();');
+    await assert.rejects(() => runMigrations(adoption,directory),new RegExp(`${failureMigration} rolled back`));
     assert.equal((await adoption.query("SELECT to_regclass('rollback_marker') AS name")).rows[0].name,null);
-    assert.equal((await adoption.query('SELECT count(*)::int AS n FROM schema_migrations')).rows[0].n,13);
-    await writeFile(join(directory,'014_failure.sql'),'CREATE TABLE rollback_marker(id integer);');
-    assert.deepEqual((await runMigrations(adoption,directory)).applied,['014_failure.sql']);
+    assert.equal((await adoption.query('SELECT count(*)::int AS n FROM schema_migrations')).rows[0].n,initialMigrations.current.length);
+    await writeFile(join(directory,failureMigration),'CREATE TABLE rollback_marker(id integer);');
+    assert.deepEqual((await runMigrations(adoption,directory)).applied,[failureMigration]);
     assert.deepEqual((await runMigrations(adoption,directory)).applied,[]);
     await writeFile(join(directory,'001_legacy_baseline.sql'),'SELECT 1;');
     await assert.rejects(() => runMigrations(adoption,directory),/history mismatch/);

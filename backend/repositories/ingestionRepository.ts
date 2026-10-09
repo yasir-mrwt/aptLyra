@@ -4,6 +4,7 @@ import { knowledgeRepository as knowledge } from "./knowledgeRepository.js";
 import { fail, object, sha256, screen, normalize, validateContract, validateQuestion, parseEnvelope,
   readLocalFile, jaccard, textField, type AdapterContract, type DocumentEnvelope, type QuestionSpec } from "../ingestion/localAdapter.js";
 import type { CollectedItem } from "../contentIntelligence/collectors.js";
+import { REVIEWED_SEED_INPUT_HASH } from "../retrieval/contracts.js";
 
 const editorial = <T>(work: () => Promise<T>): Promise<T> => withDatabaseLock("ingestion:editorial:v1",work);
 const reason = (value: string): string => /^[a-z][a-z0-9-]{1,99}$/.test(value) ? value : fail("invalid-reason-code");
@@ -123,7 +124,9 @@ async function approveRecord(id: string, reviewerId: string, expectedHash: strin
   await event(s.id,"approved",expectedHash,id,reviewerId);
 }
 async function publishRecord(id: string) {
-  const r=await record(id); await source(r.source_id); unexpired(r);
+  const r=await record(id), s=await source(r.source_id); unexpired(r);
+  if(s.source_type==="user_submission"&&(r.state!=="approved"||s.state!=="enabled"||s.permission_status!=="permitted"||s.review_status!=="approved"))
+    return fail("source-record-not-ready");
   if (r.state!=="approved") return fail("record-not-approved");
   await query("UPDATE source_document_versions SET status='published' WHERE id=$1",[r.document_version_id]);
   await query("UPDATE source_chunks SET status='active' WHERE document_version_id=$1",[r.document_version_id]);
@@ -227,6 +230,9 @@ export const ingestionRepository = {
       const id=await knowledge.createSource({stableKey:textField(key,200),type:contract.sourceType,title:textField(title,300),
         policyRevision:"source-policy-v1",permissionStatus:"unknown",reviewStatus:"proposed",state:"disabled",
         termsRevision:contract.termsRevision,licenseId:contract.licenseId,permissionEvidence:contract.permissionEvidence,attribution:contract.attribution});
+      const reviewedSeedSource=contract.sourceType==="authored"&&["techvera-junior-se-v1","techvera-junior-se-seed-v1"].includes(key)&&
+        contract.approvedInputHashes.includes(REVIEWED_SEED_INPUT_HASH)&&contract.permissionEvidence.includes(REVIEWED_SEED_INPUT_HASH);
+      if(reviewedSeedSource)await query("UPDATE sources SET model_processing_allowed=true WHERE id=$1",[id]);
       await query("INSERT INTO ingestion_adapters(source_id,adapter_id,adapter_version,contract) VALUES($1,'local-file','1',$2)",[id,JSON.stringify(contract)]);
       return id;
     });

@@ -72,6 +72,8 @@ try {
   const reviewerUser=randomUUID();
   await db.query("INSERT INTO users(id,name,email,app_role) VALUES($1,$2,$3,'reviewer')",[reviewerUser,attestation.reviewer.name,'reviewer@example.invalid']);
   await db.query('UPDATE ingestion_reviewers SET user_id=$2 WHERE id=$1',[attestation.reviewer.id,reviewerUser]);
+  const ordinaryUser=randomUUID();
+  await db.query("INSERT INTO users(id,name,email,app_role) VALUES($1,'Ordinary user','ordinary@example.invalid','user')",[ordinaryUser]);
   process.env.DATABASE_URL=connection+database;process.env.DATABASE_SSL='false';process.env.NODE_ENV='test';
   process.env.JWT_SECRET='phase9-seed-fixture-secret';
   ({pool:apiPool}=await import('../dist/config/db.js'));
@@ -80,39 +82,56 @@ try {
   const embedding=await embedCorpus({async embed(texts){return {...MODEL,processingMs:0,vectors:texts.map(()=>[1,...Array(383).fill(0)])};}});
   assert.equal(embedding.embedded,48,'the disposable fixture creates a compatible local embedding generation only');
   const {default:contentRoutes}=await import('../dist/routes/contentIntelligenceRoutes.js');
-  const app=express();app.use(express.json());app.use(cookieParser());app.use('/api/content-intelligence',contentRoutes);
+  const {default:plannerRoutes}=await import('../dist/routes/plannerRoutes.js');
+  const app=express();app.use(express.json());app.use(cookieParser());app.use('/api/content-intelligence',contentRoutes);app.use('/api/interview-plans',plannerRoutes);
   const cookie=`jwt=${jwt.sign({id:reviewerUser},process.env.JWT_SECRET)}`;
-  const seedReview=await request(app).get('/api/content-intelligence/seed-review').set('Cookie',cookie).expect(200);
-  assert.equal(seedReview.body.length,48,'trusted hash review must find the 48 historical-alias seeds');
-  assert.ok(seedReview.body.every(row=>row.candidate_id&&row.ai_review===null),'each seed must be actionable through the same AI-review workflow');
-  const {aiService}=await import('../dist/services/aiService.js');
-  const originalReview=aiService.reviewEditorialCandidate;
-  aiService.reviewEditorialCandidate=async input=>({contractVersion:'editorial-review-v1',relevance:'relevant',verdict:'recommend-approve',
-    taxonomy:input.allowedCompetencies[0],category:input.allowedCategories[0],difficulty:'standard',duplicateWarning:false,wordingIssues:[],
-    correctedQuestion:null,technicalCorrectness:'uncertain',expectedConcepts:['Explain the central concept'],evidenceStatus:'missing',
-    evidenceSummary:'No technical reference has been reviewed yet.',rubricGuidance:['Check correctness and trade-offs.'],confidence:'medium',flags:['weak-evidence','needs-human-review']});
-  try{
-    const firstSeed=seedReview.body[0];
-    const proposal=await request(app).post(`/api/content-intelligence/review/candidates/${firstSeed.candidate_id}/ai-review`)
-      .set('Cookie',cookie).send({expectedHash:firstSeed.content_hash}).expect(200);
-    assert.equal(proposal.body.aiApproved,false);assert.equal(proposal.body.version,1);
-    assert.equal(proposal.body.packet.referenceStatus,'no-reviewed-reference');
-    assert.equal((await db.query('SELECT state FROM ingestion_candidates WHERE id=$1',[firstSeed.candidate_id])).rows[0].state,'published');
-    assert.equal((await db.query('SELECT count(*)::int AS n FROM content_scoring_review_events')).rows[0].n,0);
-  }finally{aiService.reviewEditorialCandidate=originalReview;}
-  const publishedQuestions=await request(app).get('/api/content-intelligence/published').set('Cookie',cookie);
-  assert.equal(publishedQuestions.status,200,JSON.stringify(publishedQuestions.body));
-  assert.equal(publishedQuestions.body.length,48,'published endpoint must expose published questions with readiness');
-  assert.ok(publishedQuestions.body.every(row=>row.publication_class==='fresh/provisional'),JSON.stringify(publishedQuestions.body.slice(0,3).map(row=>({id:row.question_version_id,publication_class:row.publication_class}))));
+  const ordinaryCookie=`jwt=${jwt.sign({id:ordinaryUser},process.env.JWT_SECRET)}`;
+  await request(app).get('/api/content-intelligence/review/manual-references').expect(401);
+  await request(app).get('/api/content-intelligence/review/manual-references').set('Cookie',ordinaryCookie).expect(403);
+  await request(app).post(`/api/content-intelligence/review/candidates/${randomUUID()}/approve-seed-question`)
+    .set('Cookie',ordinaryCookie).send({expectedHash:'a'.repeat(64),expectedPacketHash:'b'.repeat(64)}).expect(403);
+  const emptyManualReferences=await request(app).get('/api/content-intelligence/review/manual-references').set('Cookie',cookie).expect(200);
+  assert.deepEqual(emptyManualReferences.body,[],'the exact manual-reference endpoint returns an empty queue, not a missing route');
+  const bank=await request(app).get('/api/content-intelligence/interview-bank').set('Cookie',cookie).expect(200);
+  assert.equal(bank.body.starterQuestions,48,'the exact reviewed corpus appears in the starter bank');
+  assert.equal(bank.body.approvedNewQuestions,0);
+  assert.equal(bank.body.totalAvailable,48);
+  assert.equal(bank.body.questions.length,48);
+  assert.ok(bank.body.questions.every(row=>row.inventory_class==='TRUSTED_BASELINE'&&row.origin==='Aptlyra starter'&&row.display_status==='Ready for interviews'));
+  const reviewQueue=await request(app).get('/api/content-intelligence/review/candidates').set('Cookie',cookie).expect(200);
+  assert.equal(reviewQueue.body.length,0,'trusted starter questions do not enter the dynamic review queue');
+  const scoringQueue=await request(app).get('/api/content-intelligence/scoring-queue').set('Cookie',cookie).expect(200);
+  assert.equal(scoringQueue.body.length,0,'the starter corpus does not require per-question dynamic scoring approval');
+  const readiness=await request(app).get('/api/interview-plans/capabilities').set('Cookie',cookie).expect(200);
+  assert.equal(readiness.body.starterQuestions,48);
+  assert.equal(readiness.body.approvedNewQuestions,0);
+  assert.equal(readiness.body.totalAvailable,48);
+  assert.equal(readiness.body.eligibleReviewedQuestions,48,'the trusted baseline is planner-eligible without dynamic editorial approvals');
+  const {RetrievalService}=await import('../dist/retrieval/service.js');
+  const {plannerService}=await import('../dist/planner/service.js');
+  plannerService.retriever=new RetrievalService({async embed(texts){return {...MODEL,processingMs:0,vectors:texts.map(()=>[1,...Array(383).fill(0)])};}});
+  const setup={role:'Software Engineer',level:'junior',taxonomyVersion:'junior-se-v1',competencies:['programming'],difficulty:'standard',
+    mode:'coding',count:3,minutes:45,language:'en',codeLanguage:'javascript',modifiers:{}};
+  const preview=await request(app).post('/api/interview-plans/preview').set('Cookie',cookie).send(setup).expect(201);
+  assert.equal(preview.body.canConfirm,true,JSON.stringify(preview.body.shortages));
+  assert.equal(preview.body.effectiveCount,3);
+  assert.equal(preview.body.items.length,3);
+  assert.ok(preview.body.items.every(row=>row.inventoryClass==='TRUSTED_BASELINE'));
+  const confirmed=await request(app).post('/api/interview-plans/confirm').set('Cookie',cookie)
+    .send({planId:preview.body.id,revision:preview.body.revision}).expect(200);
+  const plannedSession=(await db.query('SELECT status,questions FROM sessions WHERE id=$1',[confirmed.body.sessionId])).rows[0];
+  assert.equal(plannedSession.status,'in-progress');
+  assert.equal(plannedSession.questions.length,3);
+  assert.ok(plannedSession.questions.every(question=>question.inventoryClass==='TRUSTED_BASELINE'));
   assert.equal((await db.query("SELECT count(*)::int AS n FROM question_technical_references WHERE state='approved'")).rows[0].n,0);
   assert.equal((await db.query('SELECT count(*)::int AS n FROM rubric_drafts')).rows[0].n,0);
   assert.equal((await db.query('SELECT count(*)::int AS n FROM content_scoring_review_events')).rows[0].n,0);
-  assert.equal((await db.query('SELECT count(*)::int AS n FROM question_versions WHERE status=\'published\'')).rows[0].n,48);
+  assert.equal((await db.query("SELECT count(*)::int AS n FROM question_versions WHERE status='published'")).rows[0].n,48);
   assert.equal((await db.query('SELECT count(*)::int AS n FROM interview_experience_records')).rows[0].n,0);
   assert.equal((await db.query('SELECT count(*)::int AS n FROM rubric_versions')).rows[0].n,0);
   await writeFile('/tmp/techvera-phase4-reviewed-manifest.json',JSON.stringify({reviewArtifactHash:approvedPacketHash,inputHash:linkedInputHash,
     reviewer:attestation.reviewer,validation:'Real CLI, fresh disposable PostgreSQL; no production import',manifest},null,2)+'\n');
-  console.log('PASS: 48 trusted-hash seeds surfaced through the historical source alias; published API reports fresh/provisional; no references, rubrics, or scoring approvals were fabricated.');
+  console.log('PASS: exact 48-question trusted baseline appears in Interview Bank and confirms a three-question programming plan; no evidence, rubrics, or approvals were fabricated.');
 } finally {
   if(apiPool) await apiPool.end();
   if(db) await db.end();

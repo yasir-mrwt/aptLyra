@@ -83,6 +83,25 @@ test('typed provider failure remains retryable, zero score/reward; concurrent re
  await until(()=>events.some(e=>e.status==='evaluation completed'));assert.deepEqual(events.map(e=>e.status),['AI_EVALUATING','evaluation completed']);
  await assert.rejects(()=>service.submitSessionAnswer(s._id,other,'1',null,null,null,null,io,'FIFO'),/Session not found/);
 });
+test('trusted baseline keeps the existing live evaluator inside rubric-v1 sessions',async()=>{
+ const s=await repo.create({user:owner,role:'Backend Developer',level:'Junior',interviewType:'oral-only'});
+ s.status='in-progress';s.scoringVersion='rubric-v1';s.questions=[{questionVersionId:'trusted-baseline-fixture',inventoryClass:'TRUSTED_BASELINE',
+   questionText:'Explain how a database index helps a query.',questionType:'oral',idealAnswer:'',isSubmitted:false,isEvaluated:false}];
+ await repo.save(s);
+ const originalEvaluateAnswer=ai.evaluateAnswer,originalPrepare=evalService.prepare;
+ let legacyInput,rubricPrepareCalls=0;
+ ai.evaluateAnswer=async input=>{legacyInput=input;return {technical_score:84,confidence_score:76,ideal_answer:'Legacy evaluator response',ai_feedback:'Baseline feedback'};};
+ evalService.prepare=async(...args)=>{rubricPrepareCalls++;return originalPrepare(...args);};
+ try{
+   await service.submitSessionAnswer(s._id,owner,'0',null,null,null,null,io,'An index can reduce rows scanned.');
+   await until(async()=>(await repo.findById(s._id)).questions[0].isEvaluated);
+ }finally{ai.evaluateAnswer=originalEvaluateAnswer;evalService.prepare=originalPrepare;}
+ const saved=await repo.findById(s._id);
+ assert.equal(rubricPrepareCalls,0);
+ assert.equal(legacyInput.question,'Explain how a database index helps a query.');
+ assert.equal(saved.questions[0].technicalScore,84);
+ assert.equal(saved.questions[0].idealAnswer,'Legacy evaluator response');
+});
 test('provisional output cannot be high or enter reviewed aggregate',async()=>{const s=await active({reviewed:false});await service.submitSessionAnswer(s._id,owner,'0',null,null,null,null,io,'FIFO');await until(async()=>(await repo.findById(s._id)).questions[0].isEvaluated);const saved=await repo.findById(s._id);assert.equal(saved.questions[0].evaluation.evaluatorConfidence,'medium');assert.equal(saved.reviewedSummary.technicalScore,null);assert.equal(saved.overallScore,null);});
 test('missing rubric/grounding saves abstention, never a legacy substitution',async()=>{const s=await active();const original=s.questions[0];await q("UPDATE rubric_versions SET status='retired' WHERE id=(SELECT rubric_version_id FROM plan_items WHERE id=$1)",[original.planItemId]);await service.submitSessionAnswer(s._id,owner,'0',null,null,null,null,io,'FIFO');await until(async()=>(await repo.findById(s._id)).questions[0].isEvaluated);const saved=await repo.findById(s._id);assert.equal(saved.questions[0].evaluation.status,'abstained');assert.equal(saved.questions[0].evaluation.technicalScore,null);assert.equal(saved.questions[0].technicalScore,undefined);});
 test('reevaluation revision preserves historical grade and rejects forged score/evidence/lineage',async()=>{
