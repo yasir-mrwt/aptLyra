@@ -14,7 +14,7 @@ const messages: Record<string,string>={invalid_setup:"Choose 1–4 competencies,
   invalid_modifiers:"These modifiers are unsupported or invalid. Company/date constraints are never relaxed automatically.",
   plan_not_found:"Plan not found.",stale_corpus:"The corpus changed. Preview your plan again.",stale_retrieval:"Evidence changed. Preview your plan again.",
   plan_not_ready:"This plan cannot be confirmed. Review its coverage and warnings.",stale_revision:"This preview changed. Reload it before confirming.",
-  corpus_unavailable:"Reviewed retrieval is unavailable. Ask the operator to publish and index the approved corpus, then retry.",
+  corpus_unavailable:"The interview index is unavailable or incomplete. Ask the operator to restore the compatible question index, then retry. A temporary embedding-service outage can use the trusted starter fallback.",
   planner_unavailable:"Planning is temporarily unavailable. Retry your preview.",planning_timeout:"Planning timed out. Retry your preview.",
   model_mismatch:"The retrieval model is incompatible. Ask the operator to refresh the index.",invalid_confirmation:"Reload the preview and confirm its current revision."};
 const handle=(operation:(userId:string,req:AuthenticatedRequest)=>Promise<unknown>,status=200)=>asyncHandler(async(req:AuthenticatedRequest,res)=>{
@@ -36,7 +36,7 @@ router.get("/capabilities",handle(async()=>{
     GROUP BY ready.inventory_class`);
   const counts=Object.fromEntries(readiness.rows.map(row=>[row.inventory_class,row.count]));
   const starterQuestions=counts.TRUSTED_BASELINE||0,approvedNewQuestions=counts.DYNAMIC_REVIEWED||0;
-  return {roles:ROLES,roots:ROOTS,companies,starterQuestions,approvedNewQuestions,totalAvailable:starterQuestions+approvedNewQuestions,
+  return {roles:ROLES,roots:ROOTS,companies,starterQuestions,approvedNewQuestions,totalAvailable:starterQuestions+approvedNewQuestions+(counts.DYNAMIC_PROVISIONAL||0),
     eligibleReviewedQuestions:starterQuestions+approvedNewQuestions,provisionalQuestions:counts.DYNAMIC_PROVISIONAL||0,
     modifiers:{company:companies.length>0,resume:false,jd:false,designLite:true}};
 }));

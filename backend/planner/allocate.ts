@@ -8,7 +8,6 @@ export function allocate(setup: Setup, candidates: Candidate[]): Allocation {
   let nodes=0;
   const find=(count: number, strictDifficulty: boolean): Candidate[] | null => {
     const target=Math.round(count*0.6), adj=adjacent(setup.difficulty);
-    const recentLimit=setup.includeRecentTrends?Math.floor(count*0.3):0;
     if(setup.mode==="mixed" && (!candidates.some(c=>isCode(c.hit.category!)) || !candidates.some(c=>!isCode(c.hit.category!))))return null;
     let minimumRequested=0,maximumRequested=0;
     for(const root of setup.competencies) {
@@ -34,7 +33,6 @@ export function allocate(setup: Setup, candidates: Candidate[]): Allocation {
         || a.hit.questionVersionId!.localeCompare(b.hit.questionVersionId!));
       for(const c of pool) {
         if(groups.has(c.group) || families.has(c.hit.familyKey) || minutes+c.minutes>usable
-          || (c.inventoryClass==="DYNAMIC_PROVISIONAL"&&items.filter(i=>i.inventoryClass==="DYNAMIC_PROVISIONAL").length>=recentLimit)
           || (c.hit.category==="system-design-lite" && items.some(i=>i.hit.category==="system-design-lite")))continue;
         const nextRequested=requested+Number(c.hit.difficulty===setup.difficulty);
         if(strictDifficulty && (nextRequested>target || c.hit.difficulty!==setup.difficulty && c.hit.difficulty!==adj
@@ -66,7 +64,6 @@ export function allocate(setup: Setup, candidates: Candidate[]): Allocation {
   if(items.length && difficultyDistribution[setup.difficulty]!==Math.round(items.length*0.6))shortages.push("difficulty_target_shortage");
   if(items.some(c=>c.reason==="reviewed_seed" || c.reason==="approved_template"))shortages.push("reviewed_fallback_used");
   if(setup.includeRecentTrends&&items.some(c=>c.inventoryClass==="DYNAMIC_PROVISIONAL"))shortages.push("recent_signal_provisional_selected");
-  if(setup.includeRecentTrends&&candidates.some(c=>c.inventoryClass==="DYNAMIC_PROVISIONAL")&&!items.some(c=>c.inventoryClass==="DYNAMIC_PROVISIONAL"))shortages.push("recent_signal_not_selected_within_30_percent_cap");
   if(setup.modifiers.company || setup.modifiers.occurredAfter || setup.modifiers.occurredBefore)
     if(!items.length)shortages.push("company_date_evidence_unavailable_constraints_preserved");
   return {items,coverage,difficultyDistribution,timeBudget:{setupWrapMinutes:2,probeReserveMinutes:4,questionMinutes,slackMinutes:setup.minutes-totalMinutes,totalMinutes},

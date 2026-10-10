@@ -7,7 +7,7 @@ export const MODEL = Object.freeze({modelId:"sentence-transformers/paraphrase-Mi
 export const REVIEWED_SEED_INPUT_HASH = "b85d0e09bb94eaf6751a0ae3a86ffb1f76169ee4faf6e314b60f579cee69e995";
 export type Purpose = "question-selection" | "technical-grounding";
 export type Outcome = "success" | "no_match" | "unavailable" | "invalid_filters" | "model_mismatch" | "corpus_unavailable";
-export type Reason = "exact_match" | "semantic_match" | "reviewed_seed_available" | "no_relevant_hit" | "no_permitted_source" | "model_unavailable" | "corpus_unavailable" | "invalid_filters" | "model_mismatch";
+export type Reason = "exact_match" | "semantic_match" | "reviewed_seed_available" | "approved_practice_available" | "no_relevant_hit" | "no_permitted_source" | "model_unavailable" | "corpus_unavailable" | "invalid_filters" | "model_mismatch";
 export interface Filters {
   taxonomyVersion?: string; competencies?: string[]; role?: "Software Engineer" | "Backend Developer" | "Full Stack Developer";
   difficulties?: Difficulty[]; categories?: QuestionCategory[]; origins?: QuestionOrigin[];
@@ -16,11 +16,13 @@ export interface Filters {
   company?: string; occurredAfter?: string; occurredBefore?: string;
   sourceKeys?: string[]; documentKeys?: string[];
   reviewedSeed?: true;
+  approvedPractice?: true;
+  interviewEligible?: true;
   excludedFamilies?: string[]; excludedVersions?: string[]; alreadySelectedIds?: string[];
 }
 export interface RetrievalRequest { query: string; filters?: Filters; limit?: number; candidatePool?: number;
   minimumSimilarity?: number; expectedCorpusGeneration?: string; expectedModelRevision?: string;
-  strategy?: "semantic" | "structured-seed"; ownership?: { userId: string; sessionId: string } }
+  strategy?: "semantic" | "structured-seed" | "structured-practice"; ownership?: { userId: string; sessionId: string } }
 export interface EmbeddingBatch { modelId: string; modelRevision: string; dimension: number; normalization: string;
   embeddingVersion: string; vectors: number[][]; processingMs: number }
 export interface Embedder { embed(texts: string[], mode: "documents" | "query"): Promise<EmbeddingBatch> }

@@ -112,6 +112,13 @@ test('structured fallback identifies the exact approved input hash, never just a
   throw new Error('rollback seed identity simulation');
  }),/rollback seed identity simulation/);
 });
+test('structured practice never borrows starter questions or technical grounding',async()=>{
+ const request={query:'generic practice',strategy:'structured-practice',filters:{approvedPractice:true}};
+ const result=await service.retrieveQuestions(request);
+ assert.equal(result.outcome,'no_match');assert.equal(result.hits.length,0);
+ assert.equal((await service.retrieveQuestions({...request,filters:{}})).outcome,'invalid_filters');
+ assert.equal((await service.retrieveTechnicalEvidence(request)).outcome,'invalid_filters');
+});
 test('candidate evidence is written in one bounded SQL round trip with all lineage/rank rows intact',async()=>{
  const clients=new Map();let inserts=0;
  const observe=client=>{

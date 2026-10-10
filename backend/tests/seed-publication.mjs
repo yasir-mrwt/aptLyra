@@ -97,7 +97,7 @@ try {
   assert.equal(bank.body.approvedNewQuestions,0);
   assert.equal(bank.body.totalAvailable,48);
   assert.equal(bank.body.questions.length,48);
-  assert.ok(bank.body.questions.every(row=>row.inventory_class==='TRUSTED_BASELINE'&&row.origin==='Aptlyra starter'&&row.display_status==='Ready for interviews'));
+  assert.ok(bank.body.questions.every(row=>row.inventory_class==='TRUSTED_BASELINE'&&row.origin==='Aptlyra starter'&&row.display_status==='Aptlyra starter'));
   const reviewQueue=await request(app).get('/api/content-intelligence/review/candidates').set('Cookie',cookie).expect(200);
   assert.equal(reviewQueue.body.length,0,'trusted starter questions do not enter the dynamic review queue');
   const scoringQueue=await request(app).get('/api/content-intelligence/scoring-queue').set('Cookie',cookie).expect(200);

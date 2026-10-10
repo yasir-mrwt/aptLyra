@@ -2,18 +2,14 @@ import { performance } from "node:perf_hooks";
 import { query, withDatabaseLock } from "../config/db.js";
 import { sessionRepository, type IQuestion } from "../models/Session.js";
 import { knowledgeRepository } from "../repositories/knowledgeRepository.js";
-import { RetrievalService } from "../retrieval/service.js";
+import { RetrievalService, INTERVIEW_ELIGIBILITY_SQL } from "../retrieval/service.js";
 import { MODEL, type RetrievalRequest, type RetrievalResponse } from "../retrieval/contracts.js";
 import { allocate } from "./allocate.js";
 import { adjacent, categories, estimateMinutes, CONTRACT_VERSION, PLANNER_VERSION, PlannerError, validateSetup,
   type Candidate, type Setup, type SelectionReason } from "./contracts.js";
+import {BINARY_SEARCH_TEST_CONTENT_HASH} from "../codeExecution/specifications.js";
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-// Unchanged questions covered by the exact Phase 4 human approval, never new generated text.
-const templates: Record<string,string[]>={dsa:["dsa.structures-1","dsa.structures-2","dsa.search-sort-1"],
-  oop:["oop.encapsulation-1"],"dbms-sql":["dbms-sql.modeling-1","dbms-sql.queries-1"],os:["os.process-thread-1"],
-  networks:["networks.transport-1"],"backend-web":["backend-web.api-contracts-1"],
-  "design-lite":["design-lite.requirements-1","design-lite.requirements-2"],programming:["programming.control-data-1","programming.error-handling-1"]};
 interface Retriever { retrieveQuestions(request: RetrievalRequest): Promise<RetrievalResponse> }
 
 async function generation(expected?: string) {
@@ -22,7 +18,7 @@ async function generation(expected?: string) {
   if(expected && g.id!==expected)throw new PlannerError("stale_corpus",409);
   if(g.model_id!==MODEL.modelId || g.model_revision!==MODEL.modelRevision || g.dimension!==MODEL.dimension
     || g.normalization!==MODEL.normalization || g.embedding_version!==MODEL.embeddingVersion)throw new PlannerError("model_mismatch",503);
-  const missing=(await query(`SELECT EXISTS(SELECT 1 FROM retrieval_entities e WHERE e.purpose='question-selection' AND NOT EXISTS
+  const missing=(await query(`SELECT EXISTS(SELECT 1 FROM retrieval_entities e WHERE e.purpose='question-selection' AND ${INTERVIEW_ELIGIBILITY_SQL} AND NOT EXISTS
     (SELECT 1 FROM embedding_metadata m JOIN embedding_vectors v ON v.metadata_id=m.id
       WHERE m.question_version_id=e.entity_id AND m.purpose=e.purpose AND m.content_hash=e.content_hash
         AND m.status='active' AND m.corpus_generation=$1)) AS missing`,[g.id])).rows[0].missing;
@@ -46,24 +42,35 @@ export class PlannerService {
     const session=await sessionRepository.create({user:userId,role:setup.role,level:"Junior",interviewType:setup.mode==="oral"?"oral-only":"coding-mix",company:setup.modifiers.company});
     try {
       const candidates: Candidate[]=[],operations:string[]=[],failures:string[]=[];
+      let semanticUnavailable=false;
       for(const root of setup.competencies) {
-        const stages: { reason: SelectionReason; difficulties?: Setup["difficulty"][]; seed?: boolean; template?: boolean }[]=[
+        const stages: { reason: SelectionReason; difficulties?: Setup["difficulty"][]; seed?: boolean; practice?: boolean }[]=[
           {reason:"filtered_retrieval",difficulties:[setup.difficulty]},
           {reason:"adjacent_difficulty",difficulties:[adjacent(setup.difficulty)]},
-          {reason:"reviewed_seed",seed:true},{reason:"approved_template",seed:true,template:true}];
+          {reason:"reviewed_seed",seed:true},
+          // A generic root query can miss valid human-approved questions in a small bank.
+          // Preserve the seed stages; constrain this final fallback to dynamic inventory.
+          {reason:"fallback",practice:true,difficulties:[setup.difficulty,adjacent(setup.difficulty)]}];
         for(const stage of stages) {
+          if(semanticUnavailable && !stage.seed)continue;
           if(performance.now()-started>45000)throw new PlannerError("planning_timeout",503);
           const response=await this.retriever.retrieveQuestions({query:`Junior ${root} technical practice`,limit:5,candidatePool:20,
             expectedCorpusGeneration:corpus,expectedModelRevision:MODEL.modelRevision,ownership:{userId,sessionId:session._id},
-            strategy:stage.seed?"structured-seed":"semantic",
-            filters:{taxonomyVersion:setup.taxonomyVersion,competencies:[root],role:setup.role,categories:categories(setup),
+            // Trusted taxonomy already establishes relevance. Healthy embeddings rank
+            // that exact approved bank; only an outage uses structured selection.
+            strategy:stage.seed&&semanticUnavailable?"structured-seed":stage.practice?"structured-practice":"semantic",
+            filters:{interviewEligible:true,taxonomyVersion:setup.taxonomyVersion,competencies:[root],role:setup.role,categories:categories(setup),
               difficulties:stage.difficulties,alreadySelectedIds:candidates.map(c=>c.hit.questionVersionId!),
               company:setup.modifiers.company,occurredAfter:setup.modifiers.occurredAfter,occurredBefore:setup.modifiers.occurredBefore,
-              reviewedSeed:stage.seed?true:undefined,documentKeys:stage.template?templates[root]:undefined}});
+              reviewedSeed:stage.seed?true:undefined,approvedPractice:stage.practice?true:undefined}});
           operations.push(response.operationId);
           if(response.corpusGeneration!==corpus || ["corpus_unavailable","model_mismatch","invalid_filters"].includes(response.outcome))
             throw new PlannerError("stale_retrieval",409);
-          if(response.outcome==="unavailable")failures.push("retrieval_unavailable:"+stage.reason);
+          if(response.outcome==="unavailable") {
+            semanticUnavailable=true;failures.push("retrieval_unavailable:"+stage.reason);
+            // If this was the trusted semantic stage, repeat it once structurally.
+            if(stage.seed && response.reason==="model_unavailable" && !failures.slice(0,-1).length){stages.push({reason:"reviewed_seed",seed:true});}
+          }
           const hits=response.hits.filter(hit=>hit.questionVersionId && hit.competency?.split('.')[0]===root && hit.provenanceAvailable && hit.provenance.length);
           const rows=hits.length?(await query(`SELECT m.question_version_id,v.duplicate_group,ready.publication_class,ready.inventory_class FROM embedding_metadata m JOIN embedding_vectors v ON v.metadata_id=m.id
             JOIN content_question_readiness ready ON ready.question_version_id=m.question_version_id
@@ -74,15 +81,15 @@ export class PlannerService {
             if(!metadata)throw new PlannerError("stale_retrieval",409);
             const provisional=metadata.inventoryClass==="DYNAMIC_PROVISIONAL";
             const trustedOrReviewed=metadata.inventoryClass==="TRUSTED_BASELINE"||metadata.inventoryClass==="DYNAMIC_REVIEWED";
-            const plannerEligible=trustedOrReviewed||(setup.includeRecentTrends&&provisional);
-            if(!plannerEligible)continue;
+            const plannerEligible=trustedOrReviewed||provisional;
+            if(!plannerEligible || (stage.seed || semanticUnavailable) && metadata.inventoryClass!=="TRUSTED_BASELINE")continue;
             if(!candidates.some(c=>c.hit.questionVersionId===hit.questionVersionId))candidates.push({hit,root,group:metadata.group,
               reason:provisional?"recent_signal":setup.includeRecentTrends?(stage.reason==="filtered_retrieval"?"core_reviewed":stage.reason==="adjacent_difficulty"?"difficulty":stage.reason==="reviewed_seed"?"coverage":"fallback"):stage.reason,
               publicationClass:metadata.publicationClass,inventoryClass:metadata.inventoryClass as Candidate["inventoryClass"],minutes:estimateMinutes(hit.category!)});
           }
         }
       }
-      const allocation=allocate(setup,candidates);
+      const allocation=allocate(setup,semanticUnavailable?candidates.filter(c=>c.inventoryClass==="TRUSTED_BASELINE"):candidates);
       allocation.shortages.push(...new Set(failures));
       const planId=await withDatabaseLock("ingestion:editorial:v1",()=>withDatabaseLock(`session:${session._id}`,async()=>{
         if(await generation()!==corpus)throw new PlannerError("stale_corpus",409);
@@ -129,12 +136,9 @@ export class PlannerService {
       LEFT JOIN content_question_readiness ready ON ready.question_version_id=q.id WHERE i.plan_id=$1 ORDER BY i.position`,[id])).rows;
     const available=(await query("SELECT entity_id FROM retrieval_entities WHERE entity_id=ANY($1::uuid[]) AND purpose='question-selection'",[items.map(i=>i.question_version_id)])).rows;
     const currentItems=p.status==="ready"?await availableItems(id,p.corpus_version):[];
-    const freshCount=currentItems.filter(item=>item.inventory_class==="DYNAMIC_PROVISIONAL").length;
     const stale=available.length!==items.length || (p.status==="ready" &&
       (await generation().catch(()=>null)!==p.corpus_version || currentItems.length!==items.length||
-        (!p.setup_snapshot?.includeRecentTrends&&currentItems.some(item=>!["TRUSTED_BASELINE","DYNAMIC_REVIEWED"].includes(item.inventory_class)))||
-        (p.setup_snapshot?.includeRecentTrends&&currentItems.some(item=>!["TRUSTED_BASELINE","DYNAMIC_REVIEWED","DYNAMIC_PROVISIONAL"].includes(item.inventory_class)))||
-        (p.setup_snapshot?.includeRecentTrends&&freshCount>Math.floor(Number(p.effective_count)*0.3))));
+        currentItems.some(item=>!["TRUSTED_BASELINE","DYNAMIC_REVIEWED","DYNAMIC_PROVISIONAL"].includes(item.inventory_class))));
     return {id:p.id,sessionId:p.session_id,contractVersion:p.contract_version,plannerVersion:p.planner_version,taxonomyVersion:p.taxonomy_version,
       corpusGeneration:p.corpus_version,role:p.role,level:p.level,mode:p.mode,setup:p.setup_snapshot,revision:p.revision,status:p.status,
       requestedCount:p.requested_count,effectiveCount:p.effective_count,requestedMinutes:Number(p.requested_minutes),effectiveMinutes:Number(p.effective_minutes),
@@ -168,7 +172,9 @@ export class PlannerService {
         if(rows.length!==p.effective_count || new Set(rows.map(r=>r.duplicate_group)).size!==rows.length)throw new PlannerError("stale_retrieval",409);
         session.questions=rows.map(r=>({planItemId:r.id,questionVersionId:r.entity_id,inventoryClass:r.inventory_class,category:r.category,primaryCompetency:r.primary_competency,
           questionText:r.text,questionType:r.category==="coding" || r.category==="sql"?"coding":r.category==="system-design-lite"?"system-design":"oral",
-          idealAnswer:"",language:r.category==="sql"?"sql":p.setup_snapshot.codeLanguage,isSubmitted:false,isEvaluated:false} as IQuestion));
+          idealAnswer:"",language:r.category==="sql"?"sql":p.setup_snapshot.codeLanguage,
+          executionTestId:r.inventory_class==="TRUSTED_BASELINE"&&r.content_hash===BINARY_SEARCH_TEST_CONTENT_HASH&&r.category==="coding"?"binary-search-v1":undefined,
+          isSubmitted:false,isEvaluated:false} as IQuestion));
         await query("UPDATE sessions SET scoring_version='rubric-v1',runtime_version='aptlyra-runtime-v1',runtime_state='active',runtime_revision=runtime_revision+1 WHERE id=$1",[session._id]);
         session.scoringVersion="rubric-v1";
         session.status="in-progress";session.startTime=new Date().toISOString();await sessionRepository.save(session);

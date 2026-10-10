@@ -56,7 +56,7 @@ describe("supported planner setup",()=>{
  it("explains empty reviewed readiness without treating provisional content as reviewed",async()=>{
   vi.mocked(getPlannerCapabilities).mockResolvedValue({companies:[],eligibleReviewedQuestions:0,provisionalQuestions:2});
   renderForm({onCreated:vi.fn()});
-  await waitFor(()=>expect(screen.getByText("Not enough reviewed questions are available for this setup yet.")).toBeTruthy());
+  await waitFor(()=>expect(screen.getByText("Not enough questions are available for this setup yet.")).toBeTruthy());
   expect(screen.queryByText(/provisional questions exist/)).toBeNull();
   expect(screen.queryByRole("link",{name:"Open editorial review"})).toBeNull();
  });
@@ -72,7 +72,7 @@ describe("supported planner setup",()=>{
 describe("owned plan preview and confirmation",()=>{
  it("explains new rubric practice without claiming reviewed grading readiness",()=>{
   render(<PlanPreview plan={{...plan,evaluationMode:"rubric-v1"}} confirming={false} error={null} onConfirm={vi.fn()} onEdit={vi.fn()}/>);
-  expect(screen.getByText(/separate evaluator confidence/)).toBeTruthy();expect(screen.getByText(/provisional or withheld/)).toBeTruthy();expect(screen.queryByText(/uses legacy evaluation/)).toBeNull();
+  expect(screen.getByText(/Trusted starters use the established interview evaluator/)).toBeTruthy();expect(screen.getByText(/Dynamic questions use rubric evaluation/)).toBeTruthy();expect(screen.queryByText(/uses legacy evaluation/)).toBeNull();
  });
  it("renders actual coverage/distribution/shortages/time and no hidden answers",()=>{
   render(<PlanPreview plan={plan} confirming={false} error={null} onConfirm={vi.fn()} onEdit={vi.fn()}/>);

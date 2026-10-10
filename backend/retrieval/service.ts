@@ -8,10 +8,11 @@ import { MODEL, REVIEWED_SEED_INPUT_HASH, RetrievalFailure, validateBatch, type 
   type Purpose, type Reason, type RetrievalRequest, type RetrievalResponse } from "./contracts.js";
 import type { RetrievalInput } from "../types/knowledge.js";
 
+export const INTERVIEW_ELIGIBILITY_SQL = "e.entity_id = ANY(ARRAY(SELECT ready.question_version_id FROM content_question_readiness ready WHERE ready.inventory_class IN ('TRUSTED_BASELINE','DYNAMIC_REVIEWED','DYNAMIC_PROVISIONAL')))";
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const normalize=(s:string)=>s.normalize("NFKC").trim().replace(/\s+/g," ").toLowerCase();
 const keys=new Set(["taxonomyVersion","competencies","role","difficulties","categories","origins","qualities",
-  "sourceStates","reviewStates","company","occurredAfter","occurredBefore","excludedFamilies","excludedVersions","alreadySelectedIds","sourceKeys","documentKeys","reviewedSeed"]);
+  "sourceStates","reviewStates","company","occurredAfter","occurredBefore","excludedFamilies","excludedVersions","alreadySelectedIds","sourceKeys","documentKeys","reviewedSeed","approvedPractice","interviewEligible"]);
 function validDate(value:unknown) {
   return typeof value==="string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
     && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0,10)===value;
@@ -26,8 +27,11 @@ function validate(request:RetrievalRequest): Filters {
     || (f.taxonomyVersion!==undefined && (typeof f.taxonomyVersion!=="string" || f.taxonomyVersion.length>100))
     || (request.expectedCorpusGeneration!==undefined && !/^corpus-[0-9a-f]{64}$/.test(request.expectedCorpusGeneration))
     || (request.expectedModelRevision!==undefined && (typeof request.expectedModelRevision!=="string" || request.expectedModelRevision.length>100))
-    || (request.strategy!==undefined && !["semantic","structured-seed"].includes(request.strategy))
+    || (request.strategy!==undefined && !["semantic","structured-seed","structured-practice"].includes(request.strategy))
     || (f.reviewedSeed!==undefined && f.reviewedSeed!==true)
+    || (f.interviewEligible!==undefined && f.interviewEligible!==true)
+    || (f.approvedPractice!==undefined && f.approvedPractice!==true)
+    || (request.strategy==="structured-practice" && f.approvedPractice!==true)
     || (request.strategy==="structured-seed" && f.reviewedSeed!==true))
     throw new RetrievalFailure("invalid_filters");
   const choices:Record<string,string[]|null>={competencies:null,excludedFamilies:null,excludedVersions:null,alreadySelectedIds:null,sourceKeys:null,documentKeys:null,
@@ -51,6 +55,7 @@ export function filterSql(f:Filters,purpose:Purpose) {
   const params:unknown[]=[purpose]; const clauses=["e.purpose=$1"];
   const add=(value:unknown)=>{params.push(value);return `$${params.length}`;};
   if(purpose==="question-selection") {
+    if(f.interviewEligible)clauses.push(INTERVIEW_ELIGIBILITY_SQL);
     clauses.push(`e.taxonomy_version=${add(f.taxonomyVersion)}`);
     if(f.competencies?.length) {
       const p=add(f.competencies);
@@ -93,6 +98,8 @@ export function filterSql(f:Filters,purpose:Purpose) {
     if(ids.length)clauses.push(`NOT e.entity_id=ANY(${add(ids)}::uuid[])`);
   }
   const lineage:string[]=[];
+  if(f.approvedPractice)clauses.push(`EXISTS(SELECT 1 FROM content_question_readiness ready
+    WHERE ready.question_version_id=e.entity_id AND ready.inventory_class IN ('DYNAMIC_REVIEWED','DYNAMIC_PROVISIONAL'))`);
   if(f.reviewedSeed)clauses.push(`EXISTS(SELECT 1 FROM jsonb_array_elements(e.provenance) p
     JOIN ingestion_records r ON r.document_version_id=(p->>'documentVersionId')::uuid
     JOIN sources s ON s.id=r.source_id JOIN ingestion_adapters a ON a.source_id=s.id
@@ -125,13 +132,14 @@ export class RetrievalService {
     let vector:number[]|null=null;let structured=false;
     try {
       filters=validate(request);
+      if((filters.approvedPractice || filters.interviewEligible) && purpose!=="question-selection")throw new RetrievalFailure("invalid_filters");
       const taxonomy=(await query("SELECT id FROM competencies WHERE taxonomy_version=$1 AND status='active'",[filters.taxonomyVersion])).rows;
       if(!taxonomy.length || filters.competencies?.some(id=>!taxonomy.some(c=>c.id===id)))throw new RetrievalFailure("invalid_filters");
       // One snapshot/round trip for generation and completeness; rechecked under the
       // editorial lock after embedding below, just as before.
       const active=(await query(`SELECT g.*,
-        (SELECT count(*)::int FROM retrieval_entities WHERE purpose=$1) AS available,
-        EXISTS(SELECT 1 FROM retrieval_entities e WHERE e.purpose=$1 AND NOT EXISTS
+        (SELECT count(*)::int FROM retrieval_entities e WHERE purpose=$1 AND ${filters.interviewEligible?INTERVIEW_ELIGIBILITY_SQL:'true'}) AS available,
+        EXISTS(SELECT 1 FROM retrieval_entities e WHERE e.purpose=$1 AND ${filters.interviewEligible?INTERVIEW_ELIGIBILITY_SQL:'true'} AND NOT EXISTS
           (SELECT 1 FROM embedding_metadata m JOIN embedding_vectors ev ON ev.metadata_id=m.id
             WHERE coalesce(m.question_version_id,m.chunk_id)=e.entity_id AND m.purpose=e.purpose
               AND m.content_hash=e.content_hash AND m.status='active' AND m.corpus_generation=g.id)) AS incomplete
@@ -143,7 +151,7 @@ export class RetrievalService {
       if(request.expectedCorpusGeneration && request.expectedCorpusGeneration!==generation)throw new RetrievalFailure("corpus_unavailable");
       if(active.available) {
         if(active.incomplete)throw new RetrievalFailure("corpus_unavailable");
-        if(request.strategy==="structured-seed")structured=true;
+        if(request.strategy==="structured-seed" || request.strategy==="structured-practice")structured=true;
         else {
           const start=performance.now();const batch=validateBatch(await this.embedder.embed([request.query],"query"),1);
           vector=batch.vectors[0];embeddingMs=performance.now()-start;
@@ -159,7 +167,7 @@ export class RetrievalService {
     const response=await withDatabaseLock<RetrievalResponse>("ingestion:editorial:v1",async()=>{
       await query("SET LOCAL statement_timeout='5s'");
       if(vector || structured) {
-        const current=(await query(`SELECT g.id,EXISTS(SELECT 1 FROM retrieval_entities e WHERE e.purpose=$1
+        const current=(await query(`SELECT g.id,EXISTS(SELECT 1 FROM retrieval_entities e WHERE e.purpose=$1 AND ${filters.interviewEligible?INTERVIEW_ELIGIBILITY_SQL:'true'}
           AND NOT EXISTS(SELECT 1 FROM embedding_metadata m JOIN embedding_vectors ev ON ev.metadata_id=m.id
             WHERE coalesce(m.question_version_id,m.chunk_id)=e.entity_id AND m.purpose=e.purpose
               AND m.content_hash=e.content_hash AND m.status='active' AND m.corpus_generation=g.id)) AS incomplete
@@ -182,10 +190,11 @@ export class RetrievalService {
           ) SELECT r.* FROM ranked r JOIN groups USING(duplicate_group)
             ORDER BY (r.representative=1) DESC,exact DESC,similarity DESC,entity_id LIMIT 100`,built.params)).rows as Candidate[];
           databaseMs=performance.now()-start;
-          for(const c of candidates) if(c.representative===1 && (structured || c.exact || (c.similarity ?? -1)>=(request.minimumSimilarity ?? 0.3))
-            && selected.size<(request.limit || 5))selected.set(c.entity_id,structured?"reviewed_seed_available":c.exact?"exact_match":"semantic_match");
+          const structuredReason:Reason=request.strategy==="structured-practice"?"approved_practice_available":"reviewed_seed_available";
+          for(const c of candidates) if(c.representative===1 && (structured || c.exact || (filters.interviewEligible && filters.reviewedSeed) || (c.similarity ?? -1)>=(request.minimumSimilarity ?? 0.3))
+            && selected.size<(request.limit || 5))selected.set(c.entity_id,structured?structuredReason:c.exact?"exact_match":"semantic_match");
           outcome=selected.size?"success":"no_match";
-          reason=selected.size?(structured?"reviewed_seed_available":candidates.some(c=>selected.get(c.entity_id)==="exact_match")?"exact_match":"semantic_match")
+          reason=selected.size?(structured?structuredReason:candidates.some(c=>selected.get(c.entity_id)==="exact_match")?"exact_match":"semantic_match")
             : candidates.length?"no_relevant_hit":"no_permitted_source";
         }
       }
