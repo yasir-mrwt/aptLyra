@@ -3,9 +3,24 @@ import {query} from "../config/db.js";
 import {rubricEditor} from "./rubrics.js";
 import {reviewedAggregate} from "./contracts.js";
 import {publicOperation} from "../runtime/operations.js";
+import {canonicalCodeLanguage,executionTestFor} from "../codeExecution/specifications.js";
 
 /** Current public availability; immutable historical grades stay in PostgreSQL. */
 export async function publicEvaluationSession(session:ISession):Promise<ISession> {
+  if(session.planId){
+    const pinned=(await query(`SELECT i.id,ready.inventory_class,e.content_hash,e.category FROM plan_items i
+      JOIN retrieval_entities e ON e.entity_id=i.question_version_id AND e.purpose='question-selection'
+      JOIN content_question_readiness ready ON ready.question_version_id=e.entity_id
+      WHERE i.plan_id=$1 AND i.session_id=$2 AND i.user_id=$3`,[session.planId,session._id,session.user])).rows;
+    const capabilities=new Map(pinned.map(row=>[row.id,{
+      inventoryClass:row.inventory_class,
+      executionTestId:executionTestFor(row.inventory_class,row.content_hash,row.category,canonicalCodeLanguage(session.questions.find(q=>q.planItemId===row.id)?.language||""))||undefined,
+    }]));
+    session.questions=session.questions.map(question=>{
+      const capability=question.planItemId?capabilities.get(question.planItemId):undefined;
+      return capability?{...question,inventoryClass:capability.inventoryClass,executionTestId:capability.executionTestId}:question;
+    });
+  }
   let completedReport:any=null;
   if(session.runtimeVersion==="aptlyra-runtime-v1"){
     session.operations=(await query("SELECT * FROM durable_operations WHERE session_id=$1 AND user_id=$2 AND runtime_version='aptlyra-runtime-v1' ORDER BY created_at,id",[session._id,session.user])).rows.map(publicOperation);

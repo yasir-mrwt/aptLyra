@@ -8,7 +8,7 @@ import {abstain,finalize,POLICY,type EvaluationView,type EvaluationInput,type Ob
 import {rubricEditor,hash} from "./rubrics.js";
 import type {Json,JsonObject} from "../types/knowledge.js";
 export const unavailableObjective=():Objective=>({status:"unavailable",kind:"runtime",summary:"No matching execution evidence or reviewed tests available."});
-export interface Prepared {attempt:string;input:EvaluationInput|null;objective:Objective}
+export interface Prepared {attempt:string;input:EvaluationInput|null;objective:Objective;practiceAnswer?:string}
 export const evaluationService={
   async prepare(sessionId:string,userId:string,index:number,answer:string,code:string,diagram?:string|null,existingAttempt?:string):Promise<Prepared> {
     const session=await sessionRepository.findByIdForUser(sessionId,userId);const q=session?.questions[index];
@@ -23,7 +23,10 @@ export const evaluationService={
     const objective:Objective=pinned?existing!.grounding_snapshot.objective as Objective:code?(await this.objective(sessionId,index,code,q.language || "")):unavailableObjective();
     let rubric=pinned?(existing!.selected_rubric_id?await rubricEditor.load(parent.questionVersionId,existing!.selected_rubric_id):null):await rubricEditor.load(parent.questionVersionId,item.rubric_version_id || undefined);
     if(pinned && existing!.selected_rubric_id && !rubric)throw new Error("Rubric/reference withdrawn during evaluation");
-    if(!pinned && !rubric && !item.rubric_version_id && q.followUpOf===undefined){
+    const readiness=(await query("SELECT inventory_class FROM content_question_readiness WHERE question_version_id=$1",[parent.questionVersionId])).rows[0];
+    const practice=readiness?.inventory_class==="DYNAMIC_PROVISIONAL"&&(!rubric||rubric.kind==="known");
+    if(practice)rubric=null;
+    if(!practice && !pinned && !rubric && !item.rubric_version_id && q.followUpOf===undefined){
       const references=await new RetrievalService().retrieveTechnicalEvidence({query:q.questionText,limit:5,filters:{competencies:[item.primary_competency]},ownership:{sessionId,userId}});
       if(references.hits.length){const refs=references.hits.map(h=>({id:h.chunkId!,text:h.text.slice(0,6000)}));
         const generated=await aiService.draftRubric(q.questionText,refs) as {concepts:unknown[]};
@@ -34,7 +37,7 @@ export const evaluationService={
     }
     const input:EvaluationInput|null=rubric?{question:q.questionText,questionVersionId:parent.questionVersionId,rubric,answer,code,objective,derived:q.followUpOf!==undefined,artifactUnavailable:!!diagram && !answer.trim()}:null;
     // Durable callers claim before STT and seal preparation in their lease-fenced transaction.
-    if(existingAttempt)return {attempt:existingAttempt,input,objective};
+    if(existingAttempt)return {attempt:existingAttempt,input,objective,...(practice?{practiceAnswer:code||answer}:{})};
     const attempt=await withDatabaseLock(`session:${sessionId}`,async()=>{
       const fresh=await sessionRepository.findByIdForUser(sessionId,userId);const current=fresh?.questions[index];
       if(!fresh || fresh.status!=="in-progress" || !current?.isSubmitted || current.isEvaluated)throw new Error("Stale answer");
@@ -42,9 +45,16 @@ export const evaluationService={
       const id=await knowledgeRepository.createAnswerAttempt(userId,{planItemId:item.id,attempt:next,inputKind:code?(answer?"mixed":"code"):diagram?"mixed":"text",text:answer,code,contentHash:hash({answer,code,diagram:diagram || null}),artifactRefs:diagram?[{kind:"diagram",url:diagram}]:[]});
       await query("UPDATE answer_attempts SET status='evaluating',selected_rubric_id=$2,grounding_snapshot=$3,follow_up_index=$4 WHERE id=$1",[id,rubric?.id || null,JSON.stringify(input?{rubricHash:rubric!.hash,sourceIds:rubric!.references.map(r=>r.id)}:{}),q.followUpOf===undefined?null:index]);
       return id;
-    });return {attempt,input,objective};
+    });return {attempt,input,objective,...(practice?{practiceAnswer:code||answer}:{})};
   },
   async compute(prepared:Prepared) {
+    if(prepared.practiceAnswer!==undefined){
+      const view=abstain("practice_without_reviewed_scoring",prepared.objective);
+      view.feedback=prepared.practiceAnswer.trim()
+        ?"Provisional practice feedback: your answer has been saved. Check that it explains your approach, gives a concrete example, and covers edge cases or trade-offs. Technical correctness has not been assessed because this question has no reviewed scoring guide."
+        :"Provisional practice feedback: no answer text or code was available to assess. Try explaining an approach and a concrete example. No technical score was assigned.";
+      return {view,provider:null};
+    }
     if(!prepared.input)return {view:abstain("rubric_or_grounding_unavailable",prepared.objective),provider:null};
     const provider=await aiService.evaluateRubric(prepared.input);return {view:finalize(prepared.input,provider),provider:provider as ProviderResult};
   },
@@ -83,7 +93,7 @@ export const evaluationService={
     const record=(await query("SELECT * FROM coding_execution_evidence WHERE session_id=$1 AND question_index=$2 AND code_hash=$3 AND language=$4 ORDER BY created_at DESC LIMIT 1",[sessionId,index,hash(code),language])).rows[0];
     return record?{status:record.status,kind:"runtime",summary:record.summary,codeHash:record.code_hash}:unavailableObjective();
   },
-  async recordExecution(sessionId:string,userId:string,index:number,code:string,language:string,status:"passed"|"failed"){
-    await query("INSERT INTO coding_execution_evidence(id,session_id,user_id,question_index,code_hash,language,status,summary) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",[randomUUID(),sessionId,userId,index,hash(code),language,status,status==="failed"?"JDoodle reported execution failure; reviewed tests unavailable.":"JDoodle returned a successful execution status; this does not prove tests passed. Reviewed tests unavailable."]);
+  async recordExecution(sessionId:string,userId:string,index:number,code:string,language:string,status:"passed"|"failed",summary?:string){
+    await query("INSERT INTO coding_execution_evidence(id,session_id,user_id,question_index,code_hash,language,status,summary) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",[randomUUID(),sessionId,userId,index,hash(code),language,status,summary || (status==="failed"?"JDoodle reported execution failure; reviewed tests unavailable.":"JDoodle returned a successful execution status; reviewed tests unavailable.")]);
   }
 };

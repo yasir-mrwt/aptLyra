@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import MonacoEditor from "@monaco-editor/react";
 import { SUPPORTED_LANGUAGES } from "../constants/interview";
 import CustomSelect from "./CustomSelect";
@@ -21,7 +21,6 @@ const CodeEditorSection: React.FC<CodeEditorSectionProps> = ({
 }) => {
     // Local state for immediate feedback
     const [localCode, setLocalCode] = useState(code);
-    const debounceTimerRef = useRef<number | null>(null);
 
     // Update local state when the prop changes (e.g. navigation between questions)
     useEffect(() => {
@@ -34,25 +33,9 @@ const CodeEditorSection: React.FC<CodeEditorSectionProps> = ({
         // 1. Update local state immediately for zero-latency typing
         setLocalCode(newVal ?? "");
 
-        // 2. Clear existing timer
-        if (debounceTimerRef.current !== null) {
-            window.clearTimeout(debounceTimerRef.current);
-        }
-
-        // 3. Set a new timer to update parent state (and localStorage) after 500ms
-        debounceTimerRef.current = window.setTimeout(() => {
-            updateCode(newVal);
-        }, 500);
+        // Keep submit/run in sync with the last keystroke.
+        updateCode(newVal);
     };
-
-    // Cleanup timer on unmount
-    useEffect(() => {
-        return () => {
-            if (debounceTimerRef.current !== null) {
-                window.clearTimeout(debounceTimerRef.current);
-            }
-        };
-    }, []);
 
     return (
         <div className="bg-surface-900 rounded-[2.5rem] group/form h-125 flex flex-col border border-white/5 relative overflow-visible">
@@ -62,9 +45,9 @@ const CodeEditorSection: React.FC<CodeEditorSectionProps> = ({
                     <CustomSelect 
                         label="" 
                         name="language" 
-                        options={plannedLanguage ? SUPPORTED_LANGUAGES.filter(l => l.value === language) : SUPPORTED_LANGUAGES}
+                        options={plannedLanguage ? SUPPORTED_LANGUAGES.filter(l => language === "sql" ? l.value === "sql" : ["javascript", "python"].includes(l.value)) : SUPPORTED_LANGUAGES}
                         value={language} 
-                        onChange={(_, val) => setLanguage(String(val))} 
+                        onChange={(_, val) => { if (!isQuestionLocked) setLanguage(String(val)); }}
                     />
                 </div>
             </div>

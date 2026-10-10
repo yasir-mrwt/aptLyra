@@ -75,5 +75,5 @@ export function reviewedAggregate(questions:{followUpOf?:number;primaryCompetenc
   const sufficient=eligible.length>=2 && eligible.length/originals.length>=.6 && Object.values(byRoot).every(n=>n!==null);
   const values=Object.values(byRoot) as (number|null)[];
   return {scoringVersion:POLICY,technicalScore:sufficient?Math.round(values.reduce<number>((s,n)=>s+n!,0)/values.length*10)/10:null,eligible:eligible.length,planned:originals.length,byRoot,
-    provisional:originals.filter(q=>q.evaluation?.rubricStatus==="provisional").length,abstained:originals.filter(q=>q.evaluation?.status==="abstained").length,reason:sufficient?null:"insufficient_reviewed_coverage"};
+    provisional:originals.filter(q=>(q.evaluation?.rubricStatus==="provisional"||q.evaluation?.reasons.includes("practice_without_reviewed_scoring"))).length,abstained:originals.filter(q=>q.evaluation?.status==="abstained").length,reason:sufficient?null:"insufficient_reviewed_coverage"};
 }

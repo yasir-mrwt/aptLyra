@@ -7,9 +7,10 @@ interface CodeOutputPanelProps {
     language: string;
     code: string;
     context?: {sessionId:string;questionIndex:number};
+    executionTestId?: "binary-search-v1";
 }
 
-const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code, context }) => {
+const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code, context, executionTestId }) => {
     const [isRunning, setIsRunning] = useState(false);
     const [result, setResult] = useState<ExecutionResult | null>(null);
     const [stdin, setStdin] = useState("");
@@ -17,7 +18,7 @@ const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code, conte
     const [executionTime, setExecutionTime] = useState<number | null>(null);
     const outputRef = useRef<HTMLPreElement>(null);
 
-    const canExecute = isExecutable(language);
+    const canExecute = isExecutable(language) && (!context || executionTestId === "binary-search-v1");
 
     useEffect(() => {
         if (outputRef.current) {
@@ -64,14 +65,15 @@ const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code, conte
                     )}
                 </div>
                 <div className="flex items-center gap-2">
-                    <button
+                    {!executionTestId&&context?<span className="text-xs text-amber-200">Automated execution tests are not available for this question.</span>:null}
+                    {(!context||executionTestId==="binary-search-v1")&&<button
                         onClick={() => setShowStdin(!showStdin)}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-surface-400 hover:text-white bg-white/5 hover:bg-white/10 transition-all cursor-pointer border border-white/5"
                         title="Toggle stdin input"
                     >
                         {showStdin ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                         Input
-                    </button>
+                    </button>}
                     {hasOutput && (
                         <button
                             onClick={handleClear}
@@ -81,7 +83,7 @@ const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code, conte
                             <Trash2 size={12} />
                         </button>
                     )}
-                    <button
+                    {canExecute && <button
                         onClick={handleRun}
                         disabled={!canExecute || isRunning}
                         className={`flex items-center gap-2 px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-[0.96] border ${
@@ -100,10 +102,10 @@ const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code, conte
                         ) : (
                             <>
                                 <Play size={12} />
-                                Run
+                                {executionTestId==="binary-search-v1"?"Run tests":"Run"}
                             </>
                         )}
-                    </button>
+                    </button>}
                 </div>
             </div>
 
@@ -126,7 +128,7 @@ const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code, conte
                     <div className="flex-1 flex flex-col items-center justify-center text-surface-600 gap-3">
                         <Terminal size={32} className="opacity-30" />
                         <p className="text-[10px] font-black uppercase tracking-widest">
-                            {canExecute ? "Click Run to execute your code" : "This language does not support execution"}
+                            {context&&!executionTestId ? "Deterministic tests are not configured for this question. You can still submit your answer." : canExecute ? executionTestId==="binary-search-v1"?"Run the match, missing-value and empty-array cases":"Click Run to execute your code" : "This language does not support execution"}
                         </p>
                     </div>
                 )}

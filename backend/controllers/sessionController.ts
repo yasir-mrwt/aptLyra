@@ -12,37 +12,9 @@ import { aiService } from "../services/aiService.js";
 
 import { AuthenticatedRequest } from "../types/express.js";
 
-/**
- * @desc Create a new interview session and trigger AI question generation
- * @route POST /api/sessions
- */
-export const createSession = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const { role, level, interviewType, count, company, companyTrack, resumeId } = req.body;
-  const userId = req.user?.id || req.user?._id;
-  const io = req.app.get("io");
-
-  if (!userId || !role || !level || !interviewType || !count) {
-    res.status(400);
-    throw new Error("All fields are required");
-  }
-
-  const session = await sessionService.createInterviewSession(
-    userId,
-    role,
-    level,
-    interviewType,
-    Number(count),
-    company,
-    companyTrack,
-    resumeId || undefined,
-    io
-  );
-
-  res.status(201).json({
-    message: "Session created successfully",
-    sessionId: session._id,
-    status: "processing",
-  });
+/** Historical clients must migrate to the owned planner preview/confirm contract. */
+export const createSession = asyncHandler(async (_req: AuthenticatedRequest, res: Response) => {
+  res.status(410).json({code:"planner_required",message:"Create an interview using plan preview and confirmation."});
 });
 
 /**

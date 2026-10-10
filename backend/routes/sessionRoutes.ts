@@ -17,11 +17,6 @@ import {
 } from "../controllers/sessionController.js";
 import { uploadSingleAudio } from "../middleware/uploadMiddleware.js";
 import {getOperations,retryInterviewOperation,cancelInterviewOperation} from "../controllers/operationController.js";
-import {
-  sessionCreationValidation,
-  validateResult,
-} from "../middleware/validationMiddleware.js";
-
 const router: Router = express.Router();
 
 const createSessionLimiter = rateLimit({
@@ -34,7 +29,7 @@ router.use(protect);
 
 router
   .route("/")
-  .post(createSessionLimiter, sessionCreationValidation, validateResult, createSession)
+  .post(createSessionLimiter, createSession)
   .get(getSession);
 
 router.route("/:sessionId").get(getSessionById).delete(deleteSession);

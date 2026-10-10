@@ -27,12 +27,6 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
     const activeSession=loadedSession?._id===sessionId?loadedSession:null;
 
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-    // Derive selected language securely without side-effects (React paradigm)
-    const [languageOverride, setLanguageOverride] = useState<string | null>(null);
-    const defaultLang = activeSession?.role ? ROLE_LANGUAGE_MAP[activeSession.role] || "plaintext" : "javascript";
-    const selectedLanguage = activeSession?.planId ? activeSession.questions[currentQuestionIndex]?.language || defaultLang : languageOverride ?? defaultLang;
-    const setSelectedLanguage = setLanguageOverride;
-
     const submittingRef = useRef(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submittedLocal, setSubmittedLocal] = useState<Record<number, boolean>>({});
@@ -40,6 +34,14 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
 
     // Initial drafts state from IDB with empty fallback
     const [drafts, setDrafts] = useState<DraftRecord>({});
+    const defaultLang = activeSession?.role ? ROLE_LANGUAGE_MAP[activeSession.role] || "javascript" : "javascript";
+    const selectedLanguage = drafts[currentQuestionIndex]?.language ?? activeSession?.questions[currentQuestionIndex]?.language ?? defaultLang;
+    const setSelectedLanguage = (language: string) => {
+        if (activeSession?.planId && (activeSession.questions[currentQuestionIndex]?.language === "sql"
+            ? language !== "sql" : !["javascript", "python"].includes(language))) return;
+        setDrafts(previous => ({...previous, [currentQuestionIndex]: {...previous[currentQuestionIndex], language}}));
+    };
+
 
     useEffect(() => {
         if (!sessionId) return;

@@ -1,21 +1,5 @@
 export type InterviewType = "oral-only" | "coding-mix" | "company-specific";
 
-export interface CreateSessionRequest {
-    role: string;
-    level: string;
-    interviewType: InterviewType;
-    count: number;
-    company?: string;
-    companyTrack?: string;
-    resumeId?: string;
-}
-
-export interface CreateSessionResponse {
-    message: string;
-    sessionId: string;
-    status: "processing";
-}
-
 export interface SpeechMetrics {
     fillerWordCount: number;
     fillerWords: { word: string; count: number }[];
@@ -36,6 +20,7 @@ export interface Question {
     evaluation?: RubricEvaluation;
     planItemId?: string;
     questionVersionId?: string;
+    executionTestId?: "binary-search-v1";
     category?: string;
     evidenceUnavailable?: boolean;
     language?: string;
@@ -152,7 +137,7 @@ export interface InterviewOperation {
 /**
  * Structure for locally persisted interview drafts in IndexedDB.
  */
-export type DraftRecord = Record<number, { code?: string; answerText?: string; audio?: Blob; diagram?: Blob; diagramElements?: readonly unknown[] }>;
+export type DraftRecord = Record<number, { language?: string; code?: string; answerText?: string; audio?: Blob; diagram?: Blob; diagramElements?: readonly unknown[] }>;
 export interface RubricEvaluation {
     id?:string; rubricStatus:"reviewed"|"provisional"|"unavailable"; status:"scored"|"abstained";
     technicalScore:number|null; evaluatorConfidence:"high"|"medium"|"low"; reasons:string[];

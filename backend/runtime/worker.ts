@@ -133,7 +133,13 @@ export class InterviewRuntime {
     if(op.operation_type!=="report"){
       const question=session.questions[op.question_index];
       if(!question || (op.operation_type==="evaluate" && (question.operationId!==op.id || question.isEvaluated || !question.isSubmitted)))throw new RuntimeFailure("stale_operation");
-      if(question.planItemId!==op.plan_item_id || !(await query("SELECT 1 FROM plan_items WHERE id=$1 AND session_id=$2 AND user_id=$3 AND question_version_id=$4",[op.plan_item_id,session._id,session.user,question.questionVersionId])).rows.length)throw new RuntimeFailure("stale_operation");
+      const pinned=(await query(`SELECT ready.inventory_class FROM plan_items i
+        JOIN content_question_readiness ready ON ready.question_version_id=i.question_version_id
+        WHERE i.id=$1 AND i.session_id=$2 AND i.user_id=$3 AND i.plan_id=$4 AND i.question_version_id=$5`,
+      [op.plan_item_id,session._id,session.user,session.planId,question.questionVersionId])).rows[0];
+      if(question.planItemId!==op.plan_item_id || !pinned ||
+        (question.inventoryClass&&(question.inventoryClass==="TRUSTED_BASELINE")!==(pinned.inventory_class==="TRUSTED_BASELINE")))throw new RuntimeFailure("stale_operation");
+      question.inventoryClass=pinned.inventory_class;
       if(!(await query("SELECT entity_id FROM retrieval_entities WHERE purpose='question-selection' AND entity_id=$1",[question.questionVersionId])).rows.length)throw new RuntimeFailure("evidence_or_answer_unavailable");
       if(op.answer_attempt_id && !(await query("SELECT 1 FROM answer_attempts WHERE id=$1 AND session_id=$2 AND user_id=$3 AND plan_item_id=$4 AND question_version_id=$5 AND privacy_status='present'",[op.answer_attempt_id,session._id,session.user,op.plan_item_id,question.questionVersionId])).rows.length)throw new RuntimeFailure("evidence_or_answer_unavailable");
     }
@@ -269,6 +275,40 @@ export class InterviewRuntime {
       await removeStagedAudio(media.filename).catch(()=>{});await query("DELETE FROM staged_interview_media WHERE id=$1",[media.id]);
     }
     const diagram=answer.artifact_refs.find((a:any)=>a.kind==="diagram")?.url;
+    const inventoryClass=(await query(`SELECT ready.inventory_class FROM plan_items i
+      JOIN content_question_readiness ready ON ready.question_version_id=i.question_version_id
+      WHERE i.id=$1 AND i.session_id=$2 AND i.user_id=$3 AND i.plan_id=(SELECT interview_plan_id FROM sessions WHERE id=$2)`,
+    [op.plan_item_id,op.session_id,op.user_id])).rows[0]?.inventory_class;
+    if(inventoryClass!=="TRUSTED_BASELINE"){
+      await this.evaluateWithRubric(op,answer);
+      return;
+    }
+    const session=await sessionRepository.findByIdForUser(op.session_id,op.user_id);
+    const question=session?.questions[op.question_index];
+    if(!session||!question)throw new RuntimeFailure("stale_operation");
+    const legacy=await aiService.evaluateAnswer({question:question.questionText,
+      question_type:question.questionType as "coding"|"oral"|"system-design",
+      user_answer:answer.extracted_text??answer.answer_text??"",user_code:answer.code_text||"",
+      selected_language:question.language||"plaintext",diagram_payload:answer.artifact_refs.find((a:any)=>a.kind==="diagram")?.url,
+      role:session.role,level:session.level,interview_type:session.interviewType});
+    await this.options.beforeCommit?.(op);
+    const saved=await withDatabaseLock("ingestion:editorial:v1",()=>withSessionLock(op.session_id,async()=>{
+      const fresh=await this.fence(op),q=fresh.questions[op.question_index];
+      await query("UPDATE answer_attempts SET status='evaluated',runtime_prepared=false,selected_rubric_id=NULL,updated_at=now() WHERE id=$1",[answer.id]);
+      q.userAnswerText=answer.extracted_text??answer.answer_text??"";q.userSubmittedCode=answer.code_text||"";
+      if(diagram)q.userSubmittedDiagram=diagram;
+      q.idealAnswer=legacy.ideal_answer;q.technicalScore=legacy.technical_score;q.confidenceScore=legacy.confidence_score;
+      q.aiFeedback=legacy.ai_feedback;q.isEvaluated=true;q.isSubmitted=true;q.processingState="evaluated";
+      delete q.processingError;delete q.evaluation;speechProjection(q,answer.speech_result);
+      await gamificationService.rewardDurable(fresh._id,fresh.user,`answer:${op.question_index}`);
+      await sessionRepository.save(fresh);await bumpRevision(fresh);
+      await this.succeed(op,fresh,{answerAttemptId:answer.id,evaluationPath:"trusted-baseline"});
+      if(fresh.questions.every(item=>item.isEvaluated)&&!fresh.questions.some(item=>item.followUpPending))await requestFinish(fresh);
+      return fresh;
+    }));this.notify({...op,error_code:null},saved,"succeeded");
+  }
+  private async evaluateWithRubric(op:Operation,answer:any) {
+    const diagram=answer.artifact_refs.find((a:any)=>a.kind==="diagram")?.url;
     const prepared:Prepared=await evaluationService.prepare(op.session_id,op.user_id,op.question_index,answer.extracted_text ?? answer.answer_text ?? "",answer.code_text || "",diagram,answer.id);
     if(!answer.runtime_prepared)await this.checkpoint(op,async session=>{
       await query("UPDATE answer_attempts SET runtime_prepared=true,status='evaluating',selected_rubric_id=$2,grounding_snapshot=$3,updated_at=now() WHERE id=$1",[answer.id,prepared.input?.rubric.id || null,JSON.stringify({rubricHash:prepared.input?.rubric.hash || null,sourceIds:prepared.input?.rubric.references.map(r=>r.id) || [],objective:prepared.objective})]);
@@ -314,12 +354,13 @@ export class InterviewRuntime {
       if(!q.followUpPending || q.probeOperationId!==op.id || q.evaluation?.id!==op.payload.parentEvaluationId || q.evaluation?.status!=="scored" || fresh.questions.some(x=>x.followUpOf===op.question_index) || fresh.questions.filter(x=>x.followUpOf!==undefined).length>=2)throw new RuntimeFailure("stale_probe");
       // Recheck the exact parent scoring evidence after provider latency.
       await publicEvaluationSession(fresh);
-      if(fresh.questions[op.question_index].evaluation?.status!=="scored")throw new RuntimeFailure("evidence_or_answer_unavailable");
+      const currentParent=fresh.questions[op.question_index];
+      if(currentParent.evaluation?.status!=="scored")throw new RuntimeFailure("evidence_or_answer_unavailable");
       fresh.questions.push({questionText:generated.question,questionType:"oral",idealAnswer:"",isSubmitted:false,isEvaluated:false,
         followUpOf:op.question_index,followUpConceptId:op.payload.conceptId,followUpRationale:op.payload.rationale,
-        parentEvaluationId:op.payload.parentEvaluationId,probeOperationId:op.id,questionVersionId:q.questionVersionId,
-        planItemId:q.planItemId,primaryCompetency:q.primaryCompetency,createdAt:new Date().toISOString()});
-      q.followUpPending=false;await sessionRepository.save(fresh);await bumpRevision(fresh);await this.succeed(op,fresh,{questionIndex:fresh.questions.length-1});return fresh;
+        parentEvaluationId:op.payload.parentEvaluationId,probeOperationId:op.id,questionVersionId:currentParent.questionVersionId,
+        planItemId:currentParent.planItemId,primaryCompetency:currentParent.primaryCompetency,createdAt:new Date().toISOString()});
+      currentParent.followUpPending=false;await sessionRepository.save(fresh);await bumpRevision(fresh);await this.succeed(op,fresh,{questionIndex:fresh.questions.length-1});return fresh;
     }));this.notify(op,saved,"succeeded");
   }
   private async report(op:Operation) {

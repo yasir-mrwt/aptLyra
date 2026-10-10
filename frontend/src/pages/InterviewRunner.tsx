@@ -109,7 +109,7 @@ const InterviewRunner = () => {
 
     return (
         <div className="max-w-7xl mx-auto px-4 pb-32">
-            {activeSession.planId && <p className="mb-4">{activeSession.scoringVersion === "rubric-v1" ? "Rubric evaluation · Reviewed scores require approved scoring material; other results are provisional or abstained." : "Planner-backed questions · Legacy evaluation"}</p>}
+            {activeSession.planId && <p className="mb-4">{activeSession.scoringVersion === "rubric-v1" ? "Trusted starters use established interview evaluation. Dynamic questions show their own rubric readiness." : "Planner-backed questions · Legacy evaluation"}</p>}
             <OperationStatusPanel session={activeSession} onAction={handleOperation} connection={socketConnection} />
             {activeSession.runtimeState==="finishing" && <p role="status" className="mb-4">Lyra is finalizing your report. Answers are saved and locked. This page will restore progress after a reload.</p>}
             <InterviewHeader
@@ -167,6 +167,7 @@ const InterviewRunner = () => {
                         context={activeSession.scoringVersion === "rubric-v1" ? {sessionId:activeSession._id,questionIndex:currentQuestionIndex}:undefined}
                         language={selectedLanguage}
                         code={currentDraft.code || ""}
+                        executionTestId={currentQuestion?.executionTestId}
                     />
                 </div>
             ) : (

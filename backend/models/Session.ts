@@ -35,6 +35,7 @@ export interface IQuestion {
   planItemId?: string;
   questionVersionId?: string;
   inventoryClass?: "TRUSTED_BASELINE" | "DYNAMIC_REVIEWED" | "DYNAMIC_PROVISIONAL";
+  executionTestId?: "binary-search-v1";
   category?: string;
   evidenceUnavailable?: boolean;
   questionText: string;

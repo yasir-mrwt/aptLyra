@@ -1,18 +1,18 @@
-# Phase 6 runtime: answers and interviewer voice
+# Interview answers, coding and interviewer voice
 
-The existing runner evaluates answers through Express → authenticated FastAPI → Groq. Results remain **legacy evaluation**; reviewed rubric scoring and evaluator confidence are not implemented.
+The runner uses the existing durable PostgreSQL/Redis execution path described in [runtime recovery](runtime-recovery.md). Trusted starter questions retain their baseline evaluator. Dynamic questions with reviewed evidence and a guide use rubric evaluation; practice questions without those prerequisites receive descriptive **Provisional** feedback with low confidence and no technical score or reviewed aggregate contribution.
 
 ## Answer input and retry
 
-Oral and system-design questions accept a recording or the **Type an answer instead** field. Typed drafts use the existing IndexedDB store. Submit multipart `answerText` with `questionIndex`; text is limited to 50,000 characters. A typed answer and recording are mutually exclusive. Coding questions still require code and retain the planned language; recorded explanations can accompany code. Diagrams remain optional for system design.
+Oral and system-design questions accept a recording or **Type an answer instead**. Typed drafts use IndexedDB. Submit multipart `answerText` with `questionIndex`; typed text and a recording are mutually exclusive. Coding answers retain their draft code and chosen language. Planned executable coding supports both **JavaScript** and **Python**, including changing the original plan language. The language and final keystroke are preserved on run/submit and reload. SQL remains SQL.
 
-Typed input reaches `user_answer` directly and saves to the existing question's `userAnswerText` only after a valid evaluation. Speech still uses `/speech/analyze`; missing ffmpeg yields an explicit unavailable metrics status without fabricated pace or pauses. A provider failure restores the submitted flag for retry and saves no score. Existing session ownership, duplicate submission, follow-up capacity and completion/reward transaction guards remain in place. These are in-process tasks; this repair does not introduce durable jobs or crash-recovery architecture.
+The exact trusted binary-search exercise has identity-bound JavaScript and Python correctness harnesses. Other exercises must have supported tests before the UI can claim correctness; a successful generic execution alone is not a passing correctness suite. Ownership and question-version guards remain enforced. See the runtime and evaluation documents for durable retries, duplicate suppression and completion/reward persistence.
 
 ## Voice fallback
 
 `/speak` uses the owned active session's server-selected question. Invalid indices, unowned sessions, inactive sessions and withdrawn evidence cannot invoke the provider. Valid provider WAV audio remains supported. Provider failure returns a safe HTTP 503 `tts_unavailable` response without raw upstream detail, allowing browser speech or reading the question.
 
-The voice hook shares an in-flight request for the same question, caches decoded successful audio, and stops automatic server attempts after an intentional 503 for that session. A user-triggered Replay may make one new attempt. Late requests cannot play after a question/session/state change. Browser autoplay permission is handled at playback, after provider availability is known; a pending AudioContext activation cannot block fallback or permanently disable Replay. Browser voice availability still depends on the browser/platform. Questions and answer controls remain usable when voice cannot play.
+The voice hook shares an in-flight request for the same question, caches decoded successful audio, and stops automatic server attempts after an intentional 503 for that session. Replay question also uses browser voice after that failure; it does not retry the unavailable server provider for that session. Late requests cannot play after a question/session/state change. Browser autoplay permission is handled at playback, after provider availability is known; a pending AudioContext activation cannot block fallback or permanently disable Replay. Browser synthesis waits up to two seconds for voices to load, selects a usable English voice, retains the utterance until completion and cancels stale playback. The UI shows **Browser voice** and a **Replay question** button; unsupported or stalled playback has a visible message. Browser voice availability still depends on the browser/platform. Questions and answer controls remain usable when voice cannot play.
 
 ## Operator diagnosis
 

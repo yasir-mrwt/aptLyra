@@ -62,6 +62,7 @@ export async function acceptAnswer(session:ISession,index:number,answer:string,c
       artifactRefs:[...(diagram?[{kind:"diagram",url:diagram}]:[]),...(staged?[{kind:"audio",mediaId:staged.id}]:[])]});
     await query("UPDATE answer_attempts SET follow_up_index=$2,runtime_extracted=$3,extracted_text=$4 WHERE id=$1",[attempt,question.followUpOf===undefined?null:index,!staged,staged?null:answer]);
     if(staged)await query("INSERT INTO staged_interview_media(id,session_id,user_id,answer_attempt_id,filename,content_hash,size_bytes,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,now()+interval '24 hours')",[staged.id,session._id,session.user,attempt,staged.filename,staged.hash,staged.size]);
+    if(question.questionType==="coding")question.language=language;
     question.isSubmitted=true;delete question.processingError;question.processingState="received";
     await sessionRepository.save(session);await bumpRevision(session);
     const op=await insertOperation(session,"evaluate",`answer:${index}:${attempt}`,{index},payloadHash,attempt,parent.planItemId,index);

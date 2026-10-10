@@ -4,7 +4,6 @@ import type {EvaluationView,ProviderResult} from "../evaluation/contracts.js";
 import fs from "fs";
 import path from "node:path";
 import { sessionRepository, withSessionLock, ISession } from "../models/Session.js";
-import { resumeRepository } from "../models/Resume.js";
 import { aiService } from "./aiService.js";
 import { pushSocketUpdate } from "./socketService.js";
 import { gamificationService } from "./gamificationService.js";
@@ -30,114 +29,6 @@ async function completeLocked(session: ISession) {
 }
 
 export const sessionService = {
-  async createInterviewSession(
-    userId: string | any,
-    role: string,
-    level: string,
-    interviewType: string,
-    count: number,
-    company: string | undefined,
-    companyTrack: string | undefined,
-    resumeId: string | undefined,
-    io: any
-  ) {
-    const session = await sessionRepository.create({
-      user: userId.toString(),
-      role,
-      level,
-      interviewType: interviewType as ISession["interviewType"],
-      company,
-      companyTrack,
-      resumeId,
-      status: "pending",
-    });
-
-    // Background process for AI generation
-    (async () => {
-      try {
-        pushSocketUpdate(
-          io,
-          userId.toString(),
-          session._id,
-          "AI_GENERATING",
-          `Generating ${count} questions for ${role}...`
-        );
-
-        let resumeText = undefined;
-        if (resumeId) {
-          try {
-            const resume = await resumeRepository.findById(resumeId);
-            if (resume && resume.user === userId.toString()) {
-              resumeText = resume.parsedData?.rawText;
-              // Or extract projects specifically if you prefer, but rawText gives full context
-              if (!resumeText && resume.analysisReport?._v2?.report?.recruiter_summary) {
-                resumeText = resume.analysisReport._v2.report.recruiter_summary;
-              }
-            }
-          } catch (err: any) {
-            console.error("Error fetching resume for session:", err.message);
-          }
-        }
-
-        const aiData = await aiService.generateQuestions({
-          role,
-          level,
-          interviewType,
-          count,
-          resumeText,
-          company,
-          companyTrack,
-        });
-        const questions = (aiData.questions || []).map((qInfo: any) => ({
-          questionText: qInfo.question,
-          idealAnswer: qInfo.ideal_answer,
-          questionType: ["coding", "system-design"].includes(qInfo.question_type) ? qInfo.question_type : "oral",
-          isEvaluated: false,
-          isSubmitted: false,
-        }));
-
-        await withSessionLock(session._id, async () => {
-          const fresh = await sessionRepository.findById(session._id);
-          if (!fresh || fresh.status !== "pending") return;
-          fresh.questions = questions as any;
-          fresh.status = "in-progress";
-          fresh.startTime = new Date().toISOString();
-          await sessionRepository.save(fresh);
-          session.questions = fresh.questions;
-          session.status = fresh.status;
-          session.startTime = fresh.startTime;
-        });
-
-        pushSocketUpdate(
-          io,
-          userId.toString(),
-          session._id,
-          "QUESTIONS_READY",
-          "Starting Interview...",
-          session
-        );
-      } catch (error: any) {
-        console.error("Error in createSession (Background):", error.message);
-        await withSessionLock(session._id, async () => {
-          const fresh = await sessionRepository.findById(session._id);
-          if (!fresh || fresh.status !== "pending") return;
-          fresh.status = "failed";
-          await sessionRepository.save(fresh);
-        });
-        pushSocketUpdate(
-          io,
-          userId.toString(),
-          session._id,
-          "GENERATION_FAILED",
-          "Failed to generate questions",
-          await sessionRepository.findById(session._id)
-        );
-      }
-    })().catch(() => console.error("Question generation task could not persist its result"));
-
-    return session;
-  },
-
   async getSessionsForUser(userId: string | any, page: number, limit: number) {
     const uid = userId.toString();
 
@@ -218,7 +109,8 @@ export const sessionService = {
       const q = session.questions[qIdx];
       if(session.planId && q.questionVersionId && !(await query("SELECT entity_id FROM retrieval_entities WHERE purpose='question-selection' AND entity_id=$1",[q.questionVersionId])).rows.length)
         throw new SessionStateError("This planned question is unavailable. Create a fresh plan.",409);
-      if(session.planId && q.questionType==="coding" && language!==q.language)throw new SessionStateError("Use the planned coding language",400);
+      if(session.planId && q.questionType==="coding" && (q.language==="sql"?language!=="sql":!["javascript","python"].includes(language||"")))
+        throw new SessionStateError(q.language==="sql"?"Use SQL for this question":"Choose JavaScript or Python",400);
       if (q.questionType === "oral" && !audioFilePath && !typedAnswer) throw new SessionStateError("Record or type an answer before submitting", 400);
       if (q.questionType === "coding" && !code?.trim()) throw new SessionStateError("Code is required", 400);
       if (q.questionType === "system-design" && !audioFilePath && !diagramImageUrl && !typedAnswer) throw new SessionStateError("Provide an answer or a diagram", 400);
