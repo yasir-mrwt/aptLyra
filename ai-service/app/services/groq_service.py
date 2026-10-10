@@ -341,12 +341,12 @@ def call_groq(
 
 def editorial_ai_settings() -> tuple[str, str]:
     """Return the configured editorial provider and model without exposing secrets."""
-    default_provider = "ollama" if os.getenv("NODE_ENV", "production").strip().lower() == "development" else "groq"
+    default_provider = "ollama"
     provider = os.getenv("AI_PROVIDER", default_provider).strip().lower()
     if provider not in {"ollama", "groq"}:
         raise HTTPException(503, {"code": "provider_configuration", "message": "Editorial AI provider configuration is invalid."})
     if provider == "ollama":
-        model = os.getenv("OLLAMA_MODEL", "").strip()
+        model = os.getenv("OLLAMA_MODEL", "llama3.2:3b").strip()
         if not model:
             raise HTTPException(503, {"code": "provider_configuration", "message": "Set OLLAMA_MODEL to an installed local model."})
         return provider, model
@@ -425,9 +425,13 @@ def call_editorial_ai(
     temperature: float = 0.6,
     max_retries: int = 0,
     json_schema: dict | None = None,
+    capability: str = "editorial",
 ) -> str:
     """Use local Ollama for editorial work; Groq is an explicit opt-in fallback."""
-    provider, _ = editorial_ai_settings()
+    provider, model = editorial_ai_settings()
+    if capability not in {"question-review", "question-review-repair", "submission-extraction", "submission-extraction-repair", "scoring-guide-draft", "scoring-guide-draft-repair", "editorial"}:
+        capability = "editorial"
+    logging.info("editorial_ai.request provider=%s capability=%s model=%s", provider, capability, model)
     if provider == "groq":
         return call_groq(system_prompt, user_prompt, as_json=as_json, temperature=temperature,
                          max_retries=max_retries, json_schema=json_schema)

@@ -32,3 +32,9 @@ mapping, request guards, mute preference and cache behavior.
 Browser fallback keeps English voice selection and rate 0.95; pitch is now 1.0.
 Its sound depends on the browser and operating system. This is a conservative
 tone adjustment, not a guarantee that a particular browser voice sounds softer.
+
+## Browser fallback check
+
+After one server 503, the session uses native `window.speechSynthesis` for subsequent questions and **Replay question** without retrying server TTS. Voice selection waits for `voiceschanged`, prefers a local English voice and cancels a stale question before the next one. During playback the label is **Browser voice**. Unsupported speech or a playback-start timeout displays a clear message; answer controls remain usable.
+
+To check on your device: enable sound, start a fresh interview, wait for Browser voice, listen to the question, move to the next question and press Replay question. In browser Network, a known failing `/speak` endpoint should be called once for that session. Test mute/unmute and rapid question navigation too. Native synthesis start/end events prove the browser engine executed; a person must still confirm actual speaker/headphone audibility and preferred voice quality.

@@ -63,7 +63,9 @@ def test_invalid_output(client, monkeypatch, vector):
 
 
 def test_model_unavailable_and_artifact_hash(tmp_path):
-    with pytest.raises(EmbeddingFailure, match="model_unavailable"):
+    with pytest.raises(EmbeddingFailure, match="model_directory_missing"):
+        CpuEncoder(tmp_path / "missing", manifest()["models"]["l3"])
+    with pytest.raises(EmbeddingFailure, match="model_artifact_missing"):
         CpuEncoder(tmp_path, manifest()["models"]["l3"])
     (tmp_path / "model.onnx").write_bytes(b"corrupt")
     with pytest.raises(EmbeddingFailure, match="model_artifact_mismatch"):
@@ -95,3 +97,12 @@ async def test_timeout_holds_worker_slot_until_completion(monkeypatch):
     assert error.value.detail["code"] == "model_busy"
     await asyncio.sleep(0.1)
     assert not endpoint._lock.locked()
+
+
+def test_missing_configuration_has_safe_exact_reason(client, monkeypatch, caplog):
+    monkeypatch.setattr(endpoint, "_encoder", None)
+    monkeypatch.delenv("EMBEDDING_MODEL_DIR", raising=False)
+    response = client.post("/internal/embeddings", json={"mode": "query", "texts": ["x"]}, headers=headers())
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "model_directory_unconfigured"
+    assert "model_directory_unconfigured" in caplog.text

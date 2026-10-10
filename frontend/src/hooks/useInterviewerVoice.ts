@@ -5,11 +5,12 @@ import { isAxiosError } from "axios";
 /**
  * Voice of the AI interviewer.
  *
- * Fetches Groq TTS audio (WAV) from the backend and plays it through a
- * WebAudio AnalyserNode so the avatar's mouth can move with the real
- * amplitude of the speech. Falls back to the browser's speechSynthesis
- * (with a simulated amplitude) if the TTS endpoint is unavailable.
+ * Browser speech is the default. Explicit server configuration enables WAV
+ * playback with a WebAudio analyser, falling back once to browser speech
+ * if the configured provider is unavailable.
  */
+
+const serverVoiceEnabled = () => import.meta.env.VITE_INTERVIEW_VOICE_PROVIDER === "server";
 
 const MUTE_STORAGE_KEY = "preptalk_interviewer_muted";
 
@@ -49,12 +50,20 @@ export const useInterviewerVoice = (
     const fallbackTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const audioCacheRef = useRef<Map<number, AudioBuffer>>(new Map());
     const pendingAudioRef = useRef<Map<number, Promise<ArrayBuffer>>>(new Map());
+    const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+    const voiceWaitCleanupRef = useRef<(() => void) | null>(null);
+    const playbackWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const serverUnavailableRef = useRef(false);
     const lastSpokenRef = useRef<number>(-1);
     const generationRef = useRef(0); // invalidates stale async playback
 
     const stopSpeaking = useCallback(() => {
         generationRef.current += 1;
+        voiceWaitCleanupRef.current?.();
+        voiceWaitCleanupRef.current = null;
+        if (playbackWatchdogRef.current) clearTimeout(playbackWatchdogRef.current);
+        playbackWatchdogRef.current = null;
+        utteranceRef.current = null;
         cancelAnimationFrame(rafRef.current);
         if (fallbackTimerRef.current) {
             clearInterval(fallbackTimerRef.current);
@@ -73,7 +82,7 @@ export const useInterviewerVoice = (
     }, []);
 
     /** Browser speechSynthesis fallback with a simulated mouth movement. */
-    const speakWithBrowser = useCallback((text: string, generation: number) => {
+    const speakWithBrowser = useCallback(async (text: string, generation: number) => {
         setIsPreparing(false);
         if (!window.speechSynthesis) {
             setVoiceError("Voice unavailable. Read the question and retry voice when ready.");
@@ -81,17 +90,44 @@ export const useInterviewerVoice = (
         }
         setUsingBrowserVoice(true);
 
+        const synthesis = window.speechSynthesis;
+        let voices = synthesis.getVoices();
+        if (!voices.length) {
+            setIsPreparing(true);
+            voices = await new Promise<SpeechSynthesisVoice[]>(resolve => {
+                const finish = () => {
+                    window.clearTimeout(timeout);
+                    synthesis.removeEventListener?.("voiceschanged", changed);
+                    voiceWaitCleanupRef.current = null;
+                    resolve(synthesis.getVoices());
+                };
+                const changed = () => { if (synthesis.getVoices().length) finish(); };
+                const timeout = window.setTimeout(finish, 2000);
+                voiceWaitCleanupRef.current = finish;
+                synthesis.addEventListener?.("voiceschanged", changed);
+                changed();
+            });
+        }
+        if (generationRef.current !== generation) return;
+        setIsPreparing(false);
+        const english = voices.filter(voice => /^en(?:-|_|$)/i.test(voice.lang));
+        const voice = english.find(voice => voice.localService && /samantha|daniel|karen|zira|susan/i.test(voice.name))
+            || english.find(voice => voice.localService && voice.default) || english.find(voice => voice.localService) || english[0];
+        if (!voice && voices.length) {
+            setVoiceError("No English browser voice is available. Enable an English voice in your device settings, then Replay question.");
+            return;
+        }
         const utterance = new SpeechSynthesisUtterance(text);
-        const voices = window.speechSynthesis.getVoices();
-        const femaleVoice = voices.find((v) =>
-            /female|samantha|victoria|karen|zira|susan|google uk english female/i.test(v.name)
-        );
-        if (femaleVoice) utterance.voice = femaleVoice;
+        utteranceRef.current = utterance;
+        utterance.lang = voice?.lang || "en-US";
+        if (voice) utterance.voice = voice;
         utterance.rate = 0.95;
         utterance.pitch = 1.0;
 
         utterance.onstart = () => {
             if (generationRef.current !== generation) return;
+            if (playbackWatchdogRef.current) clearTimeout(playbackWatchdogRef.current);
+            setVoiceError(null);
             setIsSpeaking(true);
             fallbackTimerRef.current = setInterval(() => {
                 setAmplitude(0.25 + Math.random() * 0.6);
@@ -99,6 +135,8 @@ export const useInterviewerVoice = (
         };
         const finish = () => {
             if (generationRef.current !== generation) return;
+            utteranceRef.current = null;
+            if (playbackWatchdogRef.current) clearTimeout(playbackWatchdogRef.current);
             if (fallbackTimerRef.current) {
                 clearInterval(fallbackTimerRef.current);
                 fallbackTimerRef.current = null;
@@ -115,8 +153,13 @@ export const useInterviewerVoice = (
             setVoiceError("Voice playback failed. Use Replay to retry.");
         };
 
-        window.speechSynthesis.cancel();
-        window.speechSynthesis.speak(utterance);
+        synthesis.cancel();
+        synthesis.resume?.();
+        playbackWatchdogRef.current = setTimeout(() => {
+            if (generationRef.current === generation) setVoiceError("Press Replay question to enable browser audio. Check your device volume if speech is silent.");
+        }, 4000);
+        try { synthesis.speak(utterance); }
+        catch { finish(); setVoiceError("Browser voice unavailable. Read the question or enable speech in your browser."); }
     }, []);
 
     const playBuffer = useCallback(async (buffer: AudioBuffer, generation: number) => {
@@ -176,7 +219,7 @@ export const useInterviewerVoice = (
         rafRef.current = requestAnimationFrame(tick);
     }, []);
 
-    const speakQuestion = useCallback(async (qIndex: number, text: string, retryServer = false) => {
+    const speakQuestion = useCallback(async (qIndex: number, text: string) => {
         if (!enabled || isMuted || !sessionId || !text) return;
         stopSpeaking();
         const generation = generationRef.current;
@@ -184,9 +227,9 @@ export const useInterviewerVoice = (
         setVoiceError(null);
         setUsingBrowserVoice(false);
 
-        // An intentional server 503 applies to this session until explicit Replay.
+        // A server 503 disables this provider for the session, including Replay.
         // New questions and mute toggles use browser voice without hammering /speak.
-        if (serverUnavailableRef.current && !retryServer) {
+        if (!serverVoiceEnabled() || serverUnavailableRef.current) {
             speakWithBrowser(text, generation);
             return;
         }
@@ -239,7 +282,7 @@ export const useInterviewerVoice = (
     }, [sessionId, enabled, isMuted, stopSpeaking, playBuffer, speakWithBrowser]);
 
     const speak = useCallback(() => {
-        if (questionText) void speakQuestion(questionIndex, questionText, true);
+        if (questionText) void speakQuestion(questionIndex, questionText);
     }, [questionIndex, questionText, speakQuestion]);
 
     const toggleMute = useCallback(() => {

@@ -4,7 +4,9 @@ import authApi from "../../services/authApi";
 import type { AuthState, User, RegisterPendingResponse } from "../../types/user";
 
 const storedUser = localStorage.getItem("user");
-const user = storedUser ? JSON.parse(storedUser) : null;
+let user:User|null=null;
+try { user=storedUser?JSON.parse(storedUser) as User:null; }
+catch { localStorage.removeItem("user"); }
 
 const initialState: AuthState = {
     user: user ?? null,
@@ -12,12 +14,30 @@ const initialState: AuthState = {
     message: "",
     isSuccess: false,
     isLoading: false,
+    isInitializing: !!user,
     token: user?.token ?? null,
     isProfileLoading: false,
     isAvatarUploading: false,
     isAuthenticated: !!user,
     pendingVerificationEmail: null,
 };
+
+/** Restore the cookie-backed access session before mounting protected pages. */
+export const restoreSession=createAsyncThunk<User|null,void,{state:{auth:AuthState};rejectValue:string}>(
+    "auth/restoreSession",
+    async(_,thunkAPI)=>{
+        const stored=thunkAPI.getState().auth.user;
+        if(!stored)return null;
+        try {
+            await authApi.post("user/refresh",{});
+            return stored;
+        } catch {
+            localStorage.removeItem("user");
+            return thunkAPI.rejectWithValue("Your saved session has expired. Please sign in again.");
+        }
+    },
+    {condition:(_,thunkAPI)=>thunkAPI.getState().auth.isInitializing}
+);
 
 /**
  * Starts registration — the backend emails a 6-digit OTP and returns
@@ -193,6 +213,18 @@ const authSlice = createSlice({
     extraReducers: (builder) => {
         builder
             .addCase(register.pending, (state) => { state.isLoading = true; })
+            .addCase(restoreSession.fulfilled,(state,action)=>{
+                state.isInitializing=false;
+                state.user=action.payload;
+                state.isAuthenticated=Boolean(action.payload);
+            })
+            .addCase(restoreSession.rejected,(state,action)=>{
+                state.isInitializing=false;
+                state.user=null;
+                state.token=null;
+                state.isAuthenticated=false;
+                state.message=action.payload as string||"Please sign in again.";
+            })
             .addCase(register.fulfilled, (state, action) => {
                 state.isLoading = false;
                 // Account isn't created yet — an OTP was emailed. Switch the

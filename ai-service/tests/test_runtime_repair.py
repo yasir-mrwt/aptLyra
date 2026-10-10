@@ -72,8 +72,9 @@ def test_supported_groq_model_uses_strict_schema_response_format(monkeypatch):
         "name": "editorial_review_v1", "strict": True, "schema": schema}}
 
 
-def test_editorial_ollama_is_primary_and_receives_strict_schema(monkeypatch):
-    monkeypatch.setenv("NODE_ENV", "development")
+@pytest.mark.parametrize("environment", ["development", "production"])
+def test_editorial_ollama_is_primary_and_receives_strict_schema(monkeypatch, environment):
+    monkeypatch.setenv("NODE_ENV", environment)
     monkeypatch.delenv("AI_PROVIDER", raising=False)
     monkeypatch.setenv("OLLAMA_MODEL", "llama3.2:3b")
     sent = []

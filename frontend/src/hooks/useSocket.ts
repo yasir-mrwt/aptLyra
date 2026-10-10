@@ -15,6 +15,7 @@ const useSocket = () => {
     const dispatch = useDispatch<AppDispatch>();
     const socketRef = useRef<Socket | null>(null);
     const user = useSelector((state: RootState) => state.auth.user);
+    const isInitializing=useSelector((state:RootState)=>state.auth.isInitializing);
     const active=useSelector((state:RootState)=>state.session.activeSession);
     const activeRef=useRef(active);
 
@@ -33,7 +34,7 @@ const useSocket = () => {
     const userId = user?._id || user?.id;
 
     useEffect(() => {
-        if (!userId) return;
+        if (!userId||isInitializing) return;
         if(activeRef.current && activeRef.current.user!==userId)dispatchRef.current(reset());
 
         // Don't create a new socket if one already exists for this user
@@ -85,13 +86,16 @@ const useSocket = () => {
                 if(current?._id===data.sessionId && data.revision>(current.revision ?? -1))refreshOwnedSession();
                 return;
             }
+            const routeSession=pathRef.current.match(/^\/(?:interview|review)\/([^/]+)/)?.[1];
+            if(routeSession && routeSession!==data.sessionId)return;
+            // Planner confirmation owns new-session navigation. Historical events
+            // may complete only the interview currently open in this tab.
             dispatchRef.current(socketUpdateSession(data));
 
             const status = (data.status || "").toUpperCase();
-            if (status === "SESSION COMPLETED") {
+            if (status === "SESSION COMPLETED" && routeSession===data.sessionId) {
                 navigateRef.current(`/review/${data.sessionId}`);
-            } else if (status === "QUESTIONS_READY") {
-                navigateRef.current(`/interview/${data.sessionId}`);
+
             }
         });
 
@@ -100,7 +104,7 @@ const useSocket = () => {
             socket.disconnect();
             socketRef.current = null;
         };
-    }, [userId]);  // Only re-run when the user ID changes
+    }, [userId,isInitializing]);
 
     return socketRef;
 };

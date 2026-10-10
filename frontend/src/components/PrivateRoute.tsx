@@ -3,8 +3,8 @@ import { Outlet, Navigate } from "react-router-dom";
 import type { RootState } from "../app/store";
 
 const PrivateRoute = () => {
-    const { user, isLoading } = useSelector((state: RootState) => state.auth)
-    if (isLoading) {
+    const { user, isLoading, isInitializing } = useSelector((state: RootState) => state.auth)
+    if (isLoading||isInitializing) {
         return (
             <>
                 <div className="flex justify-center items-center min-h-[80vh]">

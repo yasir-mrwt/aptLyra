@@ -36,9 +36,9 @@ function App() {
   useSocket();
   const location = useLocation();
   usePageMetadata(location.pathname);
-  const { user } = useSelector((state: RootState) => state.auth);
+  const { user,isInitializing } = useSelector((state: RootState) => state.auth);
   const userId=user?.id||user?._id||null;
-  useEffect(()=>{if(userId)void dispatch(fetchCurrentRole({userId}));else dispatch(clearRole());},[dispatch,userId]);
+  useEffect(()=>{if(isInitializing)return;if(userId)void dispatch(fetchCurrentRole({userId}));else dispatch(clearRole());},[dispatch,isInitializing,userId]);
 
   // The landing page is a full-bleed experience with its own navbar —
   // rendered outside the app shell (Header + constrained <main>).

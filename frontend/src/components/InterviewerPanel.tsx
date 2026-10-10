@@ -56,7 +56,7 @@ const InterviewerPanel: React.FC<InterviewerPanelProps> = ({
                             ))}
                         </span>
                         <span className="text-[9px] font-black uppercase tracking-[0.25em] text-primary-400">
-                            Speaking
+                            {usingBrowserVoice ? "Browser voice · Speaking" : "Speaking"}
                         </span>
                     </>
                 ) : (
@@ -68,12 +68,14 @@ const InterviewerPanel: React.FC<InterviewerPanelProps> = ({
 
             {error && <p role="alert" className="text-xs text-rose-300 text-center break-words">{error}</p>}
 
+            <span className="text-xs text-surface-400">Replay question</span>
             {/* Controls */}
             <div className="flex items-center gap-3">
                 <button
                     onClick={onReplay}
                     disabled={muted || listening || processing || preparing || completed}
-                    title="Repeat the question"
+                    title="Replay question"
+                    aria-label="Replay question"
                     className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-surface-300 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                 >
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

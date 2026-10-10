@@ -2,7 +2,7 @@ import {afterEach,describe,it,expect,vi} from "vitest";
 import {renderHook,act,waitFor,cleanup} from "@testing-library/react";
 import {Provider} from "react-redux";
 import {configureStore} from "@reduxjs/toolkit";
-import {MemoryRouter} from "react-router-dom";
+import {MemoryRouter,useLocation} from "react-router-dom";
 import sessionReducer from "../features/session/sessionSlice";
 import useSocket from "./useSocket";
 import api from "../services/api";
@@ -31,4 +31,14 @@ describe("durable socket recovery",()=>{
         act(()=>{fixture.events.get("sessionUpdate")?.(envelope);fixture.events.get("sessionUpdate")?.(envelope);fixture.events.get("sessionUpdate")?.({...envelope,revision:2,eventId:"late-event"});});
         await waitFor(()=>expect(store.getState().session.activeSession?.status).toBe("completed"));expect(api.get).toHaveBeenCalledTimes(3);
     });
+});
+
+
+it("ignores another interview's historical events without navigating or replacing the open question",()=>{
+ const saved:Session={_id:"owned",user:"owner",role:"Backend",level:"Junior",interviewType:"oral-only",status:"in-progress",questions:[{questionText:"Current question",questionType:"oral",isSubmitted:false,isEvaluated:false}]};
+ const state=sessionReducer(undefined,{type:"initial"});
+ const store=configureStore({reducer:{session:sessionReducer,auth:()=>({user:{id:"owner"}})},preloadedState:{session:{...state,activeSession:saved}}});
+ const {result}=renderHook(()=>{useSocket();return useLocation().pathname;},{wrapper:({children})=><Provider store={store}><MemoryRouter initialEntries={["/interview/owned"]}>{children}</MemoryRouter></Provider>});
+ act(()=>{for(const status of ["QUESTIONS_READY","SESSION COMPLETED","AI_ERROR"])fixture.events.get("sessionUpdate")?.({sessionId:"another",status,message:"Q1 failed",session:{...saved,_id:"another"}});});
+ expect(result.current).toBe("/interview/owned");expect(store.getState().session.activeSession).toEqual(saved);expect(store.getState().session.isError).toBe(false);
 });

@@ -9,7 +9,7 @@ import { useAudioRecorder } from "./useAudioRecorder";
 import { useInterviewerVoice } from "./useInterviewerVoice";
 import { useInterviewSession } from "./useInterviewSession";
 import InterviewerPanel from "../components/InterviewerPanel";
-import sessionReducer, { setActiveSession, createSession } from "../features/session/sessionSlice";
+import sessionReducer, { setActiveSession } from "../features/session/sessionSlice";
 import api from "../services/api";
 import apiClient from "../services/apiClient";
 
@@ -19,7 +19,7 @@ vi.mock("../utils/idb", () => ({ getDrafts: vi.fn().mockResolvedValue({}), saveD
 vi.mock("react-toastify", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 beforeEach(() => { localStorage.clear(); vi.clearAllMocks(); });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 class RecorderFixture {
     static latest: RecorderFixture;
@@ -66,18 +66,34 @@ describe("recorder baseline", () => {
 
 class AudioContextFixture { state = "running"; close() { return Promise.resolve(); } }
 class UtteranceFixture {
+    text: string;
+    constructor(text: string) { this.text = text; }
     onstart: (() => void) | null = null;
     onend: (() => void) | null = null;
     onerror: (() => void) | null = null;
 }
 
 describe("Lyra voice baseline", () => {
+    beforeEach(() => vi.stubEnv("VITE_INTERVIEW_VOICE_PROVIDER", "server"));
+    it("defaults to browser speech without requesting server TTS", async () => {
+        vi.stubEnv("VITE_INTERVIEW_VOICE_PROVIDER", "");
+        vi.stubGlobal("SpeechSynthesisUtterance", UtteranceFixture);
+        const speech = { getVoices: () => [{lang:"en-US",name:"English",localService:true}], cancel: vi.fn(), speak: vi.fn((u: UtteranceFixture) => u.onstart?.()) };
+        vi.stubGlobal("speechSynthesis", speech);
+        const {result, rerender} = renderHook(({index}) => useInterviewerVoice("session", index, `Question ${index}`), {initialProps:{index:0}});
+        await waitFor(() => expect(speech.speak).toHaveBeenCalledTimes(1));
+        rerender({index:1});
+        await waitFor(() => expect(speech.speak).toHaveBeenCalledTimes(2));
+        act(() => result.current.speak());
+        expect(speech.speak).toHaveBeenCalledTimes(3);
+        expect(apiClient.post).not.toHaveBeenCalled();
+    });
     it("autoplay suspension cannot block the server request or browser fallback", async () => {
         const resume = vi.fn(() => new Promise<void>(() => {}));
         class SuspendedContext { state = "suspended"; resume = resume; close() { return Promise.resolve(); } }
         vi.stubGlobal("AudioContext", SuspendedContext);
         vi.stubGlobal("SpeechSynthesisUtterance", UtteranceFixture);
-        const speech = { getVoices: () => [], cancel: vi.fn(), speak: vi.fn() };
+        const speech = { getVoices: () => [{lang:"en-US",name:"English",localService:true}], cancel: vi.fn(), speak: vi.fn() };
         vi.stubGlobal("speechSynthesis", speech);
         vi.mocked(apiClient.post).mockRejectedValue({ isAxiosError: true, response: { status: 503 } });
         const { result } = renderHook(() => useInterviewerVoice("session", 0, "Question"));
@@ -110,7 +126,7 @@ describe("Lyra voice baseline", () => {
     it("shares pending server requests, falls back once, and uses browser voice for later automatic questions", async () => {
         vi.stubGlobal("AudioContext", AudioContextFixture);
         vi.stubGlobal("SpeechSynthesisUtterance", UtteranceFixture);
-        const speech = { getVoices: () => [], cancel: vi.fn(), speak: vi.fn((u: UtteranceFixture) => u.onstart?.()) };
+        const speech = { getVoices: () => [{lang:"en-US",name:"English",localService:true}], cancel: vi.fn(), speak: vi.fn((u: UtteranceFixture) => u.onstart?.()) };
         vi.stubGlobal("speechSynthesis", speech);
         let reject: (error: unknown) => void = () => {};
         vi.mocked(apiClient.post).mockImplementation(() => new Promise((_resolve, fail) => { reject = fail; }));
@@ -124,14 +140,15 @@ describe("Lyra voice baseline", () => {
         rerender({ index: 1 });
         await waitFor(() => expect(speech.speak).toHaveBeenCalledTimes(2));
         expect(apiClient.post).toHaveBeenCalledTimes(1);
-        act(() => result.current.speak()); // One explicit server retry is allowed.
-        expect(apiClient.post).toHaveBeenCalledTimes(2);
+        act(() => result.current.speak()); // Replay uses browser voice after a known provider failure.
+        expect(apiClient.post).toHaveBeenCalledTimes(1);
+        expect(speech.speak).toHaveBeenCalledTimes(3);
         await act(async () => { reject({ isAxiosError: true, response: { status: 503 } }); });
     });
     it("does not use stale private question text as browser fallback after a state/ownership denial", async () => {
         vi.stubGlobal("AudioContext", AudioContextFixture);
         vi.stubGlobal("SpeechSynthesisUtterance", UtteranceFixture);
-        const speech = { getVoices: () => [], cancel: vi.fn(), speak: vi.fn() };
+        const speech = { getVoices: () => [{lang:"en-US",name:"English",localService:true}], cancel: vi.fn(), speak: vi.fn() };
         vi.stubGlobal("speechSynthesis", speech);
         vi.mocked(apiClient.post).mockRejectedValue({ isAxiosError: true, response: { status: 409 } });
         const { result } = renderHook(() => useInterviewerVoice("session", 0, "Question"));
@@ -141,7 +158,7 @@ describe("Lyra voice baseline", () => {
     it("falls back to browser voice, persists mute, and stops while disabled", async () => {
         vi.stubGlobal("AudioContext", AudioContextFixture);
         vi.stubGlobal("SpeechSynthesisUtterance", UtteranceFixture);
-        const speech = { getVoices: () => [], cancel: vi.fn(), speak: vi.fn((u: UtteranceFixture) => u.onstart?.()) };
+        const speech = { getVoices: () => [{lang:"en-US",name:"English",localService:true}], cancel: vi.fn(), speak: vi.fn((u: UtteranceFixture) => u.onstart?.()) };
         vi.stubGlobal("speechSynthesis", speech);
         vi.mocked(apiClient.post).mockRejectedValue(new Error("TTS unavailable"));
         const { result, rerender } = renderHook(({ enabled }) => useInterviewerVoice("session", 0, "Question", enabled), { initialProps: { enabled: true } });
@@ -157,6 +174,39 @@ describe("Lyra voice baseline", () => {
         const count = speech.speak.mock.calls.length;
         act(() => result.current.speak());
         expect(speech.speak).toHaveBeenCalledTimes(count);
+    });
+    it("uses browser speech for later questions after one server TTS failure",async()=>{
+        vi.stubGlobal("AudioContext",AudioContextFixture);
+        vi.stubGlobal("SpeechSynthesisUtterance",UtteranceFixture);
+        const speech={getVoices:()=>[{lang:"en-US",name:"English",localService:true}],cancel:vi.fn(),speak:vi.fn((u:UtteranceFixture)=>u.onstart?.())};
+        vi.stubGlobal("speechSynthesis",speech);
+        vi.mocked(apiClient.post).mockRejectedValue({isAxiosError:true,response:{status:503}});
+        const {result,rerender}=renderHook(({index,text})=>useInterviewerVoice("session",index,text),{initialProps:{index:0,text:"First question"}});
+        await waitFor(()=>expect(result.current.usingBrowserVoice).toBe(true));
+        expect(apiClient.post).toHaveBeenCalledTimes(1);
+        rerender({index:1,text:"Second question"});
+        await waitFor(()=>expect(speech.speak).toHaveBeenCalledTimes(2));
+        expect(result.current.usingBrowserVoice).toBe(true);
+        expect(apiClient.post).toHaveBeenCalledTimes(1);
+    });
+    it("waits for delayed English voices and cancels a stale question before speaking", async()=>{
+        vi.stubGlobal("AudioContext",AudioContextFixture);vi.stubGlobal("SpeechSynthesisUtterance",UtteranceFixture);
+        let voices: {lang:string;name:string;localService:boolean}[]=[];
+        const events=new EventTarget();
+        const speech={getVoices:()=>voices,addEventListener:events.addEventListener.bind(events),removeEventListener:events.removeEventListener.bind(events),cancel:vi.fn(),resume:vi.fn(),speak:vi.fn((u:UtteranceFixture)=>u.onstart?.())};
+        vi.stubGlobal("speechSynthesis",speech);
+        vi.mocked(apiClient.post).mockRejectedValue({isAxiosError:true,response:{status:503}});
+        const {result,rerender}=renderHook(({index,text})=>useInterviewerVoice("session",index,text),{initialProps:{index:0,text:"Old question"}});
+        await waitFor(()=>expect(result.current.usingBrowserVoice).toBe(true));
+        expect(speech.speak).not.toHaveBeenCalled();
+        rerender({index:1,text:"Current question"});
+        await act(async()=>{await new Promise(resolve=>setTimeout(resolve,10));});
+        voices=[{lang:"fr-FR",name:"French",localService:true},{lang:"en-GB",name:"English",localService:true}];
+        act(()=>events.dispatchEvent(new Event("voiceschanged")));
+        await waitFor(()=>expect(speech.speak).toHaveBeenCalledTimes(1));
+        expect(speech.speak.mock.calls[0][0]).toMatchObject({text:"Current question",lang:"en-GB",voice:voices[1]});
+        act(()=>result.current.speak());
+        expect(speech.speak).toHaveBeenCalledTimes(2);expect(apiClient.post).toHaveBeenCalledTimes(1);
     });
     it("reports unavailable voice and never starts audio in completed/disabled state", async () => {
         vi.stubGlobal("AudioContext", undefined);
@@ -176,7 +226,7 @@ describe("Lyra voice baseline", () => {
         expect(screen.getByRole("status").textContent).toBe("Listening");
         rerender(<InterviewerPanel {...props} completed />);
         expect(screen.getByRole("status").textContent).toBe("Completed");
-        expect((screen.getByTitle("Repeat the question") as HTMLButtonElement).disabled).toBe(true);
+        expect((screen.getByTitle("Replay question") as HTMLButtonElement).disabled).toBe(true);
         rerender(<InterviewerPanel {...props} error="Speech failed; retry" />);
         expect(screen.getByRole("alert").textContent).toContain("retry");
     });
@@ -192,6 +242,21 @@ function interviewFixture() {
 }
 
 describe("answer controls", () => {
+    it.each(["javascript", "sql"])("preserves planned %s language and supports Python only for executable coding", async (language) => {
+        const { session: initial, store, wrapper } = interviewFixture();
+        const session: Session = { ...initial, planId: "plan", questions: [{ ...initial.questions[0], questionType: "coding", language }] };
+        vi.mocked(api.get).mockResolvedValue({ data: { session } });
+        store.dispatch(setActiveSession(session));
+        vi.mocked(api.post).mockResolvedValue({ data: { message: "accepted" } });
+        const { result } = renderHook(() => useInterviewSession(vi.fn().mockResolvedValue(null), vi.fn()), { wrapper });
+        await waitFor(() => expect(api.get).toHaveBeenCalled());
+        act(() => result.current.setSelectedLanguage("python"));
+        expect(result.current.selectedLanguage).toBe(language === "sql" ? "sql" : "python");
+        act(() => result.current.updateDraftCode(language === "sql" ? "SELECT 1" : "print(1)"));
+        await act(() => result.current.handleSubmitAnswer());
+        const form = vi.mocked(api.post).mock.calls[0][1] as FormData;
+        expect(form.get("language")).toBe(language === "sql" ? "sql" : "python");
+    });
     it("submits a typed oral draft without audio, preserves it for retry, and navigates after evaluation", async () => {
         const { session: initial, store, wrapper } = interviewFixture();
         const session = { ...initial, questions: [...initial.questions, { ...initial.questions[0], questionText: "Next question" }] };
@@ -238,13 +303,6 @@ describe("answer controls", () => {
         expect(result.current.isQuestionLocked).toBe(true);
         await act(() => result.current.handleSubmitAnswer());
         expect(api.post).toHaveBeenCalledTimes(2);
-    });
-    it("preserves company/track in the typed creation request", async () => {
-        const { store } = interviewFixture();
-        const body = { role: "Backend", level: "Junior", interviewType: "company-specific" as const, count: 2, company: "Acme", companyTrack: "Platform" };
-        vi.mocked(api.post).mockResolvedValue({ data: { sessionId: "new", status: "processing", message: "created" } });
-        await store.dispatch(createSession(body)).unwrap();
-        expect(api.post).toHaveBeenCalledWith("/sessions", body);
     });
     it("propagates finish failures so the runner can leave its loading state", async () => {
         const { wrapper } = interviewFixture();

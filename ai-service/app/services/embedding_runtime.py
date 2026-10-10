@@ -24,22 +24,30 @@ def manifest() -> dict[str, Any]:
 class CpuEncoder:
     def __init__(self, directory: Path, spec: dict[str, Any]):
         self.spec = spec
+        if not directory.is_dir():
+            raise EmbeddingFailure("model_directory_missing")
         try:
             for name, expected in spec["sha256"].items():
+                if not (directory / name).is_file():
+                    raise EmbeddingFailure("model_artifact_missing")
                 if hashlib.sha256((directory / name).read_bytes()).hexdigest() != expected:
                     raise EmbeddingFailure("model_artifact_mismatch")
+        except PermissionError as exc:
+            raise EmbeddingFailure("model_artifact_unreadable") from exc
+        try:
             self.tokenizer = Tokenizer.from_file(str(directory / "tokenizer.json"))
             self.tokenizer.no_truncation()
             self.tokenizer.enable_padding()
+        except Exception as exc:
+            raise EmbeddingFailure("model_tokenizer_load_failed") from exc
+        try:
             options = ort.SessionOptions()
             options.intra_op_num_threads = 2
             options.inter_op_num_threads = 1
             self.session = ort.InferenceSession(str(directory / "model.onnx"), options,
                                                providers=["CPUExecutionProvider"])
-        except EmbeddingFailure:
-            raise
         except Exception as exc:
-            raise EmbeddingFailure("model_unavailable") from exc
+            raise EmbeddingFailure("model_onnx_load_failed") from exc
 
     def encode(self, texts: list[str]) -> list[list[float]]:
         if not 1 <= len(texts) <= 16 or any(not t.strip() or len(t) > 4000 for t in texts):

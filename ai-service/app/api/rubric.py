@@ -7,7 +7,7 @@ import uuid
 from typing import Literal
 from fastapi import APIRouter, HTTPException, Request as FastAPIRequest
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, ValidationError, model_validator
-from app.services.groq_service import call_groq, DEFAULT_TEXT_MODEL, _resolve_model
+from app.services.groq_service import call_groq, DEFAULT_TEXT_MODEL
 from app.services.groq_service import call_editorial_ai, editorial_ai_label
 
 router = APIRouter(prefix="/internal/rubrics")
@@ -305,7 +305,7 @@ def draft(request:DraftRequest,fastapi_request:FastAPIRequest):
     schema=json.dumps(schema_object,ensure_ascii=False,separators=(",",":"))
     payload={"untrusted_data":request.model_dump()}
     try:
-        raw=call_editorial_ai(DRAFT_SYSTEM+schema,json.dumps(payload,ensure_ascii=False),as_json=True,temperature=0,max_retries=0,json_schema=schema_object)
+        raw=call_editorial_ai(DRAFT_SYSTEM+schema,json.dumps(payload,ensure_ascii=False),as_json=True,temperature=0,max_retries=0,json_schema=schema_object,capability="scoring-guide-draft")
     except HTTPException:
         raise
     try:
@@ -329,7 +329,7 @@ def draft(request:DraftRequest,fastapi_request:FastAPIRequest):
         _log_draft_failure(request_id,stage,code,paths,1)
         try:
             repaired=call_editorial_ai(REPAIR_SYSTEM+schema,json.dumps({**payload,"validation_errors":summary},ensure_ascii=False),
-                               as_json=True,temperature=0,max_retries=0,json_schema=schema_object)
+                               as_json=True,temperature=0,max_retries=0,json_schema=schema_object,capability="scoring-guide-draft-repair")
         except HTTPException:
             raise
         try:

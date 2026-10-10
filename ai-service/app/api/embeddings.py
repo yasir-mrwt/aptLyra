@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import threading
 import time
@@ -17,6 +18,7 @@ router = APIRouter(prefix="/internal/embeddings", tags=["Internal embeddings"])
 _lock = threading.Lock()
 _encoder: CpuEncoder | None = None
 DEADLINE_SECONDS = 10
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingRequest(BaseModel):
@@ -66,7 +68,7 @@ def _compute(texts: list[str]) -> EmbeddingResponse:
         if _encoder is None:
             path = os.getenv("EMBEDDING_MODEL_DIR")
             if not path:
-                raise EmbeddingFailure("model_unavailable")
+                raise EmbeddingFailure("model_directory_unconfigured")
             _encoder = CpuEncoder(Path(path), spec)
         vectors = _encoder.encode(texts)
         if len(vectors) != len(texts):
@@ -91,6 +93,7 @@ async def embeddings(request: EmbeddingRequest) -> EmbeddingResponse:
         future.add_done_callback(lambda f: f.exception() if not f.cancelled() else None)
         raise HTTPException(504, detail={"code": "model_timeout"}) from None
     except EmbeddingFailure as exc:
+        logger.warning("Embedding request failed: %s", exc.code)
         raise HTTPException(422 if exc.code in ("invalid_input", "input_token_limit") else 503,
                             detail={"code": exc.code}) from None
     except Exception:

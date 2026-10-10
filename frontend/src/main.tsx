@@ -3,14 +3,13 @@ import ReactDOM from 'react-dom/client'
 import { Provider } from 'react-redux'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import { BrowserRouter as Router } from 'react-router-dom'
-import axios from 'axios'
 import App from './App.tsx'
 import { store } from './app/store.ts'
 import './index.css'
-import { setupInterceptors } from './services/axiosSetup.ts'
+import { restoreSession } from './features/auth/authSlice.ts'
 import { googleClientId, googleLoginConfigured } from './services/googleLoginConfig.ts'
 
-setupInterceptors(axios);
+void store.dispatch(restoreSession());
 
 const application = <Provider store={store}><Router><App /></Router></Provider>;
 ReactDOM.createRoot(document.getElementById('root')!).render(

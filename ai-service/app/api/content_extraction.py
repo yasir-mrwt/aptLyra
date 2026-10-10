@@ -142,7 +142,7 @@ def extract(request:Request,fastapi_request:FastAPIRequest):
     payload={"untrusted_record":request.model_dump()}
     try:
         raw=call_editorial_ai(SYSTEM+schema,json.dumps(payload,ensure_ascii=False),as_json=True,
-                      temperature=0,max_retries=0,json_schema=schema_object)
+                      temperature=0,max_retries=0,json_schema=schema_object,capability="submission-extraction")
     except HTTPException:
         raise
     try:
@@ -167,7 +167,7 @@ def extract(request:Request,fastapi_request:FastAPIRequest):
         _log_extraction_failure(request_id,first_stage,first_code,paths,1)
         try:
             repaired_raw=call_editorial_ai(REPAIR_SYSTEM+schema,json.dumps({**payload,"validation_errors":summary},ensure_ascii=False),
-                                   as_json=True,temperature=0,max_retries=0,json_schema=schema_object)
+                                   as_json=True,temperature=0,max_retries=0,json_schema=schema_object,capability="submission-extraction-repair")
         except HTTPException:
             raise
         try:
@@ -313,7 +313,7 @@ def review(request:ReviewRequest,fastapi_request:FastAPIRequest):
     schema=json.dumps(schema_object,ensure_ascii=False,separators=(",",":"))
     payload={"untrusted_review_input":request.model_dump()}
     try:
-        raw=call_editorial_ai(REVIEW_SYSTEM+schema,json.dumps(payload,ensure_ascii=False),as_json=True,temperature=0,max_retries=0,json_schema=schema_object)
+        raw=call_editorial_ai(REVIEW_SYSTEM+schema,json.dumps(payload,ensure_ascii=False),as_json=True,temperature=0,max_retries=0,json_schema=schema_object,capability="question-review")
     except HTTPException:
         raise
     try:
@@ -339,7 +339,7 @@ def review(request:ReviewRequest,fastapi_request:FastAPIRequest):
         repair_payload={**payload,"validation_errors":first_summary}
         try:
             repaired_raw=call_editorial_ai(REVIEW_REPAIR_SYSTEM+schema,json.dumps(repair_payload,ensure_ascii=False),as_json=True,
-                                   temperature=0,max_retries=0,json_schema=schema_object)
+                                   temperature=0,max_retries=0,json_schema=schema_object,capability="question-review-repair")
         except HTTPException:
             raise
         try:
