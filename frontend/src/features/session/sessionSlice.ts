@@ -4,7 +4,7 @@ import api from "../../services/api";
 import {isAxiosError} from "axios";
 import { handleThunkError } from "../../utils/thunkUtils";
 import { updateSessionFromSocket } from "./sessionUtils";
-import type { SessionState, Session, CreateSessionRequest, CreateSessionResponse, SocketUpdatePayload, PaginatedSessionsResponse } from "../../types/session";
+import type { SessionState, Session, SocketUpdatePayload, PaginatedSessionsResponse } from "../../types/session";
 
 const initialState: SessionState = {
     sessions: [],
@@ -32,21 +32,6 @@ export const getSession = createAsyncThunk<PaginatedSessionsResponse, { page?: n
             const page = args?.page || 1;
             const limit = args?.limit || 9;
             const response = await api.get(`sessions?page=${page}&limit=${limit}`);
-            return response.data;
-        } catch (error) {
-            return thunkAPI.rejectWithValue(handleThunkError(error));
-        }
-    }
-);
-
-/**
- * Initialize a new interview session and trigger AI question generation.
- */
-export const createSession = createAsyncThunk<CreateSessionResponse, CreateSessionRequest, { rejectValue: string }>(
-    "session/create",
-    async (sessionData, thunkAPI) => {
-        try {
-            const response = await api.post<CreateSessionResponse>(`/sessions`, sessionData);
             return response.data;
         } catch (error) {
             return thunkAPI.rejectWithValue(handleThunkError(error));
@@ -156,34 +141,6 @@ export const sessionSlice = createSlice({
                 state.isLoading = false;
                 state.isError = true;
                 state.message = action.payload || "Failed to fetch sessions";
-            })
-
-            // Create new session
-            .addCase(createSession.pending, (state) => {
-                state.isLoading = true;
-            })
-            .addCase(createSession.fulfilled, (state, action) => {
-                state.isLoading = false;
-                state.isGenerating = true;
-                if (!Array.isArray(state.sessions)) {
-                    state.sessions = [];
-                }
-                const payload = action.payload as unknown;
-                // Prepend new session to lists
-                if (payload && typeof payload === 'object' && ('_id' in payload || 'role' in payload)) {
-                    const newSession = payload as Session;
-                    state.sessions.unshift(newSession);
-                    
-                    if (state.stats) {
-                        state.stats.totalSessions = (state.stats.totalSessions || 0) + 1;
-                        state.stats.activeSessions = (state.stats.activeSessions || 0) + 1;
-                    }
-                }
-            })
-            .addCase(createSession.rejected, (state, action) => {
-                state.isLoading = false;
-                state.isError = true;
-                state.message = action.payload || "Failed to create interview";
             })
 
             // Get session by ID

@@ -154,16 +154,14 @@ test('retrieval model outage uses only unchanged hash-bound reviewed seed questi
  const similarities=(await f.query('SELECT similarity FROM retrieval_results WHERE retrieval_id=ANY($1::uuid[])',[p.items.map(i=>i.retrievalId)])).rows;
  assert.ok(similarities.every(r=>r.similarity===null));assert.ok(p.shortages.includes('reviewed_fallback_used'));
 });
-test('trusted seed fallback returns three exact starter questions when semantic retrieval has no useful hits',async()=>{
+test('healthy trusted ranking covers three exact starters without structured outage fallback',async()=>{
  const {PlannerService}=await import('../dist/planner/service.js');
- const calls=[],seedRetriever={retrieveQuestions:async request=>{
-   calls.push(request);
-   if(request.strategy==='structured-seed')return new (await import('../dist/retrieval/service.js')).RetrievalService(fake).retrieveQuestions(request);
-   return {operationId:randomUUID(),outcome:'no_match',reason:'no_relevant_hit',hits:[],corpusGeneration:(await f.query("SELECT id FROM embedding_generations WHERE status='active'")).rows[0].id,cacheHit:false,timings:{embeddingMs:0,databaseMs:0,totalMs:0}};
- }};
+ const calls=[],ranker=new (await import('../dist/retrieval/service.js')).RetrievalService({embed:async texts=>({...MODEL,processingMs:0,vectors:texts.map(()=>[-1,...Array(383).fill(0)])})});
+ const seedRetriever={retrieveQuestions:async request=>{calls.push(request);return ranker.retrieveQuestions(request);}};
  const p=await new PlannerService(seedRetriever).preview(owner,setup({competencies:['programming'],mode:'coding',count:3}));
  assert.equal(p.canConfirm,true);assert.equal(p.items.length,3);assert.ok(p.items.every(i=>i.inventoryClass==='TRUSTED_BASELINE'));
- assert.ok(calls.some(c=>c.filters.reviewedSeed===true&&c.strategy==='structured-seed'));
+ assert.ok(calls.some(c=>c.filters.reviewedSeed===true&&c.strategy==='semantic'));
+ assert.ok(calls.every(c=>c.strategy!=='structured-seed'));
 });
 test('difficulty fallback records reasons while the trusted baseline does not need dynamic scoring readiness',async()=>{
  const p=await service.preview(owner,setup({competencies:['dsa'],mode:'oral',difficulty:'standard',count:5}));
@@ -237,4 +235,21 @@ test('withdrawn preview items are redacted from fresh preview reads and cannot b
  await assert.rejects(()=>sessionService.submitSessionAnswer(active.sessionId,owner,String(index),null,null,'unused',null,null),e=>e.status===409);
  // Historic persisted snapshot is retained; fresh serving is redacted.
  assert.equal((await f.query('SELECT questions FROM sessions WHERE id=$1',[active.sessionId])).rows[0].questions[index].evidenceUnavailable,undefined);
+});
+
+
+test('unclassified unindexed content cannot block the intact trusted interview corpus',async()=>{
+ const rollback=new Error('rollback isolated readiness fixture');
+ await assert.rejects(()=>f.withDatabaseLock('fixture:unclassified-index',async()=>{
+  const row=(await f.query(`SELECT e.entity_id,c.record_id FROM retrieval_entities e JOIN ingestion_candidates c ON c.question_version_id=e.entity_id
+    WHERE e.purpose='question-selection' AND e.primary_competency LIKE 'os.%' LIMIT 1`)).rows[0];
+  // Simulate a non-baseline published import in this rolled-back disposable transaction.
+  await f.query("UPDATE ingestion_records SET input_hash=$2 WHERE id=$1",[row.record_id,'f'.repeat(64)]);
+  await f.query("UPDATE embedding_metadata SET status='staged' WHERE question_version_id=$1",[row.entity_id]);
+  assert.equal((await f.query('SELECT inventory_class FROM content_question_readiness WHERE question_version_id=$1',[row.entity_id])).rows[0].inventory_class,null);
+  const plan=await service.preview(owner,setup({competencies:['programming'],mode:'coding',count:3}));
+  assert.equal(plan.effectiveCount,3);assert.equal(plan.canConfirm,true);
+  assert.ok(plan.items.every(item=>item.inventoryClass==='TRUSTED_BASELINE'&&item.questionVersionId!==row.entity_id));
+  throw rollback;
+ }),error=>error===rollback);
 });

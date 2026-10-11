@@ -85,7 +85,7 @@ describe("Lyra voice baseline", () => {
         rerender({index:1});
         await waitFor(() => expect(speech.speak).toHaveBeenCalledTimes(2));
         act(() => result.current.speak());
-        expect(speech.speak).toHaveBeenCalledTimes(3);
+        await waitFor(() => expect(speech.speak).toHaveBeenCalledTimes(3));
         expect(apiClient.post).not.toHaveBeenCalled();
     });
     it("autoplay suspension cannot block the server request or browser fallback", async () => {
@@ -136,13 +136,13 @@ describe("Lyra voice baseline", () => {
         expect(apiClient.post).toHaveBeenCalledTimes(1);
         await act(async () => { reject({ isAxiosError: true, response: { status: 503 } }); });
         await waitFor(() => expect(result.current.usingBrowserVoice).toBe(true));
-        expect(speech.speak).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(speech.speak).toHaveBeenCalledTimes(1));
         rerender({ index: 1 });
         await waitFor(() => expect(speech.speak).toHaveBeenCalledTimes(2));
         expect(apiClient.post).toHaveBeenCalledTimes(1);
         act(() => result.current.speak()); // Replay uses browser voice after a known provider failure.
         expect(apiClient.post).toHaveBeenCalledTimes(1);
-        expect(speech.speak).toHaveBeenCalledTimes(3);
+        await waitFor(() => expect(speech.speak).toHaveBeenCalledTimes(3));
         await act(async () => { reject({ isAxiosError: true, response: { status: 503 } }); });
     });
     it("does not use stale private question text as browser fallback after a state/ownership denial", async () => {
@@ -184,6 +184,7 @@ describe("Lyra voice baseline", () => {
         const {result,rerender}=renderHook(({index,text})=>useInterviewerVoice("session",index,text),{initialProps:{index:0,text:"First question"}});
         await waitFor(()=>expect(result.current.usingBrowserVoice).toBe(true));
         expect(apiClient.post).toHaveBeenCalledTimes(1);
+        await waitFor(()=>expect(speech.speak).toHaveBeenCalledTimes(1));
         rerender({index:1,text:"Second question"});
         await waitFor(()=>expect(speech.speak).toHaveBeenCalledTimes(2));
         expect(result.current.usingBrowserVoice).toBe(true);
@@ -206,7 +207,7 @@ describe("Lyra voice baseline", () => {
         await waitFor(()=>expect(speech.speak).toHaveBeenCalledTimes(1));
         expect(speech.speak.mock.calls[0][0]).toMatchObject({text:"Current question",lang:"en-GB",voice:voices[1]});
         act(()=>result.current.speak());
-        expect(speech.speak).toHaveBeenCalledTimes(2);expect(apiClient.post).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(speech.speak).toHaveBeenCalledTimes(2));expect(apiClient.post).toHaveBeenCalledTimes(1);
     });
     it("reports unavailable voice and never starts audio in completed/disabled state", async () => {
         vi.stubGlobal("AudioContext", undefined);

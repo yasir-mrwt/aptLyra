@@ -52,6 +52,7 @@ export const useInterviewerVoice = (
     const pendingAudioRef = useRef<Map<number, Promise<ArrayBuffer>>>(new Map());
     const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
     const voiceWaitCleanupRef = useRef<(() => void) | null>(null);
+    const browserStartRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const playbackWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const serverUnavailableRef = useRef(false);
     const lastSpokenRef = useRef<number>(-1);
@@ -59,6 +60,8 @@ export const useInterviewerVoice = (
 
     const stopSpeaking = useCallback(() => {
         generationRef.current += 1;
+        if (browserStartRef.current) clearTimeout(browserStartRef.current);
+        browserStartRef.current = null;
         voiceWaitCleanupRef.current?.();
         voiceWaitCleanupRef.current = null;
         if (playbackWatchdogRef.current) clearTimeout(playbackWatchdogRef.current);
@@ -154,12 +157,21 @@ export const useInterviewerVoice = (
         };
 
         synthesis.cancel();
-        synthesis.resume?.();
-        playbackWatchdogRef.current = setTimeout(() => {
-            if (generationRef.current === generation) setVoiceError("Press Replay question to enable browser audio. Check your device volume if speech is silent.");
-        }, 4000);
-        try { synthesis.speak(utterance); }
-        catch { finish(); setVoiceError("Browser voice unavailable. Read the question or enable speech in your browser."); }
+        // Native cancellation can finish asynchronously (notably on macOS).
+        // Let it settle before enqueuing the new utterance; rapid navigation
+        // cancels this start as well as any already speaking question.
+        setIsPreparing(true);
+        browserStartRef.current = setTimeout(() => {
+            browserStartRef.current = null;
+            if (generationRef.current !== generation) return;
+            setIsPreparing(false);
+            synthesis.resume?.();
+            playbackWatchdogRef.current = setTimeout(() => {
+                if (generationRef.current === generation) setVoiceError("Press Replay question to enable browser audio. Check your device volume if speech is silent.");
+            }, 4000);
+            try { synthesis.speak(utterance); }
+            catch { finish(); setVoiceError("Browser voice unavailable. Read the question or enable speech in your browser."); }
+        }, 100);
     }, []);
 
     const playBuffer = useCallback(async (buffer: AudioBuffer, generation: number) => {

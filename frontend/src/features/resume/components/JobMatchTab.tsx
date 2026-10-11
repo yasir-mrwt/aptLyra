@@ -1,11 +1,8 @@
 import { useState } from "react";
-import { Sparkles, FileText, Zap, Hourglass } from "lucide-react";
+import { Sparkles, FileText, Zap } from "lucide-react";
 import { motion } from "framer-motion";
-import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
-import type { AppDispatch } from "../../../app/store";
-import { createSession } from "../../session/sessionSlice";
 import type { ResumeData } from "../types";
 import { PDFDownloadLink } from "@react-pdf/renderer";
 import { CoverLetterPDF } from "./CoverLetterPDF";
@@ -15,9 +12,7 @@ interface JobMatchTabProps {
 }
 
 export const JobMatchTab = ({ resumeData }: JobMatchTabProps) => {
-  const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
-  const [loadingKeyword, setLoadingKeyword] = useState<string | null>(null);
 
   // Cover Letter state
   const [isGeneratingCL, setIsGeneratingCL] = useState(false);
@@ -69,26 +64,6 @@ export const JobMatchTab = ({ resumeData }: JobMatchTabProps) => {
     if (coverLetter) {
       navigator.clipboard.writeText(coverLetter);
       toast.success("Copied to clipboard!");
-    }
-  };
-
-  const handlePractice = async (keyword: string) => {
-    try {
-      setLoadingKeyword(keyword);
-      // Dispatch createSession dynamically tailoring the role to the weakness
-      const action = await dispatch(createSession({
-        role: `Focus: ${keyword}`.substring(0, 50),
-        level: "Intermediate",
-        interviewType: "oral-only", // Oral only for quick targeted practice
-        count: 3 // Short quick-fire session
-      })).unwrap();
-
-      toast.success(`Spinning up interview for ${keyword}...`);
-      const sessionAction = action as { sessionId?: string; _id?: string };
-      navigate(`/interview/${sessionAction.sessionId || sessionAction._id}`);
-    } catch (error) {
-      toast.error(`Failed to start session: ${error}`);
-      setLoadingKeyword(null);
     }
   };
 
@@ -223,12 +198,11 @@ export const JobMatchTab = ({ resumeData }: JobMatchTabProps) => {
                     <span key={i} className="group flex items-center gap-2 px-3 py-1.5 rounded-lg border border-rose-400/20 bg-rose-400/5 text-xs font-bold text-rose-400 cursor-default shadow-sm shadow-rose-400/5 transition-all hover:bg-rose-400/10">
                       {kw}
                       <button
-                        onClick={() => handlePractice(kw)}
-                        disabled={loadingKeyword === kw}
-                        title={`Start an AI Mock Interview focusing on ${kw}`}
+                        onClick={() => navigate("/dashboard")}
+                        title="Open interview setup and choose a supported competency"
                         className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 bg-rose-400/20 hover:bg-rose-400/40 text-rose-400 rounded px-2 py-0.5 text-[10px] font-black uppercase tracking-widest cursor-pointer disabled:opacity-50 flex items-center gap-1"
                       >
-                        {loadingKeyword === kw ? <Hourglass className="w-3 h-3" /> : <>Practice <Zap className="w-3 h-3 fill-current" /></>}
+                        Practice <Zap className="w-3 h-3 fill-current" />
                       </button>
                     </span>
                   ))}

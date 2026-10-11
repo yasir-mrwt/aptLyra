@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useState } from "react";
 import { useAudioRecorder } from "../hooks/useAudioRecorder";
 import { useInterviewSession } from "../hooks/useInterviewSession";
@@ -17,7 +17,7 @@ import InterviewLoading from "../components/InterviewLoading";
 import WhiteboardModal from "../components/WhiteboardModal";
 import OperationStatusPanel from "../components/OperationStatusPanel";
 
-const InterviewRunner = () => {
+const InterviewRunnerSession = () => {
     const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
     const [isWhiteboardOpen, setIsWhiteboardOpen] = useState(false);
     const [isFinishing, setIsFinishing] = useState(false);
@@ -278,4 +278,8 @@ const InterviewRunner = () => {
     );
 };
 
-export default InterviewRunner;
+// Route changes must reset drafts, recording, question index and voice together.
+export default function InterviewRunner() {
+    const {sessionId} = useParams<{sessionId:string}>();
+    return <InterviewRunnerSession key={sessionId}/>;
+}
