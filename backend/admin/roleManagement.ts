@@ -32,10 +32,14 @@ async function audit(actor:string|null,target:any,action:string,previous:AppRole
 
 export const roleManagement={
   async current(userId:string){
-    const row=(await query(`SELECT u.id,u.name,u.email,u.app_role,r.id AS reviewer_id,r.enabled AS reviewer_enabled
-      FROM users u LEFT JOIN ingestion_reviewers r ON r.user_id=u.id WHERE u.id=$1`,[userId])).rows[0];
+    const row=(await query(`SELECT u.id,u.name,u.email,u.app_role,
+      EXISTS(SELECT 1 FROM ingestion_reviewers r WHERE r.user_id=u.id AND r.enabled AND r.kind='human') AS reviewer_linked
+      FROM users u WHERE u.id=$1`,[userId])).rows[0];
     if(!row)return invalid("user-not-found");
-    return {id:row.id,name:row.name,email:row.email,role:row.app_role,reviewerLinked:Boolean(row.reviewer_id&&row.reviewer_enabled)};
+    const reviewerLinked=Boolean(row.reviewer_linked),roleCanReview=["owner","admin","reviewer"].includes(row.app_role);
+    return {id:row.id,name:row.name,email:row.email,role:row.app_role,reviewerLinked,
+      canReview:roleCanReview&&reviewerLinked,
+      reviewerReason:!roleCanReview?"Reviewer access required":!reviewerLinked?"This account does not have an enabled human reviewer profile.":null};
   },
   async team(actorId:string){
     await requireManager(actorId);

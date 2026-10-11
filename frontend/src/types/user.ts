@@ -20,6 +20,7 @@ interface AuthState {
     message: string;
     isSuccess: boolean;
     isLoading: boolean;
+    isInitializing: boolean;
     isProfileLoading: boolean;
     isAvatarUploading?: boolean;
     /** Set when registration is awaiting email OTP verification. */

@@ -43,6 +43,15 @@ before(async()=>{
   assert.equal((await roles.current(actor)).role,'user','migration never promotes the first registered account');
   assert.equal((await roles.current(reviewerId)).role,'reviewer','migration preserves linked human reviewer access');
   assert.equal((await roles.current(reviewerId)).reviewerLinked,true);
+  assert.equal((await roles.current(reviewerId)).canReview,true);
+  assert.equal((await roles.current(plainUserId)).reviewerReason,'Reviewer access required');
+  await query("UPDATE users SET app_role='reviewer' WHERE id=$1",[plainUserId]);
+  await query("INSERT INTO ingestion_reviewers(id,display_name,kind,enabled,user_id) VALUES('fixture-not-human','Disposable fixture identity','fixture',true,$1)",[plainUserId]);
+  const fixtureOnly=await roles.current(plainUserId);
+  assert.equal(fixtureOnly.reviewerLinked,false,'enabled non-human profiles do not grant human review capability');
+  assert.equal(fixtureOnly.canReview,false);
+  assert.equal(fixtureOnly.reviewerReason,'This account does not have an enabled human reviewer profile.');
+  await query("UPDATE users SET app_role='user' WHERE id=$1",[plainUserId]);
   const { default:adminRoutes }=await import('../dist/admin/routes.js');
   const { default:contentRoutes }=await import('../dist/routes/contentIntelligenceRoutes.js');
   app=express(); app.use(express.json()); app.use(cookieParser()); app.use('/api/admin',adminRoutes); app.use('/api/content-intelligence',contentRoutes);
@@ -80,7 +89,10 @@ test('bootstrap is explicit, role APIs enforce boundaries, preserve reviewer ide
   await call(reviewerId,'get','/api/admin/team').expect(403);
   await call(reviewerId,'get','/api/content-intelligence/sources').expect(403);
   await call(reviewerId,'get','/api/content-intelligence/seed-review').expect(200);
-  await call(plainUserId,'get','/api/admin/me').expect(200);
+  const reviewerMe=await call(reviewerId,'get','/api/admin/me').expect(200);
+  assert.equal(reviewerMe.body.reviewerLinked,true);assert.equal(reviewerMe.body.canReview,true);assert.equal(reviewerMe.body.reviewerReason,null);
+  const plainMe=await call(plainUserId,'get','/api/admin/me').expect(200);
+  assert.equal(plainMe.body.reviewerLinked,false);assert.equal(plainMe.body.canReview,false);assert.equal(plainMe.body.reviewerReason,'Reviewer access required');
   await call(plainUserId,'get','/api/admin/team').expect(403);
   await call(plainUserId,'get','/api/content-intelligence/seed-review').expect(403);
   await call(plainUserId,'get','/api/content-intelligence/sources').expect(403);

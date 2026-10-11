@@ -22,29 +22,25 @@ export const protect = asyncHandler(
   async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     const token = req.cookies.jwt;
 
-    if (token) {
-      try {
-        const jwtSecret = process.env.JWT_SECRET;
-        if (!jwtSecret) {
-          throw new Error("JWT_SECRET not configured");
-        }
-
-        const decoded = jwt.verify(token, jwtSecret) as any;
-        const user = await userRepository.findById(decoded.id);
-
-        if (!user) {
-          throw new AppError("UNAUTHORIZED", "Not authorized, no user found", {}, 401);
-        }
-
-        req.user = userRepository.toSafeObject(user);
-        next();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.error(message);
-        throw new AppError("UNAUTHORIZED", "Not authorized, token failed", {}, 401);
-      }
-    } else {
-      throw new AppError("UNAUTHORIZED", "Not authorized, no token", {}, 401);
+    if (!token) throw new AppError("UNAUTHORIZED", "Not authorized, no token", {}, 401);
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) throw new AppError("INTERNAL_ERROR", "Authentication is temporarily unavailable", {}, 503);
+    let userId: string;
+    try {
+      const decoded = jwt.verify(token, jwtSecret);
+      if (typeof decoded === "string" || typeof decoded.id !== "string") throw new Error("Invalid token payload");
+      userId = decoded.id;
+    } catch {
+      throw new AppError("UNAUTHORIZED", "Not authorized, token failed", {}, 401);
     }
+    let user;
+    try { user = await userRepository.findById(userId); }
+    catch {
+      // A database outage does not invalidate a valid login or require rotation.
+      throw new AppError("INTERNAL_ERROR", "Account verification is temporarily unavailable. Please retry.", {}, 503);
+    }
+    if (!user) throw new AppError("UNAUTHORIZED", "Not authorized, no user found", {}, 401);
+    req.user = userRepository.toSafeObject(user);
+    next();
   }
 );
