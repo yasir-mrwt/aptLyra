@@ -15,13 +15,13 @@ Aptlyra is an AI technical interview preparation platform for final-year student
 - Internal semantic retrieval using pinned local CPU embeddings and PostgreSQL/pgvector. Source availability, model compatibility and corpus completeness are checked before use.
 - Lyra, the SVG interviewer, with cloud/browser voice, code and diagram tools, legacy technical/delivery feedback and PDF reports. Provider-dependent features require configuration.
 
-Planning is evidence-backed. Newly confirmed interviews use **rubric evaluation with separate evaluator confidence**: reviewed or provisional scores require approved grading evidence; insufficient grounding withholds the score. Previously confirmed and historical sessions retain legacy grading. See [rubric operations and readiness](docs/rubric-evaluation.md). Planning time is an estimate, including a four-minute probe reserve, rather than a runtime deadline.
+The trusted starter bank retains its baseline evaluation path. Human-approved new questions can enter practice without evidence or a scoring guide; their descriptive **Provisional** feedback has low confidence and no reviewed score. Optional reviewed technical evidence and a human-approved guide enable **rubric evaluation with separate evaluator confidence**. Previously confirmed and historical sessions remain compatible. See [rubric operations and readiness](docs/rubric-evaluation.md). Planning time is an estimate, including a four-minute probe reserve, rather than a runtime deadline.
 
 The current corpus has no eligible company reports or reviewed technical-reference/rubric bank. Company/date choices appear only when supporting evidence exists. Resume/JD personalization is unavailable in the planner; design-lite is optional in mixed mode. Coding coverage varies by competency, so setup may need correction. Existing sessions retain their legacy behavior.
 
-## IN PROGRESS
+## Question authoring and review
 
-Phase 8.5 source-to-interview database E2E, operator workflow completion and full disposable-store regression remain to be verified. No live provider permission or source was fabricated. Phase 9 remains unstarted. See the [implementation roadmap](docs/implementation-roadmap.md).
+Linked human reviewers can add a question, review it manually or with optional local Ollama suggestions, and approve it for practice. Approved questions leave Review Queue and enter Interview Bank; evidence and scoring guides are optional enhancements. AI consent is specific to the authored source. See [question review and readiness](docs/editorial-ai-review.md). Browser speech takes over after unavailable server TTS, with Replay question and no repeated server attempts for that session.
 
 ## Architecture and stack
 

@@ -34,6 +34,8 @@ const {sessionService}=await import('../dist/services/sessionService.js');
 const {publicEvaluationSession}=await import('../dist/evaluation/readModel.js');
 const {InterviewRuntime}=await import('../dist/runtime/worker.js');
 const {contentOperations}=await import('../dist/runtime/contentOperations.js');
+const {EmbeddingClient}=await import('../dist/retrieval/embeddingClient.js');
+const originalEmbed=EmbeddingClient.prototype.embed;
 
 try{
   await new Promise(resolve=>appServer.listen(0,'127.0.0.1',resolve));
@@ -59,6 +61,9 @@ try{
       derivationType:index===4?'direct':'direct',evidenceStart:start,evidenceEnd:start+question.length,evidenceText:question,confidence:.9};
   })});
   const queued=await sourceRegistry.collect(f.owner,created.id,'manual');
+  // New fixture questions are unrelated to the starter bank. An all-identical
+  // embedding seam would incorrectly assert that every question is a duplicate.
+  EmbeddingClient.prototype.embed=async function(texts,mode){const batch=await originalEmbed.call(this,texts,mode);return {...batch,vectors:texts.map(()=>[0,1,...Array(382).fill(0)])};};
   runtime=await (await import('../dist/runtime/worker.js')).startInterviewRuntime();
   const run=await until(async()=>{
     const value=(await f.query('SELECT * FROM source_collection_runs WHERE operation_id=$1',[queued.operationId])).rows[0];
@@ -86,6 +91,8 @@ try{
     return op?.status==='succeeded'?op:null;
   },'durable extraction proposal');
   assert.ok(extraction.result);
+  EmbeddingClient.prototype.embed=originalEmbed;
+  assert.equal((await f.query("SELECT count(*)::int AS n FROM ingestion_candidates c,jsonb_array_elements(c.duplicate_links) link WHERE c.record_id=$1 AND link->>'kind'='semantic'",[imported.id])).rows[0].n,0,'low-similarity neighbours must not collapse unrelated questions');
   assert.equal((await f.query("SELECT count(*)::int AS n FROM ingestion_candidates WHERE record_id=$1 AND state='review_required'",[imported.id])).rows[0].n,5);
   assert.equal((await f.query("SELECT count(*)::int AS n FROM ingestion_review_events WHERE record_id=$1 AND action='approved'",[imported.id])).rows[0].n,0);
 
@@ -94,9 +101,9 @@ try{
   const candidates=(await f.query('SELECT id,content_hash,specification FROM ingestion_candidates WHERE record_id=$1 ORDER BY evidence_start,id',[imported.id])).rows;
   assert.equal(candidates.length,5);
   const edited={...candidates[0].specification,text:'What does a hash table provide to a junior engineer?'};
-  await contentEditorial.editApproveQuestion(f.owner,candidates[0].id,candidates[0].content_hash,edited,'paraphrased');
+  await contentEditorial.editApproveQuestion(f.owner,candidates[0].id,candidates[0].content_hash,edited,'paraphrased','distinct');
   const editedHash=(await f.query('SELECT content_hash FROM ingestion_candidates WHERE id=$1',[candidates[0].id])).rows[0].content_hash;
-  for(const candidate of candidates.slice(1,4))await contentEditorial.approveQuestion(f.owner,candidate.id,candidate.content_hash);
+  for(const candidate of candidates.slice(1,4))await contentEditorial.approveQuestion(f.owner,candidate.id,candidate.content_hash,'distinct');
   await contentEditorial.duplicateQuestion(f.owner,candidates[4].id,candidates[4].content_hash,candidates[0].id,'duplicate-repost');
   const activeCandidates=[candidates[0],...candidates.slice(1,4)];
   const versions=[];
@@ -107,9 +114,6 @@ try{
         normalization:'l2',embeddingVersion:'onnx-mean-l2-v1',vectors:texts.map(()=>[1,...Array(383).fill(0)]),processingMs:1};}});
     assert.equal(publication.embeddingReady,true);versions.push(publication.questionVersionId);
   }
-  await contentEditorial.linkQuestionFamily(f.owner,candidates[1].id,candidates[1].content_hash,candidates[2].id);
-  await f.query('UPDATE ingestion_candidates SET state=\'published\' WHERE id=$1',[candidates[2].id]);
-  assert.ok((await f.query('SELECT duplicate_links FROM ingestion_candidates WHERE id=$1',[candidates[1].id])).rows[0].duplicate_links.length);
   const {RetrievalService}=await import('../dist/retrieval/service.js');
   const retrieval=new RetrievalService({async embed(texts){return {modelId:'sentence-transformers/paraphrase-MiniLM-L3-v2',modelRevision:'4ca70771034acceecb2e72475f72050fcdde4ddc',dimension:384,normalization:'l2',embeddingVersion:'onnx-mean-l2-v1',vectors:texts.map(()=>[1,...Array(383).fill(0)]),processingMs:1};}});
   for(let i=0;i<3;i++){
@@ -182,6 +186,10 @@ try{
     const historicalText=historicalQuestion.questionText,historicalRubric=historicalQuestion.evaluation.rubricVersionId;
     const snapshot=(await f.query('SELECT questions,summary FROM interview_reports WHERE session_id=$1',[session._id])).rows[0];
     assert.equal(snapshot.summary.reviewedSummary.eligible,3);
+    // Linking after the four-question interview verifies the editorial action
+    // without expecting the planner to select two members of the same family.
+    await contentEditorial.linkQuestionFamily(f.owner,candidates[1].id,candidates[1].content_hash,candidates[2].id);
+    assert.ok((await f.query('SELECT duplicate_links FROM ingestion_candidates WHERE id=$1',[candidates[1].id])).rows[0].duplicate_links.some(link=>link.kind==='family'));
     await f.query('UPDATE interview_questions SET family_key=$1 WHERE id=ANY(SELECT question_id FROM question_versions WHERE id=ANY($2::uuid[]))',
       ['phase85-integrated-question-family',versions]);
     const familyTrend=(await contentTrends.list(f.owner,30,'Backend Developer')).find(t=>t.topic===taxonomy);
@@ -212,6 +220,7 @@ try{
     assert.deepEqual((await f.query('SELECT questions,summary FROM interview_reports WHERE session_id=$1',[session._id])).rows[0],snapshot);
   }finally{await evalRuntime.stop(true);}
 }finally{
+  EmbeddingClient.prototype.embed=originalEmbed;
   aiService.extractInterviewExperience=oldExtraction;aiService.draftRubric=oldDraft;
   if(staleRuntime)await staleRuntime.stop(true).catch(()=>{});
   if(runtime)await runtime.stop(true).catch(()=>{});

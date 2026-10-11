@@ -100,7 +100,7 @@ export const contentEditorial={
         const links:any[]=existing.map((old:any)=>({candidateId:old.id,kind:old.content_hash===hash?"exact":"near",similarity:old.content_hash===hash?1:jaccard(old.specification?.text||"",text)}))
           .filter((link:any)=>link.kind==="exact"||link.similarity>=0.8);
         for(const old of existing){
-          if(!links.some((link:any)=>link.candidateId===old.id)&&!links.some((link:any)=>link.similarity>=0.8))continue;
+          if(!links.some((link:any)=>link.candidateId===old.id))continue;
           for(const group of Array.isArray(old.duplicate_links)?old.duplicate_links:[])if(group.candidateId&&!links.some((link:any)=>link.candidateId===group.candidateId))links.push({...group,kind:"family"});
         }
         const vector=proposalVectors[proposalIndex];
@@ -110,7 +110,9 @@ export const contentEditorial={
             JOIN ingestion_candidates c ON c.question_version_id=q.id AND c.state IN ('approved','published')
             WHERE em.purpose='question-selection' AND em.status='active' AND em.model_id=$2 AND em.model_revision=$3
               AND em.embedding_version=$4 ORDER BY ev.value <=> $1::vector LIMIT 5`,[JSON.stringify(vector),MODEL.modelId,MODEL.modelRevision,MODEL.embeddingVersion])).rows;
-          for(const match of semantic)if(!links.some((link:any)=>link.candidateId===match.candidate_id))links.push({candidateId:match.candidate_id,kind:"semantic",similarity:Number(match.similarity),duplicateGroup:match.duplicate_group});
+          // Nearest neighbours are not automatically duplicates; unrelated questions
+          // must not become one family simply because the bank is small.
+          for(const match of semantic)if(Number(match.similarity)>=0.9&&!links.some((link:any)=>link.candidateId===match.candidate_id))links.push({candidateId:match.candidate_id,kind:"semantic",similarity:Number(match.similarity),duplicateGroup:match.duplicate_group});
         }
         const metadata={role:c.role,company:c.company,occurredOn:c.occurredOn,datePrecision:c.datePrecision,roundType:c.roundType,taxonomy:c.taxonomy,
           language:c.language,topics:c.topics,evidenceText:c.evidenceText,evidenceStart:c.evidenceStart,evidenceEnd:c.evidenceEnd};
@@ -123,6 +125,38 @@ export const contentEditorial={
         invocation==='reviewer'?'model-proposal':'permission-authorized-worker',JSON.stringify({contractVersion:"interview-extraction-v1",proposalCount:created.length,aiApproved:false,invocation})]);
       return {recordId,candidateIds:created,aiApproved:false};
       });
+  },
+  async enableCandidateAi(userId:string,candidateId:string,expectedHash:string){
+    const reviewer=await reviewerFor(userId);
+    if(!uuid.test(candidateId))fail("invalid-id");
+    return withDatabaseLock("ingestion:editorial:v1",async()=>{
+      const row=(await query(`SELECT c.content_hash,c.state,r.id AS record_id,s.id AS source_id,s.source_type,s.origin,s.stable_key,
+          s.state AS source_state,s.withdrawn_at,s.permission_status,s.review_status
+        FROM ingestion_candidates c JOIN ingestion_records r ON r.id=c.record_id JOIN sources s ON s.id=r.source_id
+        WHERE c.id=$1 FOR UPDATE OF c,r,s`,[candidateId])).rows[0];
+      if(!row||row.content_hash!==expectedHash)fail("review-hash-mismatch");
+      if(row.source_type!=="authored"||row.origin!=="aptlyra-reviewer-authored-question-v1"||
+        row.stable_key!==`aptlyra-manual-question:${row.source_id}`||row.source_state!=="enabled"||row.withdrawn_at||
+        row.permission_status!=="permitted"||row.review_status!=="approved"||!["review_required","approved","published"].includes(row.state))
+        fail("source-ai-processing-disallowed");
+      await query("UPDATE sources SET model_processing_allowed=true WHERE id=$1",[row.source_id]);
+      await query(`INSERT INTO ingestion_review_events(id,source_id,record_id,candidate_id,reviewer_id,action,content_hash,reason_code,event_metadata)
+        VALUES($1,$2,$3,$4,$5,'source-approved',$6,'explicit-authored-ai-consent',$7)`,
+        [randomUUID(),row.source_id,row.record_id,candidateId,reviewer.id,expectedHash,JSON.stringify({modelProcessingAllowed:true,scope:"one-authored-question"})]);
+      return {candidateId,modelProcessingAllowed:true};
+    });
+  },
+  async approveForPractice(userId:string,id:string,expectedHash:string,decision?:string,embedder?:Embedder){
+    await reviewerFor(userId);
+    const candidate=await ingestionRepository.inspectCandidate(id);
+    if(candidate.contentHash!==expectedHash)fail("review-hash-mismatch");
+    if(candidate.state==="review_required")await this.approveQuestion(userId,id,expectedHash,decision);
+    const record=(await query(`SELECT r.id,r.input_hash,r.state FROM ingestion_records r
+      JOIN ingestion_candidates c ON c.record_id=r.id WHERE c.id=$1`,[id])).rows[0];
+    // Source permission and exact-hash human checks still apply to publication.
+    if(record.state==="review_required")await this.approveSourceRecord(userId,record.id,record.input_hash,decision);
+    if(record.state!=="published")await this.publishSourceRecord(userId,record.id);
+    return this.publishQuestion(userId,id,expectedHash,embedder);
   },
   async reviewCandidate(userId:string,candidateId:string,expectedHash:string,requestId?:string){
     const reviewer=await reviewerFor(userId);
@@ -275,6 +309,9 @@ export const contentEditorial={
       v.normalized_text,s.id AS source_id,CASE WHEN s.stable_key IN ('techvera-junior-se-v1','techvera-junior-se-seed-v1')
         THEN 'Aptlyra reviewed junior SE seed' ELSE s.title END AS source_name,s.source_type,s.origin,s.permission_status,s.review_status,
       e.company_label,e.role,e.occurred_on,e.round_type,e.topics,e.ai_processing_consent,s.model_processing_allowed,
+      (s.source_type='authored' AND s.origin='aptlyra-reviewer-authored-question-v1'
+        AND s.stable_key='aptlyra-manual-question:'||s.id::text AND s.state='enabled' AND s.withdrawn_at IS NULL
+        AND s.permission_status='permitted' AND s.review_status='approved') AS can_enable_ai,
       (SELECT jsonb_build_object('id',p.id,'version',p.version,'hash',p.packet_hash,'createdAt',p.created_at,'packet',p.packet)
         FROM candidate_ai_review_packets p WHERE p.candidate_id=c.id AND p.content_hash=c.content_hash ORDER BY p.version DESC LIMIT 1) AS ai_review
       FROM ingestion_candidates c JOIN ingestion_records r ON r.id=c.record_id
@@ -284,7 +321,7 @@ export const contentEditorial={
         AND NOT (r.input_hash=$1 AND s.source_type='authored'
           AND s.stable_key IN ('techvera-junior-se-v1','techvera-junior-se-seed-v1'))
         AND NOT EXISTS(SELECT 1 FROM content_question_readiness ready
-          WHERE ready.question_version_id=c.question_version_id AND ready.inventory_class='DYNAMIC_REVIEWED')
+          WHERE ready.question_version_id=c.question_version_id AND ready.inventory_class IN ('DYNAMIC_REVIEWED','DYNAMIC_PROVISIONAL'))
       ORDER BY r.created_at,c.id LIMIT 100`,[REVIEWED_SEED_INPUT_HASH])).rows;
   },
   async competencies(userId:string){
@@ -379,8 +416,8 @@ export const contentEditorial={
     }
     return approved;
   },
-  async editApproveQuestion(userId:string,id:string,expectedHash:string,specification:unknown,derivation:"paraphrased"|"topic-derived"="paraphrased"){
-    const reviewer=await reviewerFor(userId);return ingestionRepository.editAndApproveQuestion(id,reviewer.id,expectedHash,specification,derivation);
+  async editApproveQuestion(userId:string,id:string,expectedHash:string,specification:unknown,derivation:"paraphrased"|"topic-derived"="paraphrased",duplicateDecision?:string){
+    const reviewer=await reviewerFor(userId);return ingestionRepository.editAndApproveQuestion(id,reviewer.id,expectedHash,specification,derivation,duplicateDecision);
   },
   async rejectQuestion(userId:string,id:string,expectedHash:string,reason:string){
     const reviewer=await reviewerFor(userId);return ingestionRepository.rejectQuestion(id,reviewer.id,reason,expectedHash);
@@ -443,7 +480,14 @@ export const contentEditorial={
       (SELECT rd.content FROM rubric_versions rv JOIN rubric_drafts rd ON rd.id=rv.draft_id WHERE rv.question_version_id=q.id AND rv.status IN ('reviewed','provisional') ORDER BY rv.version DESC LIMIT 1) AS rubric_content,
       COALESCE((SELECT jsonb_agg(jsonb_build_object('id',d.id,'hash',d.content_hash,'content',d.content)
         ORDER BY d.created_at DESC) FROM rubric_drafts d WHERE d.question_version_id=q.id),'[]'::jsonb) AS drafts,
-      ready.publication_class,ready.inventory_class
+      ready.publication_class,ready.inventory_class,
+      (SELECT s.model_processing_allowed FROM ingestion_records r JOIN sources s ON s.id=r.source_id WHERE r.id=candidate.record_id) AS model_processing_allowed,
+      EXISTS(SELECT 1 FROM ingestion_records r JOIN sources s ON s.id=r.source_id WHERE r.id=candidate.record_id
+        AND s.source_type='authored' AND s.origin='aptlyra-reviewer-authored-question-v1'
+        AND s.stable_key='aptlyra-manual-question:'||s.id::text AND s.state='enabled' AND s.withdrawn_at IS NULL
+        AND s.permission_status='permitted' AND s.review_status='approved') AS can_enable_ai,
+      (SELECT jsonb_build_object('id',p.id,'version',p.version,'hash',p.packet_hash,'createdAt',p.created_at,'packet',p.packet)
+        FROM candidate_ai_review_packets p WHERE p.candidate_id=candidate.id AND p.content_hash=candidate.content_hash ORDER BY p.version DESC LIMIT 1) AS ai_review
       FROM question_versions q JOIN content_question_readiness ready ON ready.question_version_id=q.id
       LEFT JOIN ingestion_candidates candidate ON candidate.question_version_id=q.id AND candidate.state='published'
       WHERE q.status='published' AND ready.inventory_class IS DISTINCT FROM 'TRUSTED_BASELINE'
@@ -462,15 +506,18 @@ export const contentEditorial={
             JOIN source_documents document ON document.id=version.document_id JOIN sources source ON source.id=document.source_id
             WHERE provenance.question_version_id=q.id AND source.origin LIKE 'aptlyra-reviewer-%') THEN 'User submitted'
           ELSE 'Research/import' END AS origin,
-        'Ready for interviews' AS display_status
+        CASE ready.inventory_class WHEN 'TRUSTED_BASELINE' THEN 'Aptlyra starter'
+          WHEN 'DYNAMIC_REVIEWED' THEN 'Reviewed · scoring ready' ELSE 'Practice ready · provisional' END AS display_status,
+        CASE ready.inventory_class WHEN 'TRUSTED_BASELINE' THEN 'TRUSTED_BASELINE'
+          WHEN 'DYNAMIC_REVIEWED' THEN 'REVIEWED_SCORING_READY' ELSE 'PRACTICE_READY' END AS readiness
       FROM question_versions q JOIN content_question_readiness ready ON ready.question_version_id=q.id
       JOIN competencies competency ON competency.taxonomy_version=q.taxonomy_version AND competency.id=q.primary_competency
-      WHERE q.status='published' AND ready.inventory_class IN ('TRUSTED_BASELINE','DYNAMIC_REVIEWED')
+      WHERE q.status='published' AND ready.inventory_class IN ('TRUSTED_BASELINE','DYNAMIC_REVIEWED','DYNAMIC_PROVISIONAL')
         AND EXISTS(SELECT 1 FROM embedding_metadata metadata JOIN embedding_vectors vector ON vector.metadata_id=metadata.id
           WHERE metadata.question_version_id=q.id AND metadata.purpose='question-selection' AND metadata.status='active')
       ORDER BY CASE ready.inventory_class WHEN 'TRUSTED_BASELINE' THEN 0 ELSE 1 END,competency.display_name,q.difficulty,q.question_text`)).rows;
     return {starterQuestions:rows.filter(row=>row.inventory_class==='TRUSTED_BASELINE').length,
-      approvedNewQuestions:rows.filter(row=>row.inventory_class==='DYNAMIC_REVIEWED').length,
+      approvedNewQuestions:rows.filter(row=>row.inventory_class!=='TRUSTED_BASELINE').length,
       totalAvailable:rows.length,questions:rows};
   },
   async technicalReferenceOptions(userId:string){
@@ -609,7 +656,12 @@ export const contentEditorial={
     await reviewerFor(userId);
     const candidate=await ingestionRepository.inspectCandidate(candidateId);
     if(candidate.contentHash!==expectedHash)fail("review-hash-mismatch");
-    const questionVersionId=await ingestionRepository.publishQuestion(candidateId,expectedHash);
+    const questionVersionId=await withDatabaseLock("ingestion:editorial:v1",async()=>{
+      const current=(await query("SELECT state,content_hash,question_version_id FROM ingestion_candidates WHERE id=$1 FOR UPDATE",[candidateId])).rows[0];
+      if(current?.content_hash!==expectedHash)fail("review-hash-mismatch");
+      if(current.state==="published"&&current.question_version_id)return current.question_version_id as string;
+      return ingestionRepository.publishQuestion(candidateId,expectedHash);
+    });
     try{await embedCorpus(embedder);}
     catch(error){
       const code=(error as {code?:string})?.code || "embedding_unavailable";

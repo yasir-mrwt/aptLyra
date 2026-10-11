@@ -7,8 +7,8 @@ import { clearRole } from "../features/auth/roleSlice";
 import ContentEditorialConsole from "./ContentEditorialConsole";
 import { editorialQueryCache } from "../services/editorialQueryCache";
 
-const { get } = vi.hoisted(() => ({ get: vi.fn() }));
-vi.mock("../services/apiClient", () => ({ default: { get, post: vi.fn(), patch: vi.fn(), delete: vi.fn() } }));
+const { get,post } = vi.hoisted(() => ({ get: vi.fn(),post:vi.fn() }));
+vi.mock("../services/apiClient", () => ({ default: { get, post, patch: vi.fn(), delete: vi.fn() } }));
 
 const questionHash = "a".repeat(64);
 const renderConsole = () => render(<Provider store={store}><MemoryRouter><ContentEditorialConsole /></MemoryRouter></Provider>);
@@ -22,7 +22,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   editorialQueryCache.clear();
   store.dispatch(clearRole());
-  store.dispatch({ type: "role/fetchCurrent/fulfilled", payload: { userId: "editor", role: "reviewer", reviewerLinked: true } });
+  store.dispatch({ type: "role/fetchCurrent/fulfilled", payload: { userId: "editor", role: "reviewer", reviewerLinked: true,canReview:true,reviewerReason:null } });
   get.mockImplementation((path: string) => {
     if (path === "/content-intelligence/interview-bank") return Promise.resolve({ data: bankData });
     if (path === "/content-intelligence/review/candidates") return Promise.resolve({ data: [] });
@@ -33,6 +33,13 @@ beforeEach(() => {
 afterEach(() => { cleanup(); store.dispatch(clearRole()); });
 
 describe("simplified editorial workflow", () => {
+  it("waits for reviewer capability and sends no protected requests for a normal user",async()=>{
+    store.dispatch({type:"role/fetchCurrent/fulfilled",payload:{userId:"ordinary-user",role:"user",reviewerLinked:false,canReview:false,reviewerReason:"Reviewer access required"}});
+    renderConsole();
+    expect(await screen.findByText("Reviewer access required")).toBeTruthy();
+    expect(get).not.toHaveBeenCalled();
+  });
+
   it("keeps primary navigation to the bank and review queue and reuses cached bank data", async () => {
     renderConsole();
     await waitFor(() => expect(get).toHaveBeenCalledWith("/content-intelligence/interview-bank"));
@@ -87,14 +94,28 @@ describe("simplified editorial workflow", () => {
     });
     renderConsole();
     fireEvent.click(sectionNav().getByRole("button", { name: /Review Queue/ }));
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Backend Developer" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "What does an index change about a database query?" })).toBeTruthy());
     expect(screen.getAllByText("What does an index change about a database query?").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Review with AI" })).toBeTruthy();
-    expect(screen.getByText("Optional. You can review and decide manually without AI.")).toBeTruthy();
-    fireEvent.click(screen.getByText("Review manually · edit, approve or reject"));
-    expect(screen.getByRole("button", { name: "Approve manually" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Edit and approve" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Review manually" }));
+    expect(screen.getByRole("button", { name: "Approve for practice" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Reject" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Publish source record/ })).toBeNull();
+  });
+
+  it("forwards explicit optional AI permission for a locally authored question",async()=>{
+    get.mockImplementation((path:string)=>path==="/content-intelligence/review/manual-references"||path==="/content-intelligence/review/competencies"
+      ?Promise.resolve({data:[{id:"dbms-sql.transactions-indexes",label:"Indexes",parentId:"dbms-sql"}]})
+      :path==="/content-intelligence/interview-bank"?Promise.resolve({data:bankData}):Promise.resolve({data:[]}));
+    post.mockResolvedValue({data:{candidateId:"created-question"}});
+    renderConsole();fireEvent.click(sectionNav().getByRole("button",{name:/Review Queue/}));
+    fireEvent.click(await screen.findByText("Add question"));
+    fireEvent.change(screen.getByLabelText("Question"),{target:{value:"Explain how an index improves a database lookup."}});
+    fireEvent.change(screen.getByLabelText("Topic"),{target:{value:"dbms-sql.transactions-indexes"}});
+    fireEvent.click(screen.getByLabelText("I wrote or manually reviewed this question and have the right to share it."));
+    fireEvent.click(screen.getByLabelText("Allow optional AI suggestions for this authored question."));
+    fireEvent.click(screen.getByRole("button",{name:"Save to Review Queue"}));
+    await waitFor(()=>expect(post).toHaveBeenCalledWith("/content-intelligence/review/manual-questions",expect.objectContaining({allowAi:true,authorshipAttested:true})));
   });
 });

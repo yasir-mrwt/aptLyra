@@ -169,7 +169,7 @@ async function approveCandidate(id: string, reviewerId: string, hash: string, du
   const spec=validateQuestion(c.specification,await children(),r.normalized_text+"\n"+String(c.specification.text||""));
   await query("UPDATE ingestion_candidates SET state='approved',reviewed_by=$2,reviewed_at=now() WHERE id=$1",[id,reviewerId]);
   if(s.source_type==="user_submission"){
-    if(!["review_required","approved"].includes(r.state)||!r.document_version_id)fail("record-not-reviewable");
+    if(!["review_required","approved","published"].includes(r.state)||!r.document_version_id)fail("record-not-reviewable");
     if(r.state==="review_required"){
       await query(`UPDATE sources SET state='enabled',permission_status='permitted',review_status='approved',reviewed_by=$2,reviewed_at=now(),
         terms_revision='content-policy-v1',permission_basis='submitter-consent-v1',permission_evidence_hash=$3 WHERE id=$1`,[s.id,reviewerId,sha256(s.permission_evidence)]);
@@ -334,7 +334,7 @@ export const ingestionRepository = {
   publishDocument: (id: string)=>editorial(()=>publishRecord(id)),
   extract: (id: string)=>editorial(()=>extract(id)),
   approveQuestion: (id: string, reviewerId: string, hash: string, duplicateDecision?: string)=>editorial(()=>approveCandidate(id,reviewerId,hash,duplicateDecision)),
-  editAndApproveQuestion: (id:string,reviewerId:string,expectedHash:string,value:unknown,derivation:"paraphrased"|"topic-derived"="paraphrased")=>editorial(async()=>{
+  editAndApproveQuestion: (id:string,reviewerId:string,expectedHash:string,value:unknown,derivation:"paraphrased"|"topic-derived"="paraphrased",duplicateDecision?:string)=>editorial(async()=>{
     const c=await candidate(id),r=await record(c.record_id),s=await source(r.source_id,false);
     await reviewer(reviewerId,s.contract);unexpired(r);matchHash(c.content_hash,expectedHash);
     if(c.state!=="review_required" || !r.normalized_text)fail("candidate-not-reviewable");
@@ -345,7 +345,7 @@ export const ingestionRepository = {
     if(evidenceStart<0 || evidenceEnd<=evidenceStart || evidenceEnd>r.normalized_text.length)fail("unsupported-evidence-span");
     await query("UPDATE ingestion_candidates SET specification=$2,content_hash=$3,evidence_start=$4,evidence_end=$5,derivation_type=$6 WHERE id=$1",
       [id,JSON.stringify(spec),contentHash,evidenceStart,evidenceEnd,derivation]);
-    await approveCandidate(id,reviewerId,contentHash);
+    await approveCandidate(id,reviewerId,contentHash,duplicateDecision);
     await event(s.id,"edited-approved",contentHash,r.id,reviewerId,id,null,{oldState:c.state,newState:"approved",previousHash:expectedHash,contentHash,derivation});
   }),
   markDuplicateQuestion: (id:string,reviewerId:string,expectedHash:string,duplicateOf:string,reasonCode:string)=>editorial(async()=>{

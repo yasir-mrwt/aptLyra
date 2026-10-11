@@ -179,6 +179,10 @@ router.get("/review/competencies",handle(req=>contentEditorial.competencies(user
 router.post("/review/manual-questions",handle(req=>contentEditorial.createManualQuestion(userId(req),req.body),201));
 router.post("/review/manual-references/:id/approve",handle(req=>contentEditorial.approveManualReference(
   userId(req),String(req.params.id),String(req.body?.expectedHash||""))));
+router.post("/review/candidates/:id/enable-ai",handle(req=>contentEditorial.enableCandidateAi(
+  userId(req),String(req.params.id),String(req.body?.expectedHash||""))));
+router.post("/review/candidates/:id/approve-practice",handle(req=>contentEditorial.approveForPractice(
+  userId(req),String(req.params.id),String(req.body?.expectedHash||""),req.body?.duplicateDecision)));
 router.post("/review/candidates/:id/ai-review",handle(req=>contentEditorial.reviewCandidate(
   userId(req),String(req.params.id),String(req.body?.expectedHash||""),String((req as AuthenticatedRequest & {requestId?:string}).requestId||""),
 )));
@@ -218,6 +222,7 @@ router.post(
       String(req.body?.expectedHash || ""),
       req.body?.specification,
       req.body?.derivation,
+      req.body?.duplicateDecision,
     ),
   ),
 );

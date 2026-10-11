@@ -1,7 +1,7 @@
 import type {RubricEvaluation} from "../types/session";
 export default function RubricFeedback({evaluation:e}:{evaluation:RubricEvaluation}){
   return <section aria-label="Rubric evaluation" className="glass-card p-6 rounded-2xl mt-6 space-y-3">
-    <h2>{e.status === "abstained"?"Abstained":e.rubricStatus === "reviewed"?"Reviewed":"Provisional"}</h2>
+    <h2>{e.reasons.includes("practice_without_reviewed_scoring")?"Provisional":e.status === "abstained"?"Abstained":e.rubricStatus === "reviewed"?"Reviewed":"Provisional"}</h2>
     <p>Evaluator Confidence: {e.evaluatorConfidence[0].toUpperCase()+e.evaluatorConfidence.slice(1)}</p>
     {e.technicalScore === null ? <p>Score withheld · {e.reasons.join(", ").replaceAll("_"," ")}</p> : <p>{e.rubricStatus === "provisional"?"Provisional practice estimate":"Technical score"}: {e.technicalScore}/100</p>}
     <p>{e.feedback}</p>

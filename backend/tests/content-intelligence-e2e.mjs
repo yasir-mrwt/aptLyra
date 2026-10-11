@@ -286,6 +286,27 @@ test('quarantine → extraction → human reviews → technical grounding/rubric
   assert.deepEqual(new Set(manualAudit.map(row=>row.action)),new Set(['received','review-required','source-approved','approved','published']));
   assert.ok(manualAudit.every(row=>row.content_hash===staged.content_hash));
 
+  const exactAiQuestion='For this disposable test, explain how a SQL index can speed up reads.';
+  const allowedAiQuestion=await request(app).post('/api/content-intelligence/review/manual-questions').set('Cookie',reviewerCookie)
+    .send({question:exactAiQuestion,topic:'dbms-sql.transactions-indexes',mode:'oral',difficulty:'standard',
+      sourceNote:'Locally authored disposable test question.',authorshipAttested:true,allowAi:true}).expect(201);
+  const permission=(await query(`SELECT s.source_type,s.model_processing_allowed,c.specification->>'text' AS question
+    FROM ingestion_candidates c JOIN ingestion_records r ON r.id=c.record_id JOIN sources s ON s.id=r.source_id WHERE c.id=$1`,[allowedAiQuestion.body.candidateId])).rows[0];
+  assert.equal(permission.source_type,'authored');assert.equal(permission.model_processing_allowed,true);assert.equal(permission.question,exactAiQuestion);
+  const aiReviewCalls=[];
+  aiService.reviewEditorialCandidate=async input=>{aiReviewCalls.push(input);return {contractVersion:'editorial-review-v1',relevance:'relevant',verdict:'recommend-approve',
+    taxonomy:'dbms-sql.transactions-indexes',category:'conceptual-oral',difficulty:'standard',duplicateWarning:false,wordingIssues:[],correctedQuestion:null,
+    technicalCorrectness:'supported',expectedConcepts:['index lookup','write cost'],evidenceStatus:'weak',evidenceSummary:'No separate reviewed technical reference was attached.',
+    rubricGuidance:[],confidence:'medium',flags:['needs-human-review']};};
+  const allowedAiReview=await request(app).post(`/api/content-intelligence/review/candidates/${allowedAiQuestion.body.candidateId}/ai-review`)
+    .set('Cookie',reviewerCookie).send({expectedHash:allowedAiQuestion.body.contentHash}).expect(200);
+  assert.equal(allowedAiReview.body.aiApproved,false);assert.equal(aiReviewCalls.length,1);
+  assert.equal(aiReviewCalls[0].question,exactAiQuestion);assert.equal(aiReviewCalls[0].evidenceText,null);
+  assert.deepEqual(aiReviewCalls[0].similarQuestions,[],'one review call sends only the selected candidate question');
+  const allowedAiRow=(await query('SELECT s.model_processing_allowed,p.packet FROM ingestion_candidates c JOIN ingestion_records r ON r.id=c.record_id JOIN sources s ON s.id=r.source_id JOIN candidate_ai_review_packets p ON p.candidate_id=c.id WHERE c.id=$1',[allowedAiQuestion.body.candidateId])).rows[0];
+  assert.equal(allowedAiRow.model_processing_allowed,true);assert.equal(allowedAiRow.packet.expectedConcepts.length,2);
+  aiService.reviewEditorialCandidate=originalReview;
+
   const manuallyCreated=await request(app).post('/api/content-intelligence/review/manual-questions').set('Cookie',reviewerCookie)
     .send({question:'How can an index improve reads while increasing write cost?',topic:'dbms-sql.transactions-indexes',mode:'oral',
       difficulty:'standard',sourceNote:'Written for this disposable review fixture.',authorshipAttested:true,allowAi:false}).expect(201);
@@ -294,16 +315,74 @@ test('quarantine → extraction → human reviews → technical grounding/rubric
   assert.ok(manualQueueBefore.body.some(item=>item.candidate_id===manuallyCreated.body.candidateId));
   assert.equal((await query('SELECT count(*)::int AS n FROM candidate_ai_review_packets WHERE candidate_id=$1',[manuallyCreated.body.candidateId])).rows[0].n,0,
     'a manual question does not require an AI proposal and AI did not approve it');
-  await request(app).post(`/api/content-intelligence/review/candidates/${manuallyCreated.body.candidateId}/approve`)
-    .set('Cookie',reviewerCookie).send({expectedHash:manuallyCreated.body.contentHash}).expect(200);
-  assert.equal((await query('SELECT state FROM ingestion_candidates WHERE id=$1',[manuallyCreated.body.candidateId])).rows[0].state,'approved');
   const originalQuestionEmbed=EmbeddingClient.prototype.embed;
   EmbeddingClient.prototype.embed=successEmbedder.embed;
   let manuallyPublished;
-  try{manuallyPublished=await request(app).post(`/api/content-intelligence/review/candidates/${manuallyCreated.body.candidateId}/publish`)
+  try{manuallyPublished=await request(app).post(`/api/content-intelligence/review/candidates/${manuallyCreated.body.candidateId}/approve-practice`)
     .set('Cookie',reviewerCookie).send({expectedHash:manuallyCreated.body.contentHash}).expect(200);}
   finally{EmbeddingClient.prototype.embed=originalQuestionEmbed;}
   assert.equal(manuallyPublished.body.publicationClass,'fresh/provisional');
+  const practiceBank=await editorial.interviewBank(userId);
+  assert.equal(practiceBank.questions.find(q=>q.question_version_id===manuallyPublished.body.questionVersionId)?.readiness,'PRACTICE_READY');
+  assert.ok(!(await editorial.candidateQueue(userId)).some(c=>c.candidate_id===manuallyCreated.body.candidateId));
+  assert.equal((await query('SELECT count(*)::int AS n FROM rubric_versions WHERE question_version_id=$1',[manuallyPublished.body.questionVersionId])).rows[0].n,0);
+  assert.equal((await query('SELECT count(*)::int AS n FROM question_technical_references WHERE question_version_id=$1',[manuallyPublished.body.questionVersionId])).rows[0].n,0);
+  // Generic root text may have zero similarity to a valid newly approved question.
+  const unrelatedRetriever=new RetrievalService({async embed(texts){return {...await successEmbedder.embed(texts),vectors:texts.map(()=>[0,1,...Array(382).fill(0)])};}});
+  const structured={query:'generic junior practice',strategy:'structured-practice',filters:{approvedPractice:true,competencies:['dbms-sql'],role:'Software Engineer',categories:['conceptual-oral']}};
+  const lowSimilarity=await unrelatedRetriever.retrieveQuestions({...structured,strategy:'semantic'});
+  assert.equal(lowSimilarity.hits.length,0);
+  const structuredPractice=await unrelatedRetriever.retrieveQuestions(structured);
+  assert.ok(structuredPractice.hits.some(hit=>hit.questionVersionId===manuallyPublished.body.questionVersionId));
+  assert.ok(structuredPractice.hits.every(hit=>hit.similarity===null&&hit.reason==='approved_practice_available'));
+  for(const extra of [{company:'Unknown company'},{occurredAfter:'2026-01-01'},{competencies:['dsa']},{categories:['coding']},{excludedVersions:[manuallyPublished.body.questionVersionId]}]) {
+    const constrained=await unrelatedRetriever.retrieveQuestions({...structured,filters:{...structured.filters,...extra}});
+    assert.ok(!constrained.hits.some(hit=>hit.questionVersionId===manuallyPublished.body.questionVersionId),'structured lookup retains every source, taxonomy and exclusion constraint');
+  }
+  plannerService.retriever=unrelatedRetriever;
+  const practicePlan=await plannerService.preview(userId,{role:'Software Engineer',level:'junior',taxonomyVersion:'junior-se-v1',
+    competencies:['dbms-sql'],difficulty:'standard',mode:'oral',count:3,minutes:45,language:'en',codeLanguage:'python',modifiers:{}});
+  assert.ok(practicePlan.items.some(item=>item.questionVersionId===manuallyPublished.body.questionVersionId),'practice-only corpus plans without trends opt-in');
+  const confirmedPractice=await plannerService.confirm(userId,{planId:practicePlan.id,revision:practicePlan.revision});
+  plannerService.retriever=retrieval;
+  const practiceSession=await sessionRepository.findByIdForUser(confirmedPractice.sessionId,userId);
+  const practiceIndex=practiceSession.questions.findIndex(q=>q.questionVersionId===manuallyPublished.body.questionVersionId);
+  practiceSession.questions[practiceIndex].isSubmitted=true;await sessionRepository.save(practiceSession);
+  const {evaluationService}=await import('../dist/evaluation/service.js');
+  const preparedPractice=await evaluationService.prepare(practiceSession._id,userId,practiceIndex,'An index trades faster lookup for extra write work.','');
+  assert.equal(preparedPractice.input,null,'practice does not generate an unreviewed rubric to bypass optional scoring');
+  const practiceFeedback=await evaluationService.compute(preparedPractice);
+  assert.equal(practiceFeedback.view.technicalScore,null);assert.equal(practiceFeedback.view.evaluatorConfidence,'low');
+  assert.match(practiceFeedback.view.feedback,/Provisional/);assert.equal(practiceFeedback.provider,null);
+  const savedPractice=await evaluationService.commit(userId,preparedPractice.attempt,practiceFeedback.view,null);
+  const {reviewedAggregate}=await import('../dist/evaluation/contracts.js');
+  assert.equal(reviewedAggregate([{primaryCompetency:'dbms-sql.transactions-indexes',evaluation:savedPractice}]).eligible,0);
+  const consentedCandidate=(await editorial.candidateQueue(userId)).find(c=>c.candidate_id===allowedAiQuestion.body.candidateId);
+  assert.equal(consentedCandidate.model_processing_allowed,true);
+  const retryPractice=await editorial.approveForPractice(userId,manuallyCreated.body.candidateId,manuallyCreated.body.contentHash,undefined,successEmbedder);
+  assert.equal(retryPractice.questionVersionId,manuallyPublished.body.questionVersionId,'publication retry is idempotent');
+  // Explicit consent can change only an individually controlled authored source.
+  const optIn=await editorial.createManualQuestion(userId,{question:'Explain how a hash collision can be handled using chaining.',topic:'dsa.structures',mode:'oral',difficulty:'easy',authorshipAttested:true,allowAi:false});
+  await request(app).post(`/api/content-intelligence/review/candidates/${optIn.candidateId}/ai-review`).set('Cookie',reviewerCookie).send({expectedHash:optIn.contentHash}).expect(403);
+  assert.equal((await editorial.candidateQueue(userId)).find(c=>c.candidate_id===optIn.candidateId).can_enable_ai,true);
+  await request(app).post(`/api/content-intelligence/review/candidates/${optIn.candidateId}/enable-ai`).set('Cookie',reviewerCookie).send({expectedHash:'0'.repeat(64)}).expect(409);
+  await request(app).post(`/api/content-intelligence/review/candidates/${optIn.candidateId}/enable-ai`).set('Cookie',reviewerCookie).send({expectedHash:optIn.contentHash}).expect(200);
+  assert.equal((await editorial.candidateQueue(userId)).find(c=>c.candidate_id===optIn.candidateId).model_processing_allowed,true);
+  await request(app).post(`/api/content-intelligence/review/candidates/${first.id}/enable-ai`).set('Cookie',reviewerCookie).send({expectedHash:first.content_hash}).expect(403);
+  const multi=await submissions.create(userId,{role:'Backend Developer',topics:['queues'],questions:['Explain a queue front.','Explain a queue back.'],practiceConsent:true,rightToShare:true,aiProcessingConsent:false});
+  const siblingIds=[];
+  for(const question of ['Explain the front of a queue with two waiting jobs.','Explain the back of a queue when a third job arrives.']){
+    const sibling=await editorial.createManualQuestion(userId,{recordId:multi.id,question,topic:'dsa.structures',mode:'oral',difficulty:'easy',authorshipAttested:true});
+    siblingIds.push(sibling);
+  }
+  for(const sibling of siblingIds){
+    const publishedSibling=await editorial.approveForPractice(userId,sibling.candidateId,sibling.contentHash,'distinct',successEmbedder);
+    assert.equal(publishedSibling.embeddingReady,true,'each question from one submission can be approved independently');
+  }
+  assert.equal((await query("SELECT count(*)::int AS n FROM ingestion_candidates WHERE id=ANY($1::uuid[]) AND state='published'",[siblingIds.map(sibling=>sibling.candidateId)])).rows[0].n,2);
+  // AI-reviewed authored question takes the same two-step publication path.
+  const aiPractice=await editorial.approveForPractice(userId,allowedAiQuestion.body.candidateId,allowedAiQuestion.body.contentHash,undefined,successEmbedder);
+  assert.equal((await editorial.interviewBank(userId)).questions.find(q=>q.question_version_id===aiPractice.questionVersionId)?.readiness,'PRACTICE_READY');
   await editorial.addTechnicalReference(userId,manuallyPublished.body.questionVersionId,chunkId);
   const manualDraft=await request(app).post(`/api/content-intelligence/scoring/${manuallyPublished.body.questionVersionId}/draft`)
     .set('Cookie',reviewerCookie).expect(200);
@@ -311,8 +390,8 @@ test('quarantine → extraction → human reviews → technical grounding/rubric
     .set('Cookie',reviewerCookie).send({expectedHash:manualDraft.body.hash}).expect(200);
   assert.equal(manualRubric.body.publicationClass,'reviewed/scoring-ready');
   const finalBank=await request(app).get('/api/content-intelligence/interview-bank').set('Cookie',reviewerCookie).expect(200);
-  assert.equal(finalBank.body.approvedNewQuestions,1);
-  assert.equal(finalBank.body.totalAvailable,1);
+  assert.ok(finalBank.body.approvedNewQuestions>=2);
+  assert.ok(finalBank.body.totalAvailable>=2);
   assert.ok(finalBank.body.questions.some(item=>item.question_version_id===manuallyPublished.body.questionVersionId));
   const manualQueueAfter=await request(app).get('/api/content-intelligence/review/candidates').set('Cookie',reviewerCookie).expect(200);
   assert.ok(!manualQueueAfter.body.some(item=>item.candidate_id===manuallyCreated.body.candidateId),

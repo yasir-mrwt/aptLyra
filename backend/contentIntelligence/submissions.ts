@@ -75,6 +75,6 @@ export const contentSubmissions = {
       CASE WHEN v.normalized_text ~* '[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}' THEN ARRAY['email']::text[] ELSE ARRAY[]::text[] END AS warnings
       FROM ingestion_records r JOIN sources s ON s.id=r.source_id JOIN source_document_versions v ON v.id=r.document_version_id
       LEFT JOIN interview_experience_records e ON e.document_version_id=v.id
-      WHERE r.state IN ('review_required','approved') AND r.expires_at>now() ORDER BY r.created_at LIMIT 100`);
+      WHERE s.source_type='user_submission' AND r.state IN ('review_required','approved') AND r.expires_at>now() ORDER BY r.created_at LIMIT 100`);
   },
 };

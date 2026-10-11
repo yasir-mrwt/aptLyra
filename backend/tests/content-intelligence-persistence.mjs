@@ -425,7 +425,12 @@ test('AI extraction requires explicit consent and creates only unapproved exact-
     const editable=randomUUID(),oldText='Why do database systems use indexes?',oldHash=createHash('sha256').update(oldText).digest('hex');
     await query(`INSERT INTO ingestion_candidates(id,record_id,chunk_id,specification,content_hash,evidence_start,evidence_end)
       VALUES($1,$2,$3,$4,$5,0,1)`,[editable,allowed.id,chunk,JSON.stringify({text:oldText,category:'sql',difficulty:'standard',primary:taxonomy,secondary:[],roles:['Backend Developer']}),oldHash]);
-    await contentEditorial.editApproveQuestion(first,editable,oldHash,{text:'How does an index help SQL?',category:'sql',difficulty:'standard',primary:taxonomy,secondary:[],roles:['Backend Developer']},'paraphrased');
+    await query('UPDATE ingestion_candidates SET duplicate_links=$2 WHERE id=$1',[editable,JSON.stringify([{candidateId:outcome.candidateIds[0],kind:'near',similarity:0.85}])]);
+    const editedSpec={text:'How does an index help SQL?',category:'sql',difficulty:'standard',primary:taxonomy,secondary:[],roles:['Backend Developer']};
+    await assert.rejects(()=>contentEditorial.editApproveQuestion(first,editable,oldHash,editedSpec,'paraphrased'),/duplicate-review-required/);
+    assert.equal((await query('SELECT content_hash FROM ingestion_candidates WHERE id=$1',[editable])).rows[0].content_hash,oldHash,'failed edit rolls back before a duplicate decision');
+    await contentEditorial.editApproveQuestion(first,editable,oldHash,editedSpec,'paraphrased','distinct');
+    assert.equal((await query("SELECT event_metadata->>'duplicateDecision' AS decision FROM ingestion_review_events WHERE candidate_id=$1 AND action='approved'",[editable])).rows[0].decision,'distinct');
     const edited=(await query('SELECT state,content_hash FROM ingestion_candidates WHERE id=$1',[editable])).rows[0];
     assert.equal(edited.state,'approved');assert.notEqual(edited.content_hash,oldHash);
     const editEvent=(await query("SELECT event_metadata->>'previousHash' AS previous_hash FROM ingestion_review_events WHERE candidate_id=$1 AND action='edited-approved'",[editable])).rows[0];
