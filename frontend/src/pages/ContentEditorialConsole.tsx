@@ -36,7 +36,7 @@ export default function ContentEditorialConsole(){
   const activePaths=useMemo(()=>{
     switch(tab){
       case "bank":return apiRoleReady?["/content-intelligence/interview-bank","/content-intelligence/scoring-queue","/content-intelligence/technical-references","/content-intelligence/review/manual-references"]:[];
-      case "review":return apiRoleReady?["/content-intelligence/review/candidates","/content-intelligence/review-queue","/content-intelligence/scoring-queue","/content-intelligence/technical-references","/content-intelligence/review/manual-references","/content-intelligence/review/competencies"]:[];
+      case "review":return apiRoleReady?["/content-intelligence/review/candidates","/content-intelligence/review/competencies"]:[];
       case "sources":return apiRoleReady&&(appRole==="owner"||appRole==="admin")?["/content-intelligence/sources"]:[];
     }
   },[apiRoleReady,appRole,tab]);
@@ -65,8 +65,15 @@ export default function ContentEditorialConsole(){
   // eslint-disable-next-line react-hooks/exhaustive-deps -- cacheVersion intentionally refreshes cached labels.
   const countLabel=useCallback((key:string)=>{const state=editorialQueryCache.get<unknown[]>(key);if(state.error&&state.data===undefined)return "Error";if(!state.data)return "—";return `${state.data.length}${state.stale?"*":""}`;},[cacheVersion]);
   const invalidateForTab=()=>tab==="review"?["/content-intelligence/review/candidates","/content-intelligence/review-queue","/content-intelligence/scoring-queue","/content-intelligence/technical-references","/content-intelligence/review/manual-references","/content-intelligence/review/competencies","/content-intelligence/interview-bank"]:tab==="sources"?["/content-intelligence/sources"]:["/content-intelligence/interview-bank","/content-intelligence/scoring-queue","/content-intelligence/technical-references","/content-intelligence/review/manual-references"];
+  const [indexingReady,setIndexingReady]=useState<boolean|null>(null);
+  useEffect(()=>{
+    if(tab!=="review"||!apiRoleReady)return;
+    let active=true;
+    void apiClient.get("/content-intelligence/review/indexing-readiness").then(response=>{if(active&&typeof response.data.ready==="boolean")setIndexingReady(response.data.ready);}).catch(()=>{if(active)setIndexingReady(false);});
+    return()=>{active=false;};
+  },[tab,apiRoleReady]);
   const actionInFlight=useRef(false);
-  const act:EditorialAction=async(work,success,invalidates)=>{if(actionInFlight.current)return false;actionInFlight.current=true;setBusy(true);setMessage("");try{await work();editorialQueryCache.invalidate([...new Set([...invalidateForTab(),...(invalidates||[])])]);await load();assignCachedData();setMessage(success);return true;}catch(error){const response=(error as {response?:{data?:{code?:string;message?:string}}})?.response?.data;setMessage(editorialActionMessage(response?.code,response?.message));editorialQueryCache.invalidate(invalidateForTab());await load(true);return false;}finally{actionInFlight.current=false;setBusy(false);}};
+  const act:EditorialAction=async(work,success,invalidates)=>{if(actionInFlight.current)return false;actionInFlight.current=true;setBusy(true);setMessage("");try{await work();editorialQueryCache.invalidate([...new Set([...invalidateForTab(),...(invalidates||[])])]);setMessage(success);await load(true);assignCachedData();return true;}catch(error){const response=(error as {response?:{data?:{code?:string;message?:string}}})?.response?.data;setMessage(editorialActionMessage(response?.code,response?.message));editorialQueryCache.invalidate(invalidateForTab());await load(true);return false;}finally{actionInFlight.current=false;setBusy(false);}};
   const tabs=useMemo(()=>[
     {id:"bank" as const,label:"Interview Bank"},
     {id:"review" as const,label:`Review Queue · ${countLabel("/content-intelligence/review/candidates")}`},
@@ -77,6 +84,7 @@ export default function ContentEditorialConsole(){
     <nav aria-label="Editorial sections" className="editorial-section-nav snap-x snap-mandatory flex gap-2 overflow-x-auto pb-2">{tabs.map(item=><button key={item.id} onClick={()=>setTab(item.id)} aria-pressed={tab===item.id} className={`min-h-11 shrink-0 snap-start rounded-lg border px-3 py-2 text-sm ${tab===item.id?"border-cyan-300 bg-cyan-950/40 text-cyan-100":"border-white/15 text-surface-300"}`}>{item.label}</button>)}</nav>
     <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-surface-400" aria-live="polite">{refreshing?"Refreshing saved review data…":loading?roleLoading?"Checking reviewer access…":"Loading this section…":""}</p><button type="button" disabled={!apiRoleReady} onClick={()=>void load(true)} className="rounded border border-white/20 px-3 py-2 text-sm disabled:opacity-40">Refresh</button></div>
     {!roleLoading&&!apiRoleReady&&<p role="alert" className="rounded-lg border border-amber-300/30 p-3 text-sm text-amber-100">{roleState.status==="failed"?"Reviewer access could not be verified.":roleState.reviewerReason||"Reviewer access required"}</p>}
+    {tab==="review"&&indexingReady===false&&<p role="status" className="rounded border border-amber-300/40 p-3">Search preparation is unavailable. You can save drafts or approve; approved questions will need Retry indexing after the AI service recovers.</p>}
     {message&&<p role="status" className="rounded-lg border border-cyan-300/30 p-3 text-sm">{message}</p>}
     {loadErrors.map(error=><p key={error} role="alert" className="rounded-lg border border-amber-300/30 p-3 text-sm text-amber-100">{error} <button type="button" onClick={()=>void load(true)} className="underline">Retry</button> Other sections remain available.</p>)}
     {loading&&<div aria-label="Loading editorial section" className="space-y-3" aria-busy="true"><div className="grid grid-cols-2 gap-2 sm:grid-cols-5">{Array.from({length:5},(_,index)=><span key={index} className="h-10 animate-pulse rounded bg-white/10"/> )}</div><div className="h-28 animate-pulse rounded-xl bg-white/5"/></div>}
@@ -209,22 +217,27 @@ function CandidateCard({item,competencies,busy,act,canReview,reviewerReason}:{it
   const [topic,setTopic]=useState(item.extraction_metadata?.classificationPending&&!stored?"":String(item.specification.primary||"")),[difficulty,setDifficulty]=useState(String(item.specification.difficulty||"standard")),[mode,setMode]=useState(stored?.mode||(item.specification.category==="coding"?"coding":"oral"));
   const [decision,setDecision]=useState(item.duplicate_links?.length?"":"distinct");
   const [notice,setNotice]=useState("");
+  const [pending,setPending]=useState("");
+  const [confirmReject,setConfirmReject]=useState(false);
+  const run=(label:string,work:()=>Promise<unknown>,success:string)=>{if(busy||pending)return;setPending(label);setNotice("");void act(work,success).then(ok=>{if(ok)setNotice(success);}).finally(()=>setPending(""));};
   const consent=item.model_processing_allowed===true&&(item.source_type!=="user_submission"||item.ai_processing_consent===true);
   const base=`/content-intelligence/review/candidates/${encodeURIComponent(item.candidate_id)}`;
   const published=item.state==="published";
   const source=item.source_type==="user_submission"?"User submission":item.origin==="aptlyra-reviewer-authored-question-v1"?"Manual":"Research";
   const save=async()=> (await apiClient.post(base+"/save",{expectedHash:item.content_hash,expectedRevision:stored?.revision,review:{question,answer,topic,difficulty,mode}})).data as {contentHash:string;revision:string};
-  const analyze=()=>void act(async()=>{
-    try{const {data}=await apiClient.post(base+"/ai-review",{expectedHash:item.content_hash});const p=data.packet as AIReviewPacket;
+  const analyze=()=>run("Analyzing…",async()=>{
+    const started=performance.now();
+    try{const {data}=await apiClient.post(base+"/ai-review",{expectedHash:item.content_hash},{timeout:95000});const p=data.packet as AIReviewPacket;
       setQuestion(p.correctedQuestion||question);setAnswer(p.suggestedAnswer||p.expectedConcepts.join("\n"));setTopic(p.taxonomy);setDifficulty(p.difficulty);setMode(p.category==="coding"?"coding":p.category==="scenario"?"mixed":"oral");setEditing(true);
-    }catch{setEditing(true);throw {response:{data:{message:"AI analysis failed. You can retry or review manually."}}};}
+    }catch{setEditing(true);throw {response:{data:{message:"AI analysis failed or timed out. Your review is unchanged. Retry once or review manually."}}};}finally{console.info("editorial_review browser elapsed_ms",Math.round(performance.now()-started));}
   },"AI suggestions loaded. Review and edit them before approval.");
-  return <article className="space-y-4 rounded-xl border border-white/15 bg-slate-900/60 p-5">
+  return <article aria-busy={!!pending} className="min-w-0 break-words space-y-4 rounded-xl border border-white/15 bg-slate-900/60 p-3 sm:p-5">
+    {pending&&<p role="status" aria-live="polite">{pending} Please wait; do not submit again.</p>}
     <h2 className="font-semibold">{String(item.specification.text||"")}</h2><p className="text-sm">Source: {source}</p>
-    <p className="text-cyan-200">{published?(item.extraction_metadata.indexStatus==="failed"?"Indexing failed":"Reviewed"):stored?.revision?"Reviewed":"Needs review"}</p>
+    <p className="text-cyan-200">{published?(item.extraction_metadata.indexStatus==="failed"?"Approved — indexing failed":"Approved — indexing pending"):stored?.revision?"Reviewed":"Needs review"}</p>
     {!canReview&&<p>{reviewerReason||"Reviewer access required."}</p>}
-    {published?<><p>Question approved, but search preparation has not completed.</p><button disabled={busy||!canReview} onClick={()=>void act(async()=>{const {data}=await apiClient.post(base+"/retry-indexing",{expectedHash:item.content_hash});if(!data.embeddingReady)throw {response:{data:{message:"Question approved, but search preparation failed. Retry indexing when the service is available."}}};},"Ready for interviews")} className="rounded bg-cyan-800 px-4 py-2">Retry indexing</button></>:<>
-      <div className="flex flex-wrap gap-3"><button disabled={busy||!canReview||!consent} onClick={analyze} className="rounded bg-cyan-800 px-4 py-2 disabled:opacity-40">Analyze with AI</button><button disabled={busy||!canReview} onClick={()=>setEditing(true)} className="rounded border border-white/20 px-4 py-2">Review manually</button></div>
+    {published?<><p>Question approved, but search preparation has not completed.</p><button disabled={busy||!canReview} onClick={()=>run("Indexing…",async()=>{const {data}=await apiClient.post(base+"/retry-indexing",{expectedHash:item.content_hash});if(!data.embeddingReady)throw {response:{data:{message:"Question approved, but search preparation failed. Retry indexing when the service is available."}}};},"Ready for interviews")} className="rounded bg-cyan-800 px-4 py-2">{pending==="Indexing…"?pending:"Retry indexing"}</button></>:<>
+      <div className="flex flex-wrap gap-3"><button disabled={busy||!canReview||!consent} onClick={analyze} className="rounded bg-cyan-800 px-4 py-2 disabled:opacity-40">{pending==="Analyzing…"?pending:"Analyze with AI"}</button><button disabled={busy||!canReview} onClick={()=>setEditing(true)} className="rounded border border-white/20 px-4 py-2">Review manually</button></div>
       {!consent&&<p className="text-sm">AI analysis is not permitted for this question. Manual review is available.</p>}
       {!consent&&item.can_enable_ai&&<button disabled={busy||!canReview} onClick={()=>void act(()=>apiClient.post(base+"/enable-ai",{expectedHash:item.content_hash}),"AI analysis enabled for this question.")} className="underline">Enable AI analysis</button>}
       {editing&&<div className="grid gap-4" aria-label="Question review editor">
@@ -233,13 +246,15 @@ function CandidateCard({item,competencies,busy,act,canReview,reviewerReason}:{it
         <label>Topic<select aria-label="Topic" value={topic} onChange={e=>setTopic(e.target.value)} className="mt-1 w-full rounded bg-slate-800 p-3"><option value="">Choose a topic</option>{competencies.map(c=><option key={c.id} value={c.id}>{topicLabel(c.parentId)} / {c.label}</option>)}</select></label>
         <label>Difficulty<select aria-label="Difficulty" value={difficulty} onChange={e=>setDifficulty(e.target.value)} className="mt-1 w-full rounded bg-slate-800 p-3">{["easy","standard","stretch"].map(v=><option key={v} value={v}>{v[0].toUpperCase()+v.slice(1)}</option>)}</select></label>
         <label>Mode<select aria-label="Mode" value={mode} onChange={e=>setMode(e.target.value)} className="mt-1 w-full rounded bg-slate-800 p-3"><option value="oral">Oral</option><option value="coding">Coding</option><option value="mixed">Mixed-compatible</option></select></label>
+        {(!topic||!answer.trim()||!decision)&&<p className="text-sm">To approve, select a topic, add an expected answer and resolve any duplicate decision.</p>}
         {mode==="coding"&&<p className="text-sm">Automated execution tests are not available for this question.</p>}
         {item.ai_review&&<p>AI quality: {item.ai_review.packet.technicalCorrectness==="supported"?"Good":"Needs checking"} · Confidence: {item.ai_review.packet.confidence}. Human review required.</p>}
         {!!item.duplicate_links?.length&&<label>Possible duplicate<select value={decision} onChange={e=>setDecision(e.target.value)} className="ml-2 rounded bg-slate-800 p-2"><option value="">Choose a decision</option><option value="distinct">Keep distinct</option><option value="retain-provenance">Retain duplicate provenance</option></select></label>}
-        <div className="flex flex-wrap gap-3"><button disabled={busy||!canReview||!topic||!question.trim()} onClick={()=>void act(save,"Changes saved. The question still needs approval.")} className="rounded border border-white/20 px-4 py-2">Save changes</button>
-        <button disabled={busy||!canReview||!topic||!answer.trim()||!decision} onClick={()=>void act(async()=>{const saved=await save();const {data}=await apiClient.post(base+"/approve-bank",{expectedHash:saved.contentHash,revision:saved.revision,duplicateDecision:decision});if(!data.embeddingReady){setNotice("Question approved, but search preparation failed.");throw {response:{data:{message:"Question approved, but search preparation failed. Use Retry indexing."}}};}},"Question approved and added to Interview Bank.")} className="rounded bg-emerald-700 px-4 py-2">Approve for Interview Bank</button></div>
+        <div className="flex flex-wrap gap-3"><button disabled={busy||!canReview||!topic||!question.trim()} onClick={()=>run("Saving…",save,"Draft saved. Approve when your review is complete.")} className="rounded border border-white/20 px-4 py-2">{pending==="Saving…"?pending:"Save draft"}</button>
+        <button disabled={busy||!canReview||!topic||!answer.trim()||!decision} onClick={()=>run("Approving…",async()=>{const saved=await save();const {data}=await apiClient.post(base+"/approve-bank",{expectedHash:saved.contentHash,revision:saved.revision,duplicateDecision:decision});if(!data.embeddingReady){setNotice("Question approved, but search preparation failed.");throw {response:{data:{message:"Question approved, but search preparation failed. Use Retry indexing."}}};}},"Question approved and added to Interview Bank.")} className="rounded bg-emerald-700 px-4 py-2">{pending==="Approving…"?pending:"Approve & add to Interview Bank"}</button></div>
       </div>}
-      <button disabled={busy||!canReview} onClick={()=>void act(()=>apiClient.post(base+"/reject",{expectedHash:item.content_hash,reason:"reviewer-rejected"}),"Question rejected.")} className="rounded border border-rose-300/40 px-4 py-2">Reject</button>
+      <button disabled={busy||!canReview} onClick={()=>setConfirmReject(true)} className="rounded border border-rose-300/40 px-4 py-2">Reject</button>
+      {confirmReject&&<div role="group" aria-label="Confirm rejection" className="rounded border border-rose-300/40 p-3"><p>This removes the question from review and prevents publication. The rejection decision remains in audit history.</p><div className="flex flex-wrap gap-2 mt-3"><button disabled={busy} onClick={()=>run("Rejecting…",()=>apiClient.post(base+"/reject",{expectedHash:item.content_hash,reason:"reviewer-rejected"}),"Question rejected.")}>{pending==="Rejecting…"?pending:"Confirm rejection"}</button><button disabled={busy} onClick={()=>setConfirmReject(false)}>Cancel</button></div></div>}
     </>}{notice&&<p role="status">{notice}</p>}
     <details className="text-sm text-surface-400"><summary>Advanced details</summary><p>{item.source_name}</p><HashDisclosure label="question hash" hash={item.content_hash}/><p>{item.normalized_text}</p>{item.ai_review&&<AIReviewProposal review={item.ai_review}/>}</details>
   </article>;

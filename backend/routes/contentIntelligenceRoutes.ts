@@ -175,6 +175,7 @@ router.get(
 );
 router.get("/review/manual-references",handle(req=>contentEditorial.manualReferenceQueue(userId(req))));
 router.post("/review/manual-references",handle(req=>contentEditorial.createManualReference(userId(req),req.body),201));
+router.get("/review/indexing-readiness",handle(req=>contentEditorial.indexingReadiness(userId(req))));
 router.get("/review/competencies",handle(req=>contentEditorial.competencies(userId(req))));
 router.post("/review/manual-questions",handle(req=>contentEditorial.createManualQuestion(userId(req),req.body),201));
 router.post("/review/manual-references/:id/approve",handle(req=>contentEditorial.approveManualReference(

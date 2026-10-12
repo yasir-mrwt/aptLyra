@@ -31,3 +31,12 @@ describe("editorial section cache", () => {
     expect(state.stale).toBe(true);
   });
 });
+
+it("ignores reads started before a successful mutation instead of restoring stale cards",async()=>{
+ let resolveOld!:(value:string[])=>void;
+ const old=editorialQueryCache.load(key,()=>new Promise<string[]>(resolve=>{resolveOld=resolve;}));
+ editorialQueryCache.invalidate([key]);
+ await editorialQueryCache.load(key,async()=>["new saved revision"],{force:true});
+ resolveOld(["old draft"]);await old;
+ expect(editorialQueryCache.get<string[]>(key).data).toEqual(["new saved revision"]);
+});

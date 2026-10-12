@@ -98,8 +98,8 @@ describe("simplified editorial workflow", () => {
     expect(screen.getAllByText("What does an index change about a database query?").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Analyze with AI" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Review manually" }));
-    expect(screen.getByRole("button", { name: "Approve for Interview Bank" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Save changes" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Approve & add to Interview Bank" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save draft" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Reject" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Publish source record/ })).toBeNull();
   });
@@ -131,7 +131,7 @@ it('edits answer and classification, then saves and approves the exact revision'
   fireEvent.change(card.getByLabelText('Suggested / expected answer'),{target:{value:'Cookies may be sent with requests; sessionStorage stays in the current tab.'}});
   fireEvent.change(card.getByLabelText('Difficulty'),{target:{value:'stretch'}});
   fireEvent.change(card.getByLabelText('Mode'),{target:{value:'mixed'}});
-  fireEvent.click(card.getByRole('button',{name:'Approve for Interview Bank'}));
+  fireEvent.click(card.getByRole('button',{name:'Approve & add to Interview Bank'}));
   await waitFor(()=>expect(post).toHaveBeenCalledWith('/content-intelligence/review/candidates/selected/approve-bank',{expectedHash:'edited-hash',revision:'edited-revision',duplicateDecision:'distinct'}));
   expect(post).toHaveBeenCalledWith('/content-intelligence/review/candidates/selected/save',expect.objectContaining({review:expect.objectContaining({difficulty:'stretch',mode:'mixed',answer:expect.stringContaining('Cookies')})}));
   expect(post.mock.calls.some(([path])=>String(path).includes('ai-review'))).toBe(false);
@@ -142,5 +142,23 @@ it('retries only indexing for an already approved question',async()=>{
   get.mockImplementation((path:string)=>Promise.resolve({data:path.endsWith('/review/candidates')?[candidate]:path.endsWith('/interview-bank')?bankData:[]}));post.mockResolvedValue({data:{embeddingReady:true}});
   renderConsole();fireEvent.click(sectionNav().getByRole('button',{name:/Review Queue/}));fireEvent.click(await screen.findByRole('button',{name:'Retry indexing'}));
   await waitFor(()=>expect(post).toHaveBeenCalledTimes(1));expect(post).toHaveBeenCalledWith('/content-intelligence/review/candidates/failed-index/retry-indexing',{expectedHash:questionHash});
-  expect(screen.queryByRole('button',{name:'Approve for Interview Bank'})).toBeNull();
+  expect(screen.queryByRole('button',{name:'Approve & add to Interview Bank'})).toBeNull();
+});
+
+it('shows immediate saving feedback, blocks duplicate writes and confirms rejection',async()=>{
+ const candidate={candidate_id:'pending',state:'review_required',content_hash:questionHash,specification:{text:'Explain safe input validation.',primary:'backend-web.auth-validation',difficulty:'easy',category:'conceptual-oral'},source_type:'authored',source_name:'Manual',extraction_metadata:{},duplicate_links:[],model_processing_allowed:false};
+ get.mockImplementation((path:string)=>Promise.resolve({data:path.endsWith('/review/candidates')?[candidate]:path.endsWith('/review/competencies')?[{id:'backend-web.auth-validation',label:'Validation',parentId:'backend-web'}]:path.endsWith('/interview-bank')?bankData:[]}));
+ let resolveSave:(value:unknown)=>void=()=>{};
+ post.mockImplementation(()=>new Promise(resolve=>{resolveSave=resolve;}));
+ renderConsole();fireEvent.click(sectionNav().getByRole('button',{name:/Review Queue/}));
+ const heading=await screen.findByRole('heading',{name:'Explain safe input validation.'});const card=within(heading.closest('article')!);
+ fireEvent.click(card.getByRole('button',{name:'Review manually'}));fireEvent.click(card.getByRole('button',{name:'Save draft'}));
+ expect((card.getByRole('button',{name:'Saving…'}) as HTMLButtonElement).disabled).toBe(true);
+ expect((card.getByRole('button',{name:'Reject'}) as HTMLButtonElement).disabled).toBe(true);
+ expect(post).toHaveBeenCalledTimes(1);
+ resolveSave({data:{contentHash:questionHash,revision:'draft'}});
+ await waitFor(()=>expect((card.getByRole('button',{name:'Save draft'}) as HTMLButtonElement).disabled).toBe(false));
+ fireEvent.click(card.getByRole('button',{name:'Reject'}));expect(post).toHaveBeenCalledTimes(1);
+ expect(card.getByRole('group',{name:'Confirm rejection'})).toBeTruthy();
+ fireEvent.click(card.getByRole('button',{name:'Cancel'}));expect(post).toHaveBeenCalledTimes(1);
 });

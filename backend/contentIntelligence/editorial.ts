@@ -146,6 +146,11 @@ export const contentEditorial={
       return {candidateId,modelProcessingAllowed:true};
     });
   },
+  async indexingReadiness(userId:string){
+    await reviewerFor(userId);
+    try { await new EmbeddingClient().embed(["Indexing readiness check"],"query");return {ready:true}; }
+    catch { return {ready:false,message:"Search preparation is unavailable. Check the AI service model readiness. Drafts and human approval remain safe; indexing can be retried."}; }
+  },
   async saveReview(userId:string,id:string,expectedHash:string,expectedRevision:string|undefined,value:any){
     const reviewer=await reviewerFor(userId);
     return withDatabaseLock("ingestion:editorial:v1",async()=>{
@@ -199,7 +204,7 @@ export const contentEditorial={
         JOIN embedding_vectors ev ON ev.metadata_id=em.id WHERE ready.question_version_id=$1
           AND ready.inventory_class IN ('DYNAMIC_PROVISIONAL','DYNAMIC_REVIEWED')
           AND em.status='active' AND em.purpose='question-selection' AND em.content_hash=$2`,[row.question_version_id,expectedHash])).rows.length);
-    }catch{embeddingReady=false;}
+    }catch(error){embeddingReady=false;console.warn(JSON.stringify({operation:"editorial_indexing",status:"failed",code:error instanceof Error&&"code" in error?String(error.code).replace(/[^a-z_]/g,"").slice(0,80):"indexing_unavailable"}));}
     await query(`UPDATE ingestion_candidates SET extraction_metadata=extraction_metadata||jsonb_build_object('indexStatus',$2::text) WHERE id=$1`,[id,embeddingReady?"ready":"failed"]);
     return {questionVersionId:row.question_version_id,embeddingReady,status:embeddingReady?"Ready for interviews":"Indexing failed"};
   },

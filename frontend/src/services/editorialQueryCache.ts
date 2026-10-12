@@ -8,6 +8,7 @@ export type EditorialQueryState<T = unknown> = {
 
 const TTL_MS = 45_000;
 const entries = new Map<string, EditorialQueryState>();
+const revisions = new Map<string, number>();
 const pending = new Map<string, Promise<unknown>>();
 const listeners = new Set<() => void>();
 let snapshotVersion = 0;
@@ -42,15 +43,16 @@ export const editorialQueryCache = {
   },
   async fetch<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
     const startedGeneration = generation;
+    const startedRevision = revisions.get(key) || 0;
     const previous = this.get<T>(key);
     entries.set(key, { ...previous, loading: true, error: null, stale: previous.data !== undefined });
     emit();
     const request = fetcher().then(data => {
-      if (generation === startedGeneration) { entries.set(key, { data, loadedAt: Date.now(), loading: false, error: null, stale: false }); emit(); }
+      if (generation === startedGeneration && (revisions.get(key)||0) === startedRevision) { entries.set(key, { data, loadedAt: Date.now(), loading: false, error: null, stale: false }); emit(); }
       return data;
     }).catch(error => {
       const current = this.get<T>(key);
-      if (generation === startedGeneration) { entries.set(key, { ...current, loading: false, error: "This section could not be loaded.", stale: current.data !== undefined }); emit(); }
+      if (generation === startedGeneration && (revisions.get(key)||0) === startedRevision) { entries.set(key, { ...current, loading: false, error: "This section could not be loaded.", stale: current.data !== undefined }); emit(); }
       if (current.data !== undefined) return current.data;
       throw error;
     }).finally(() => { if (pending.get(key) === request) pending.delete(key); });
@@ -59,10 +61,12 @@ export const editorialQueryCache = {
   },
   invalidate(keys: string[]) {
     for (const key of keys) {
+      revisions.set(key,(revisions.get(key)||0)+1);
+      pending.delete(key);
       const current = entries.get(key);
       if (current) entries.set(key, { ...current, loadedAt: 0, stale: current.data !== undefined });
     }
     emit();
   },
-  clear() { generation += 1; entries.clear(); pending.clear(); emit(); },
+  clear() { generation += 1; entries.clear(); pending.clear(); revisions.clear(); emit(); },
 };
