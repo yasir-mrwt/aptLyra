@@ -1,13 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { query, withDatabaseLock } from "../config/db.js";
 import { fail } from "../ingestion/localAdapter.js";
+import { sha256 } from "../ingestion/localAdapter.js";
 import { validateSubmission } from "./contracts.js";
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const q = async (sql: string, params: unknown[] = []) => (await query(sql, params)).rows;
 
 export const contentSubmissions = {
   async create(userId: string, value: unknown) {
-    const data = validateSubmission(value);
+    const input=value as Record<string,unknown>;
+    const simple=Boolean(input&&typeof input.question==="string");
+    if(simple&&Object.keys(input).some(k=>!["question","role","topic","notes","rightToShare","aiProcessingConsent"].includes(k)))fail("invalid-submission");
+    const data = validateSubmission(simple?{questions:[input.question],role:input.role||"Software Engineer",topics:input.topic?[input.topic]:[],notes:input.notes,
+      practiceConsent:true,rightToShare:input.rightToShare,aiProcessingConsent:input.aiProcessingConsent}:value);
     return withDatabaseLock("content-intelligence:submission:v1", async () => {
       const id = randomUUID(), sourceId = randomUUID(), documentId = randomUUID(), versionId = randomUUID(), recordId = randomUUID();
       const sourceKey = `user-submission:${id}`;
@@ -34,6 +39,16 @@ export const contentSubmissions = {
       [versionId, data.company, data.role, data.occurredOn, null, userId, data.roundType, JSON.stringify(data.topics), data.notes, data.anonymized,data.aiProcessingConsent]);
       await query(`INSERT INTO ingestion_review_events(id,source_id,record_id,action,content_hash,reason_code)
         VALUES($1,$2,$3,'received',$4,'user-consent-submission')`, [randomUUID(), sourceId, recordId, data.hash]);
+      if(simple){
+        const text=data.questions[0],candidateId=randomUUID();
+        const chunk=(await query("SELECT id FROM source_chunks WHERE document_version_id=$1 ORDER BY chunk_index LIMIT 1",[versionId])).rows[0];
+        const primary=(await query("SELECT id FROM competencies WHERE taxonomy_version='junior-se-v1' AND kind='child' AND parent_id='backend-web' AND status='active' ORDER BY id LIMIT 1")).rows[0]?.id;
+        if(!primary)fail("taxonomy-unavailable");
+        await query(`INSERT INTO ingestion_candidates(id,record_id,chunk_id,specification,content_hash,evidence_start,evidence_end,extraction_contract,derivation_type,extraction_metadata)
+          VALUES($1,$2,$3,$4,$5,0,$6,'manual-review-v1','topic-derived',$7)`,[candidateId,recordId,chunk.id,
+          JSON.stringify({text,category:"conceptual-oral",difficulty:"standard",primary,secondary:[],roles:[data.role]}),sha256(text),data.cleaned.length,
+          JSON.stringify({sourceType:"user_submission",classificationPending:true,submittedTopic:input.topic||null,aiApproved:false})]);
+      }
       return { id: recordId, state: "quarantined", expiresInDays: 7 };
     });
   },

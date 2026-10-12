@@ -398,6 +398,44 @@ test('quarantine → extraction → human reviews → technical grounding/rubric
     'a reviewed dynamic question leaves Review Queue and appears in Interview Bank');
   const completedScoring=await request(app).get('/api/content-intelligence/scoring-queue').set('Cookie',reviewerCookie).expect(200);
   assert.ok(!completedScoring.body.some(item=>item.question_version_id===manuallyPublished.body.questionVersionId));
+
+});
+
+test('simple submission saves human guidance and retries indexing without repeating approval',async()=>{
+  const normal=randomUUID();await query("INSERT INTO users(id,name,email,app_role) VALUES($1,'Submission fixture',$2,'user')",[normal,`${normal}@example.invalid`]);
+  const created=await submissions.create(normal,{question:'Explain cookies compared with sessionStorage.',rightToShare:true,aiProcessingConsent:false});
+  let item=(await editorial.candidateQueue(userId)).find(c=>c.record_id===created.id);assert.ok(item);
+  await assert.rejects(editorial.reviewCandidate(userId,item.candidate_id,item.content_hash));
+  await assert.rejects(editorial.enableCandidateAi(userId,item.candidate_id,item.content_hash));
+  const review={question:'Compare cookies and sessionStorage in web applications.',answer:'Cookies may be sent with HTTP requests and expire. sessionStorage is scoped to a tab and origin and is not automatically sent.',topic:'backend-web.auth-validation',difficulty:'easy',mode:'oral'};
+  await assert.rejects(editorial.saveReview(normal,item.candidate_id,item.content_hash,undefined,review));
+  let saved=await editorial.saveReview(userId,item.candidate_id,item.content_hash,undefined,review);
+  await assert.rejects(editorial.saveReview(userId,item.candidate_id,saved.contentHash,undefined,review),/review-hash-mismatch/);
+  assert.equal((await query('SELECT state FROM ingestion_candidates WHERE id=$1',[item.candidate_id])).rows[0].state,'review_required');
+  saved=await editorial.saveReview(userId,item.candidate_id,saved.contentHash,saved.revision,{...review,mode:'mixed',difficulty:'standard'});
+  const approved=await editorial.approveReview(userId,item.candidate_id,saved.contentHash,saved.revision,'distinct',failedEmbedder);
+  assert.equal(approved.embeddingReady,false);
+  item=(await editorial.candidateQueue(userId)).find(c=>c.candidate_id===item.candidate_id);assert.equal(item.state,'published');assert.equal(item.extraction_metadata.indexStatus,'failed');
+  const version=(await query('SELECT generation_metadata,category,difficulty FROM question_versions WHERE id=$1',[approved.questionVersionId])).rows[0];
+  assert.equal(version.generation_metadata.humanApprovedAnswer,review.answer);assert.equal(version.category,'scenario');assert.equal(version.difficulty,'standard');
+  const count=async()=>(await query("SELECT count(*)::int AS n FROM ingestion_review_events WHERE candidate_id=$1 AND action IN ('approved','published')",[item.candidate_id])).rows[0].n;
+  const before=await count();assert.equal((await editorial.retryIndexing(userId,item.candidate_id,saved.contentHash,successEmbedder)).embeddingReady,true);assert.equal(await count(),before);
+  assert.equal((await editorial.candidateQueue(userId)).some(c=>c.candidate_id===item.candidate_id),false);
+  assert.ok((await editorial.interviewBank(userId)).questions.some(q=>q.question_version_id===approved.questionVersionId));
+  assert.ok((await query("SELECT 1 FROM content_question_readiness WHERE question_version_id=$1 AND inventory_class='DYNAMIC_PROVISIONAL'",[approved.questionVersionId])).rows.length);
+  await query("UPDATE sources SET state='suspended' WHERE id=(SELECT r.source_id FROM ingestion_records r JOIN ingestion_candidates c ON c.record_id=r.id WHERE c.id=$1)",[item.candidate_id]);
+  assert.equal((await editorial.retryIndexing(userId,item.candidate_id,saved.contentHash,successEmbedder)).embeddingReady,false,'indexing cannot override source eligibility');
+  assert.equal(await count(),before,'retry never repeats approval even when source permission is unavailable');
+  const rejected=await submissions.create(normal,{question:'Disposable review rejection question about web requests?',rightToShare:true,aiProcessingConsent:false});
+  const rejectItem=(await editorial.candidateQueue(userId)).find(c=>c.record_id===rejected.id);
+  await editorial.rejectQuestion(userId,rejectItem.candidate_id,rejectItem.content_hash,'reviewer-rejected');
+  assert.equal((await editorial.candidateQueue(userId)).some(c=>c.candidate_id===rejectItem.candidate_id),false);
+  assert.ok((await query("SELECT 1 FROM ingestion_review_events WHERE candidate_id=$1 AND action='rejected'",[rejectItem.candidate_id])).rows.length);
+});
+
+
+test('missing schema produces an actionable failure',async()=>{
+  const reviewerCookie=`jwt=${jwt.sign({id:userId},process.env.JWT_SECRET)}`;
   await query('DROP VIEW IF EXISTS content_question_readiness');
   await query('DROP VIEW IF EXISTS content_question_readiness_base');
   await query('DROP TABLE seed_question_review_approvals');

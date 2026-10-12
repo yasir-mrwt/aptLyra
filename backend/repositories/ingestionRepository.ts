@@ -192,6 +192,7 @@ async function publishCandidate(id: string,expectedHash?:string): Promise<string
   const qv=await knowledge.createQuestionVersion({questionId:qid,version:1,text:spec.text,category:spec.category,difficulty:spec.difficulty,
     origin:"retrieved",evidenceStatus:"available",contentHash:c.content_hash,reviewedBy:c.reviewed_by,reviewedAt:new Date(c.reviewed_at).toISOString(),
     secondaryCompetencies:spec.secondary,generationMetadata:{extractionMethod:"structured-local-v1",model:null,promptVersion:null,roles:spec.roles,
+      ...(c.extraction_metadata?.review?.answer?{humanApprovedAnswer:c.extraction_metadata.review.answer,reviewRevision:c.extraction_metadata.review.revision}:{}),
       evidenceStart:c.evidence_start,evidenceEnd:c.evidence_end,reviewHints:["authored-selection-evidence-not-a-rubric"]},
     provenance:[{documentVersionId:current.document_version_id,chunkId:c.chunk_id,relation:"origin"}],publish:true});
   await query("UPDATE interview_questions SET status='active' WHERE id=$1",[qid]);

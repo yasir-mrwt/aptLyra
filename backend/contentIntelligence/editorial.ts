@@ -5,7 +5,7 @@ import { rubricEditor, hash as rubricHash } from "../evaluation/rubrics.js";
 import { aiService } from "../services/aiService.js";
 import { embedCorpus } from "../retrieval/corpus.js";
 import { fail } from "../ingestion/localAdapter.js";
-import { categories, difficulties, normalize, screen, sha256, validateContract } from "../ingestion/localAdapter.js";
+import { categories, difficulties, normalize, screen, sha256, validateContract, validateQuestion } from "../ingestion/localAdapter.js";
 import { knowledgeRepository } from "../repositories/knowledgeRepository.js";
 import { jaccard } from "../ingestion/localAdapter.js";
 import { EmbeddingClient } from "../retrieval/embeddingClient.js";
@@ -146,6 +146,63 @@ export const contentEditorial={
       return {candidateId,modelProcessingAllowed:true};
     });
   },
+  async saveReview(userId:string,id:string,expectedHash:string,expectedRevision:string|undefined,value:any){
+    const reviewer=await reviewerFor(userId);
+    return withDatabaseLock("ingestion:editorial:v1",async()=>{
+      const row=(await query(`SELECT c.*,r.source_id,r.input_hash,v.normalized_text,s.stable_key FROM ingestion_candidates c
+        JOIN ingestion_records r ON r.id=c.record_id JOIN sources s ON s.id=r.source_id
+        JOIN source_document_versions v ON v.id=r.document_version_id WHERE c.id=$1 FOR UPDATE OF c`,[id])).rows[0];
+      if(!row||row.content_hash!==expectedHash||row.extraction_metadata?.review?.revision!==expectedRevision)fail("review-hash-mismatch");
+      if(row.input_hash===REVIEWED_SEED_INPUT_HASH||row.state!=="review_required")fail("candidate-not-reviewable");
+      if(!value||typeof value.question!=="string"||Buffer.byteLength(value.question)>1000||typeof value.answer!=="string"||value.answer.length>6000||screen(value.answer).length||
+        !["oral","coding","mixed"].includes(value.mode))fail("invalid-review-editor");
+      const children=new Set((await knowledgeRepository.listCompetencies("junior-se-v1")).filter(c=>c.kind==="child"&&c.status==="active").map(c=>c.id));
+      const specification=validateQuestion({...row.specification,text:value.question,primary:value.topic,difficulty:value.difficulty,
+        category:value.mode==="coding"?"coding":value.mode==="mixed"?"scenario":"conceptual-oral"},children,row.normalized_text+"\n"+String(value.question));
+      const answer=value.answer.trim(),revision=sha256(JSON.stringify({specification,answer,mode:value.mode}));
+      const review={answer,mode:value.mode,revision};
+      await query(`UPDATE ingestion_candidates SET specification=$2,content_hash=$3,derivation_type='topic-derived',
+        extraction_metadata=extraction_metadata||jsonb_build_object('review',$4::jsonb) WHERE id=$1`,[id,JSON.stringify(specification),sha256(specification.text),JSON.stringify(review)]);
+      await query(`INSERT INTO ingestion_review_events(id,source_id,record_id,candidate_id,reviewer_id,action,content_hash,reason_code,event_metadata)
+        VALUES($1,$2,$3,$4,$5,'review-required',$6,'review-draft-saved',$7)`,[randomUUID(),row.source_id,row.record_id,id,reviewer.id,sha256(specification.text),JSON.stringify({revision,previousRevision:expectedRevision,review,previousSpecification:row.specification,specification,approved:false})]);
+      return {contentHash:sha256(specification.text),revision};
+    });
+  },
+  async approveReview(userId:string,id:string,expectedHash:string,revision:string,decision?:string,embedder?:Embedder){
+    const reviewer=await reviewerFor(userId);
+    await withDatabaseLock("ingestion:editorial:v1",async()=>{
+      const row=(await query("SELECT * FROM ingestion_candidates WHERE id=$1 FOR UPDATE",[id])).rows[0];
+      const review=row?.extraction_metadata?.review;
+      if(!row||row.content_hash!==expectedHash||!revision||review?.revision!==revision)fail("review-hash-mismatch");
+      if(!review.answer?.trim())fail("expected-answer-required");
+      if(row.state!=="review_required")fail("candidate-not-reviewable");
+      await this.approveQuestion(userId,id,expectedHash,decision);
+      const record=(await query("SELECT * FROM ingestion_records WHERE id=$1",[row.record_id])).rows[0];
+      if(record.state==="review_required")await this.approveSourceRecord(userId,record.id,record.input_hash,decision);
+      if(record.state!=="published")await this.publishSourceRecord(userId,record.id);
+      await ingestionRepository.publishQuestion(id,expectedHash);
+      await query(`UPDATE ingestion_candidates SET extraction_metadata=jsonb_set(extraction_metadata,'{review}', $2::jsonb) WHERE id=$1`,[id,JSON.stringify({...review,approvedRevision:revision,approvedBy:reviewer.id,indexStatus:"pending"})]);
+      await query(`INSERT INTO ingestion_review_events(id,source_id,record_id,candidate_id,reviewer_id,action,content_hash,reason_code,event_metadata)
+        VALUES($1,$2,$3,$4,$5,'approved',$6,'question-answer-approved',$7)`,[randomUUID(),record.source_id,record.id,id,reviewer.id,expectedHash,JSON.stringify({revision,answer:review.answer,specification:row.specification})]);
+    });
+    return this.retryIndexing(userId,id,expectedHash,embedder);
+  },
+  async retryIndexing(userId:string,id:string,expectedHash:string,embedder?:Embedder){
+    await reviewerFor(userId);
+    const row=(await query(`SELECT c.*,r.input_hash FROM ingestion_candidates c JOIN ingestion_records r ON r.id=c.record_id WHERE c.id=$1`,[id])).rows[0];
+    if(!row||row.content_hash!==expectedHash||row.state!=="published"||!row.question_version_id||row.input_hash===REVIEWED_SEED_INPUT_HASH)fail("candidate-not-approved");
+    let embeddingReady=true;
+    try{
+      await embedCorpus(embedder);
+      embeddingReady=Boolean((await query(`SELECT 1 FROM content_question_readiness ready
+        JOIN embedding_metadata em ON em.question_version_id=ready.question_version_id
+        JOIN embedding_vectors ev ON ev.metadata_id=em.id WHERE ready.question_version_id=$1
+          AND ready.inventory_class IN ('DYNAMIC_PROVISIONAL','DYNAMIC_REVIEWED')
+          AND em.status='active' AND em.purpose='question-selection' AND em.content_hash=$2`,[row.question_version_id,expectedHash])).rows.length);
+    }catch{embeddingReady=false;}
+    await query(`UPDATE ingestion_candidates SET extraction_metadata=extraction_metadata||jsonb_build_object('indexStatus',$2::text) WHERE id=$1`,[id,embeddingReady?"ready":"failed"]);
+    return {questionVersionId:row.question_version_id,embeddingReady,status:embeddingReady?"Ready for interviews":"Indexing failed"};
+  },
   async approveForPractice(userId:string,id:string,expectedHash:string,decision?:string,embedder?:Embedder){
     await reviewerFor(userId);
     const candidate=await ingestionRepository.inspectCandidate(id);
@@ -211,6 +268,7 @@ export const contentEditorial={
       if(packet?.contractVersion!=="editorial-review-v1"||!(["relevant","borderline","irrelevant"].includes(packet.relevance))||
         !(["recommend-approve","recommend-edit","recommend-reject"].includes(packet.verdict))||!allowedCompetencies.includes(packet.taxonomy)||
         !categories.includes(packet.category)||!difficulties.includes(packet.difficulty)||typeof packet.duplicateWarning!=="boolean"||
+        (packet.suggestedAnswer!=null&&(typeof packet.suggestedAnswer!=="string"||packet.suggestedAnswer.length>6000))||
         !Array.isArray(packet.wordingIssues)||packet.wordingIssues.length>8||
         !(packet.correctedQuestion===null||typeof packet.correctedQuestion==="string"&&packet.correctedQuestion.length<=1000)||
         !(["supported","uncertain","suspicious"].includes(packet.technicalCorrectness))||!Array.isArray(packet.expectedConcepts)||
@@ -321,7 +379,8 @@ export const contentEditorial={
         AND NOT (r.input_hash=$1 AND s.source_type='authored'
           AND s.stable_key IN ('techvera-junior-se-v1','techvera-junior-se-seed-v1'))
         AND NOT EXISTS(SELECT 1 FROM content_question_readiness ready
-          WHERE ready.question_version_id=c.question_version_id AND ready.inventory_class IN ('DYNAMIC_REVIEWED','DYNAMIC_PROVISIONAL'))
+          WHERE ready.question_version_id=c.question_version_id AND ready.inventory_class IN ('DYNAMIC_REVIEWED','DYNAMIC_PROVISIONAL')
+          AND EXISTS(SELECT 1 FROM embedding_metadata em JOIN embedding_vectors ev ON ev.metadata_id=em.id WHERE em.question_version_id=c.question_version_id AND em.status='active' AND em.purpose='question-selection'))
       ORDER BY r.created_at,c.id LIMIT 100`,[REVIEWED_SEED_INPUT_HASH])).rows;
   },
   async competencies(userId:string){
