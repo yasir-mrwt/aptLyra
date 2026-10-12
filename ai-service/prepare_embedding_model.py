@@ -47,6 +47,8 @@ if __name__ == "__main__":
     service_root = Path(__file__).resolve().parent
     product_root = next((p for p in service_root.parents if (p / ".git").is_dir()
                          or ((p / "backend").is_dir() and (p / "frontend").is_dir())), service_root)
-    if args.directory.resolve() == product_root or product_root in args.directory.resolve().parents:
-        parser.error("Model directory must be outside the product repository")
+    target = args.directory.resolve()
+    local_cache = product_root / ".model-cache"
+    if (target == product_root or product_root in target.parents) and local_cache not in target.parents:
+        parser.error("Model directory must be outside the product repository or under its ignored .model-cache directory")
     prepare(args.directory, args.model)

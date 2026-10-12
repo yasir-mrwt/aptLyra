@@ -80,8 +80,12 @@ export const aiService = {
     if(!response.ok)throw await providerError(response);return response.json();
   },
   async reviewEditorialCandidate(input: {question:string;allowedCompetencies:string[];allowedCategories:string[];evidenceText:string|null;similarQuestions:string[]},requestId?:string): Promise<unknown> {
+    const started=Date.now();
+    let status="failed";
+    try {
     const response=await fetchWithRetry(`${API_SERVICE_URL}/internal/content/review`,{method:"POST",headers:{"Content-Type":"application/json","X-API-Key":process.env.INTERNAL_API_KEY || "",...(requestId?{"X-Request-ID":requestId}:{})},body:JSON.stringify(input)},1);
-    if(!response.ok)throw await providerError(response);return response.json();
+    if(!response.ok)throw await providerError(response);status=String(response.status);return response.json();
+    } finally { console.info(JSON.stringify({operation:"editorial_review",requestId,elapsedMs:Date.now()-started,status})); }
   },
   async evaluateRubric(input: import("../evaluation/contracts.js").EvaluationInput): Promise<unknown> {
     const response=await fetchWithRetry(`${API_SERVICE_URL}/internal/rubrics/evaluate`,{method:"POST",headers:{"Content-Type":"application/json","X-API-Key":process.env.INTERNAL_API_KEY || ""},body:JSON.stringify(input)},1);

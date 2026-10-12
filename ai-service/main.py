@@ -17,12 +17,11 @@ import uvicorn
 from fastapi import FastAPI, Depends, HTTPException, Security
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
+from app.runtime_config import load_runtime_config
 from contextlib import asynccontextmanager
-from app.api.interview import router as interview_router
-from app.api.v2.resume import router as v2_resume_router
 
-load_dotenv()
+load_runtime_config()
+
 
 # Startup validation for critical environment variables
 if not os.getenv("GROQ_API_KEY"):
@@ -51,6 +50,10 @@ async def lifespan(app: FastAPI):
     FastAPI lifespan manager to handle startup and shutdown logic.
     Note: Heavy ML models are now lazy-loaded in whisper_service to save system RAM on cloud platforms.
     """
+    from app.api.embeddings import readiness
+    import logging
+    status = await readiness()
+    logging.warning("embedding_readiness: %s", status["code"])
     yield
     # Cleanup logic (if any) can go here
 
@@ -60,6 +63,9 @@ def create_app() -> FastAPI:
     Initialize and configure the FastAPI application instance.
     @returns: FastAPI application object.
     """
+    from app.api.interview import router as interview_router
+    from app.api.v2.resume import router as v2_resume_router
+
     app = FastAPI(
         title="Aptlyra AI Microservice",
         description="Refactored microservice for generating and evaluating interview questions.",

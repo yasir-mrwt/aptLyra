@@ -98,3 +98,15 @@ async def embeddings(request: EmbeddingRequest) -> EmbeddingResponse:
                             detail={"code": exc.code}) from None
     except Exception:
         raise HTTPException(503, detail={"code": "invalid_model_output"}) from None
+
+
+@router.get("/readiness")
+async def readiness() -> dict:
+    """Authenticated readiness uses the exact pinned artifacts and real inference."""
+    try:
+        await embeddings(EmbeddingRequest(mode="query", texts=["Indexing readiness check"]))
+        return {"ready": True, "code": "ready", "dimension": 384}
+    except HTTPException as exc:
+        detail: dict = exc.detail if isinstance(exc.detail, dict) else {}
+        return {"ready": False, "code": detail.get("code", "model_unavailable"),
+                "action": "Check ai-service/.env EMBEDDING_MODEL_DIR and provision the pinned model; restart the AI service."}

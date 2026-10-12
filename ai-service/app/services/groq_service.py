@@ -15,6 +15,7 @@ Models (override via env):
   GROQ_VISION_MODEL — multimodal model  (default: meta-llama/llama-4-scout-17b-16e-instruct)
 """
 
+from contextvars import ContextVar
 import requests
 import os
 import json
@@ -362,6 +363,8 @@ def editorial_ai_label() -> str:
         return "provider=unconfigured model=unconfigured"
 
 
+editorial_deadline: ContextVar[float | None] = ContextVar("editorial_deadline", default=None)
+
 def _call_ollama(
     system_prompt: str,
     user_prompt: str,
@@ -385,17 +388,24 @@ def _call_ollama(
         "options": {"temperature": temperature},
         **({"format": json_schema} if json_schema else ({"format": "json"} if as_json else {})),
     }
+    started = time.monotonic()
+    deadline = editorial_deadline.get()
+    remaining = min(int(os.getenv("REQUEST_TIMEOUT", "60")), deadline - started) if deadline else int(os.getenv("REQUEST_TIMEOUT", "60"))
+    if remaining <= 0:
+        raise HTTPException(504, {"code": "provider_timeout", "message": "AI review time budget exhausted. Retry or review manually."})
     try:
         response = requests.post(
             f"{base_url}/api/chat",
             json=body,
             headers={"Content-Type": "application/json"},
-            timeout=int(os.getenv("REQUEST_TIMEOUT", "60")),
+            timeout=remaining,
         )
     except requests.exceptions.Timeout:
         raise HTTPException(504, {"code": "provider_timeout", "message": "Local AI timed out. Retry or explicitly enable the configured fallback."}) from None
     except requests.exceptions.RequestException:
         raise HTTPException(503, {"code": "provider_unavailable", "message": "Local AI is unavailable. Start Ollama or explicitly enable the configured fallback."}) from None
+    finally:
+        logging.warning("editorial_ai.ollama elapsed_ms=%d", (time.monotonic() - started) * 1000)
     if not response.ok:
         status, code = 503, "provider_unavailable"
         if response.status_code == 404:
@@ -410,6 +420,7 @@ def _call_ollama(
         raise HTTPException(status, {"code": code, "message": "Local AI could not complete this request. Check the model and Ollama service."})
     try:
         data = response.json()
+        logging.warning("editorial_ai.ollama durations_ms=%s", {key: round(data[key] / 1_000_000) for key in ("load_duration", "prompt_eval_duration", "eval_duration") if isinstance(data.get(key), (int, float))})
         content = data.get("message", {}).get("content")
     except (ValueError, TypeError, AttributeError):
         content = None

@@ -305,8 +305,7 @@ def validate_review_packet(value:object,request:ReviewRequest)->ReviewPacket:
     return packet
 
 
-@router.post("/review")
-def review(request:ReviewRequest,fastapi_request:FastAPIRequest):
+def _review(request:ReviewRequest,fastapi_request:FastAPIRequest):
     request_id=_safe_request_id(fastapi_request.headers.get("x-request-id"))
     schema_object=ReviewPacket.model_json_schema()
     schema_object["properties"]["taxonomy"]["enum"]=request.allowedCompetencies
@@ -362,3 +361,24 @@ def review(request:ReviewRequest,fastapi_request:FastAPIRequest):
         except ReviewSemanticError as error:
             _log_review_failure(request_id,"semantic_validation",error.code,[error.field_path],2)
             raise HTTPException(502,{"code":"editorial_semantic_validation_failed","category":"semantic_validation","message":"AI review output failed a safety or eligibility rule after one correction attempt."}) from None
+
+
+@router.post("/review")
+def review(request: ReviewRequest, fastapi_request: FastAPIRequest):
+    import time
+    from app.services.groq_service import editorial_deadline
+    started = time.monotonic()
+    token = editorial_deadline.set(started + 75)
+    status = "failed"
+    try:
+        result = _review(request, fastapi_request)
+        status = "ok"
+        return result
+    except HTTPException as exc:
+        status = str(exc.status_code)
+        raise
+    finally:
+        editorial_deadline.reset(token)
+        logging.warning("editorial_review.request request_id=%s elapsed_ms=%d status=%s",
+                        _safe_request_id(fastapi_request.headers.get("x-request-id")),
+                        (time.monotonic() - started) * 1000, status)
