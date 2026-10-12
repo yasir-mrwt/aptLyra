@@ -206,11 +206,12 @@ class ReviewPacket(StrictModel):
     relevance:Literal["relevant","borderline","irrelevant"]
     verdict:ReviewVerdict
     taxonomy:str=Field(min_length=1,max_length=100)
-    category:Category
+    category:Category=Field(description="Use conceptual-oral for explain/compare/what-is questions. Use coding only when the candidate must write code.")
     difficulty:Difficulty
     duplicateWarning:bool
     wordingIssues:list[str]=Field(max_length=8)
     correctedQuestion:str|None=Field(max_length=1000)
+    suggestedAnswer:str=Field(min_length=30,max_length=6000,description="A substantive answer explaining the question, at least two sentences. A suggestion for a human to verify, not a list of keywords.")
     technicalCorrectness:Correctness
     expectedConcepts:list[str]=Field(min_length=1,max_length=12)
     evidenceStatus:EvidenceStatus
@@ -228,7 +229,7 @@ Do not include markdown fences, comments, or prose before or after the JSON. Inc
 use only the JSON Schema's enum values and types, include explicit null for correctedQuestion when no edit is needed,
 and include empty arrays where appropriate. The flags array MUST always include `needs-human-review`; add other flags
 only when applicable. Do not add fields. Choose only an allowed taxonomy ID and category. Prefer
-conservative junior scope. Flag uncertain technical claims, weak/missing evidence, ambiguous wording, and likely duplicates.
+conservative junior scope. A question asking a difference or explanation is conceptual-oral, not coding. Missing technical evidence does not prevent drafting a suggested answer for human verification. Include suggestedAnswer: a concise technically accurate answer for human review, never evidence or human approval. Classify web cookies/sessionStorage under backend web fundamentals, not data structures. Flag uncertain technical claims, weak/missing evidence, ambiguous wording, and likely duplicates.
 Recommend rejection for irrelevant material; recommend edit when a concise correction can fix it. Ground answer concepts
 and scoring guidance only in the question and permitted evidence. Do not invent citations or claim an interview report is
 authoritative technical evidence. The final response must conform exactly to this schema:
@@ -298,7 +299,7 @@ def validate_review_packet(value:object,request:ReviewRequest)->ReviewPacket:
     if "needs-human-review" not in packet.flags:
         raise ReviewSemanticError("human_review_flag_required","flags")
     text_fields=[*packet.wordingIssues,*packet.expectedConcepts,*packet.rubricGuidance]
-    text_fields.extend(value for value in (packet.correctedQuestion,packet.evidenceSummary) if value)
+    text_fields.extend(value for value in (packet.correctedQuestion,packet.evidenceSummary,packet.suggestedAnswer) if value)
     if any(AUTO_DECISION_CLAIM.search(value) for value in text_fields):
         raise ReviewSemanticError("ai_attempted_human_approval","rubricGuidance|expectedConcepts|evidenceSummary|correctedQuestion")
     return packet
@@ -309,7 +310,11 @@ def review(request:ReviewRequest,fastapi_request:FastAPIRequest):
     request_id=_safe_request_id(fastapi_request.headers.get("x-request-id"))
     schema_object=ReviewPacket.model_json_schema()
     schema_object["properties"]["taxonomy"]["enum"]=request.allowedCompetencies
-    schema_object["properties"]["category"]["enum"]=request.allowedCategories
+    # A pure explanation/comparison prompt does not ask the candidate to execute code.
+    explanation = bool(re.match(r"(?i)^\s*(what\b|explain\b|compare\b|describe\b|why\b|how\b)", request.question))
+    execution = bool(re.search(r"(?i)\b(write|implement|code|query|debug|function|algorithm)\b", request.question))
+    allowed_categories = ["conceptual-oral"] if explanation and not execution and "conceptual-oral" in request.allowedCategories else request.allowedCategories
+    schema_object["properties"]["category"]["enum"]=allowed_categories
     schema=json.dumps(schema_object,ensure_ascii=False,separators=(",",":"))
     payload={"untrusted_review_input":request.model_dump()}
     try:

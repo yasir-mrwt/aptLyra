@@ -122,7 +122,7 @@ def review_request(**overrides):
 def packet(**overrides):
     value={"contractVersion":"editorial-review-v1","relevance":"relevant","verdict":"recommend-approve",
         "taxonomy":"dbms-sql.queries","category":"sql","difficulty":"standard","duplicateWarning":False,
-        "wordingIssues":[],"correctedQuestion":None,"technicalCorrectness":"supported","expectedConcepts":["Indexes can reduce rows scanned"],
+        "wordingIssues":[],"correctedQuestion":None,"suggestedAnswer":"An index can accelerate matching lookups by reducing scans. It uses storage and adds work to updates.","technicalCorrectness":"supported","expectedConcepts":["Indexes can reduce rows scanned"],
         "evidenceStatus":"weak","evidenceSummary":"Interview wording is a weak signal, not technical proof.",
         "rubricGuidance":["Explain lookup benefits and write/update costs."],"confidence":"medium","flags":["weak-evidence","needs-human-review"]}
     value.update(overrides)
@@ -144,7 +144,7 @@ def test_ai_review_returns_valid_proposal_and_never_approves():
     assert '"title":"ReviewPacket"' in call.call_args.args[0]
     assert '"additionalProperties":false' in call.call_args.args[0]
     assert '"enum":["dbms-sql.queries"]' in call.call_args.args[0]
-    assert '"enum":["conceptual-oral","sql"]' in call.call_args.args[0]
+    assert call.call_args.kwargs["json_schema"]["properties"]["category"]["enum"] == ["conceptual-oral"]
     assert call.call_args.kwargs["as_json"] is True
     assert call.call_count==1
 
@@ -257,3 +257,18 @@ def test_review_rejects_unapproved_taxonomy_and_missing_human_review_flag():
         validate_review_packet(packet(taxonomy="invented.taxonomy"),review_request())
     with pytest.raises(ValueError):
         validate_review_packet(packet(flags=["weak-evidence"]),review_request())
+
+
+def test_review_requires_substantive_suggested_answer():
+    with pytest.raises(ValueError):
+        validate_review_packet(packet(suggestedAnswer=None), review_request())
+    with pytest.raises(ValueError):
+        validate_review_packet(packet(suggestedAnswer="keywords"), review_request())
+
+
+def test_explanation_review_schema_does_not_suggest_coding():
+    request=ReviewRequest(question="What is the difference between cookies and sessionStorage?",allowedCompetencies=["backend-web.auth-validation"],allowedCategories=["conceptual-oral","coding"])
+    proposed=packet(taxonomy="backend-web.auth-validation",category="conceptual-oral")
+    with patch("app.api.content_extraction.call_editorial_ai",return_value=json.dumps(proposed)) as call:
+        review(request,review_context())
+    assert call.call_args.kwargs["json_schema"]["properties"]["category"]["enum"]==["conceptual-oral"]
