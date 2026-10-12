@@ -165,7 +165,7 @@ const Dashboard = () => {
                     className="mr-2 rounded-lg border border-violet-300/30 px-4 py-2 text-sm text-violet-100 hover:border-violet-300/60">Team access</button>}
                 <button type="button" onClick={() => navigate("/share-interview-experience")}
                     className="rounded-lg border border-white/15 px-4 py-2 text-sm text-surface-200 hover:border-cyan-300/50 hover:text-cyan-200">
-                    Share an interview experience
+                    Submit question
                 </button>
             </div>
 
