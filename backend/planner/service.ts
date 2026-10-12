@@ -7,7 +7,7 @@ import { MODEL, type RetrievalRequest, type RetrievalResponse } from "../retriev
 import { allocate } from "./allocate.js";
 import { adjacent, categories, estimateMinutes, CONTRACT_VERSION, PLANNER_VERSION, PlannerError, validateSetup,
   type Candidate, type Setup, type SelectionReason } from "./contracts.js";
-import {BINARY_SEARCH_TEST_CONTENT_HASH} from "../codeExecution/specifications.js";
+import {executionTestFor} from "../codeExecution/specifications.js";
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 interface Retriever { retrieveQuestions(request: RetrievalRequest): Promise<RetrievalResponse> }
@@ -173,7 +173,7 @@ export class PlannerService {
         session.questions=rows.map(r=>({planItemId:r.id,questionVersionId:r.entity_id,inventoryClass:r.inventory_class,category:r.category,primaryCompetency:r.primary_competency,
           questionText:r.text,questionType:r.category==="coding" || r.category==="sql"?"coding":r.category==="system-design-lite"?"system-design":"oral",
           idealAnswer:"",language:r.category==="sql"?"sql":p.setup_snapshot.codeLanguage,
-          executionTestId:r.inventory_class==="TRUSTED_BASELINE"&&r.content_hash===BINARY_SEARCH_TEST_CONTENT_HASH&&r.category==="coding"?"binary-search-v1":undefined,
+          executionTestId:executionTestFor(r.inventory_class,r.content_hash,r.category,"javascript")||undefined,
           isSubmitted:false,isEvaluated:false} as IQuestion));
         await query("UPDATE sessions SET scoring_version='rubric-v1',runtime_version='aptlyra-runtime-v1',runtime_state='active',runtime_revision=runtime_revision+1 WHERE id=$1",[session._id]);
         session.scoringVersion="rubric-v1";

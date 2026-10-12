@@ -7,7 +7,7 @@ import {evaluationService} from "./evaluation/service.js";
 import {query} from "./config/db.js";
 import {spawnSync} from "node:child_process";
 import vm from "node:vm";
-import {BINARY_SEARCH_TEST_CONTENT_HASH,parseBinarySearchResults,withBinarySearchTests} from "./codeExecution/specifications.js";
+import {BINARY_SEARCH_TEST_CONTENT_HASH,FIRST_REPEATED_TEST_CONTENT_HASH,normalizedExecutionCode,executionTestFor,withExecutionTests,parseBinarySearchResults,withBinarySearchTests} from "./codeExecution/specifications.js";
 // The baseline includes a compatibility errors.js; exercise the typed AppError.
 jest.mock("./types/errors.js",()=>jest.requireActual("./types/errors.ts"));
 jest.mock("./models/Session.js",()=>({sessionRepository:{findByIdForUser:jest.fn<(...a:any[])=>Promise<any>>()}}));
@@ -67,4 +67,35 @@ test("Python can execute a trusted coding question initially planned in JavaScri
  expect(res.status).toBe(200);
  expect(JSON.parse((globalThis.fetch as any).mock.calls[0][1].body).language).toBe("python3");
  expect(evaluationService.recordExecution).toHaveBeenCalledWith(sessionId,"owner",0,"def binary_search(a,t): return -1","python","passed",expect.any(String));
+});
+
+test("Python uses a modern pinned provider version and preserves annotated input",async()=>{
+ const code="def binary_search(arr: list[int], target: int) -> int:\n    return -1";
+ await request(app).post("/execute").send({...body,language:"python",code});
+ const payload=JSON.parse((globalThis.fetch as any).mock.calls[0][1].body);
+ expect(payload.versionIndex).toBe("6");expect(payload.script.startsWith(code)).toBe(true);
+});
+test("runtime exceptions retain diagnostics rather than pretending assertions ran",async()=>{
+ (globalThis.fetch as any).mockResolvedValue(new Response(JSON.stringify({statusCode:200,output:"TypeError: incompatible interpreter"}),{status:200}));
+ const res=await request(app).post("/execute").send(body);
+ expect(res.body.executionStatus).toBe("runtime-error");expect(res.body.run.stderr).toContain("TypeError");expect(res.body.tests).toBeNull();
+});
+
+test("first repeated specification is exact-hash gated and checks encounter order, empty, unique, zero and negatives",()=>{
+ expect(executionTestFor("TRUSTED_BASELINE",FIRST_REPEATED_TEST_CONTENT_HASH,"coding","python")).toBe("first-repeated-v1");
+ expect(executionTestFor("DYNAMIC_PROVISIONAL",FIRST_REPEATED_TEST_CONTENT_HASH,"coding","python")).toBeNull();
+ expect(executionTestFor("TRUSTED_BASELINE","changed","coding","python")).toBeNull();
+ let output="";
+ vm.runInNewContext(withExecutionTests("function firstRepeated(a){const seen=new Set();for(const v of a){if(seen.has(v))return v;seen.add(v);}return null;}","javascript","first-repeated-v1"),{console:{log:(s:string)=>{output=s;}}});
+ expect(parseBinarySearchResults(output,"first-repeated-v1").result).toMatchObject({passed:true,cases:expect.any(Array)});
+ const code="def first_repeated(values: list[int]):\n    seen=set()\n    for value in values:\n        if value in seen: return value\n        seen.add(value)\n    return None";
+ const result=spawnSync("python3",["-c",withExecutionTests(code,"python","first-repeated-v1")],{encoding:"utf8"});
+ expect(result.status).toBe(0);expect(parseBinarySearchResults(result.stdout,"first-repeated-v1").result?.passed).toBe(true);
+ vm.runInNewContext(withExecutionTests("function firstRepeated(a){return null;}","javascript","first-repeated-v1"),{console:{log:(s:string)=>{output=s;}}});
+ expect(parseBinarySearchResults(output,"first-repeated-v1").result?.cases.filter(c=>c.passed)).toHaveLength(2);
+});
+
+test("multipart CRLF and editor LF share execution identity without erasing indentation",()=>{
+ expect(normalizedExecutionCode("def f():\r\n    return 1")).toBe("def f():\n    return 1");
+ expect(normalizedExecutionCode("def f():\n  return 1")).not.toBe(normalizedExecutionCode("def f():\n    return 1"));
 });

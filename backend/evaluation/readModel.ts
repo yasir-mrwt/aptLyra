@@ -1,9 +1,10 @@
 import type {ISession} from "../models/Session.js";
 import {query} from "../config/db.js";
 import {rubricEditor} from "./rubrics.js";
+import {hash} from "./rubrics.js";
 import {reviewedAggregate} from "./contracts.js";
 import {publicOperation} from "../runtime/operations.js";
-import {canonicalCodeLanguage,executionTestFor} from "../codeExecution/specifications.js";
+import {canonicalCodeLanguage,executionTestFor,normalizedExecutionCode} from "../codeExecution/specifications.js";
 
 /** Current public availability; immutable historical grades stay in PostgreSQL. */
 export async function publicEvaluationSession(session:ISession):Promise<ISession> {
@@ -33,6 +34,13 @@ export async function publicEvaluationSession(session:ISession):Promise<ISession
     const available=(await query("SELECT entity_id FROM retrieval_entities WHERE purpose='question-selection' AND entity_id=ANY($1::uuid[])",[session.questions.map(q=>q.questionVersionId).filter(Boolean)])).rows;
     session.questions=session.questions.map(q=>q.questionVersionId && !available.some(e=>e.entity_id===q.questionVersionId)
       ? {...q,questionText:"This planned question is no longer available. Return to setup for a fresh plan.",idealAnswer:"",aiFeedback:undefined,evidenceUnavailable:true}:q);
+  }
+  if(session.planId){
+    const evidence=(await query("SELECT question_index,code_hash,language,status,summary FROM coding_execution_evidence WHERE session_id=$1 AND user_id=$2 ORDER BY created_at DESC",[session._id,session.user])).rows;
+    session.questions=session.questions.map((question,index)=>{
+      const record=question.userSubmittedCode?evidence.find(row=>row.question_index===index&&[hash(question.userSubmittedCode!),hash(normalizedExecutionCode(question.userSubmittedCode!))].includes(row.code_hash)&&row.language===question.language):undefined;
+      return record?{...question,executionEvidence:{status:record.status,summary:record.summary}}:question;
+    });
   }
   if(session.scoringVersion!=="rubric-v1")return session;
   // A completed interview is an immutable historical report snapshot. Source withdrawal

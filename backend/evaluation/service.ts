@@ -1,3 +1,4 @@
+import {normalizedExecutionCode} from "../codeExecution/specifications.js";
 import {randomUUID} from "node:crypto";
 import {query,withDatabaseLock} from "../config/db.js";
 import {sessionRepository} from "../models/Session.js";
@@ -90,10 +91,10 @@ export const evaluationService={
   },
   async fail(attempt:string,userId:string){await query("UPDATE answer_attempts SET status='failed',updated_at=now() WHERE id=$1 AND user_id=$2 AND status='evaluating'",[attempt,userId]);},
   async objective(sessionId:string,index:number,code:string,language:string):Promise<Objective>{
-    const record=(await query("SELECT * FROM coding_execution_evidence WHERE session_id=$1 AND question_index=$2 AND code_hash=$3 AND language=$4 ORDER BY created_at DESC LIMIT 1",[sessionId,index,hash(code),language])).rows[0];
+    const record=(await query("SELECT * FROM coding_execution_evidence WHERE session_id=$1 AND question_index=$2 AND code_hash=ANY($3::text[]) AND language=$4 ORDER BY created_at DESC LIMIT 1",[sessionId,index,[hash(code),hash(normalizedExecutionCode(code))],language])).rows[0];
     return record?{status:record.status,kind:"runtime",summary:record.summary,codeHash:record.code_hash}:unavailableObjective();
   },
   async recordExecution(sessionId:string,userId:string,index:number,code:string,language:string,status:"passed"|"failed",summary?:string){
-    await query("INSERT INTO coding_execution_evidence(id,session_id,user_id,question_index,code_hash,language,status,summary) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",[randomUUID(),sessionId,userId,index,hash(code),language,status,summary || (status==="failed"?"JDoodle reported execution failure; reviewed tests unavailable.":"JDoodle returned a successful execution status; reviewed tests unavailable.")]);
+    await query("INSERT INTO coding_execution_evidence(id,session_id,user_id,question_index,code_hash,language,status,summary) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",[randomUUID(),sessionId,userId,index,hash(normalizedExecutionCode(code)),language,status,summary || (status==="failed"?"JDoodle reported execution failure; reviewed tests unavailable.":"JDoodle returned a successful execution status; reviewed tests unavailable.")]);
   }
 };

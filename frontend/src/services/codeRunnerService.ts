@@ -40,6 +40,8 @@ export const executeCode = async (
         const run = data.run;
 
         return {
+            tests: data.tests,
+            executionStatus: data.executionStatus,
             stdout: run?.stdout || "",
             stderr: run?.stderr || "",
             exitCode: run?.code ?? 1,

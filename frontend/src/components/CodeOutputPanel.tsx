@@ -7,7 +7,7 @@ interface CodeOutputPanelProps {
     language: string;
     code: string;
     context?: {sessionId:string;questionIndex:number};
-    executionTestId?: "binary-search-v1";
+    executionTestId?: "binary-search-v1"|"first-repeated-v1";
 }
 
 const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code, context, executionTestId }) => {
@@ -18,7 +18,7 @@ const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code, conte
     const [executionTime, setExecutionTime] = useState<number | null>(null);
     const outputRef = useRef<HTMLPreElement>(null);
 
-    const canExecute = isExecutable(language) && (!context || executionTestId === "binary-search-v1");
+    const canExecute = isExecutable(language) && (!context || !!executionTestId);
 
     useEffect(() => {
         if (outputRef.current) {
@@ -66,7 +66,7 @@ const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code, conte
                 </div>
                 <div className="flex items-center gap-2">
                     {!executionTestId&&context?<span className="text-xs text-amber-200">Automated execution tests are not available for this question.</span>:null}
-                    {(!context||executionTestId==="binary-search-v1")&&<button
+                    {!context&&<button
                         onClick={() => setShowStdin(!showStdin)}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-surface-400 hover:text-white bg-white/5 hover:bg-white/10 transition-all cursor-pointer border border-white/5"
                         title="Toggle stdin input"
@@ -102,13 +102,14 @@ const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code, conte
                         ) : (
                             <>
                                 <Play size={12} />
-                                {executionTestId==="binary-search-v1"?"Run tests":"Run"}
+                                {executionTestId?"Run tests":"Run"}
                             </>
                         )}
                     </button>}
                 </div>
             </div>
 
+            {executionTestId&&<p className="px-6 py-2 text-sm">{executionTestId==="first-repeated-v1"?(language==="python"?"Define first_repeated(values); return None when unique.":"Define firstRepeated(values); return null or undefined when unique."):(language==="python"?"Define binary_search(arr, target); return the index or -1.":"Define binarySearch(arr, target); return the index or -1.")}</p>}
             {/* Stdin Input */}
             {showStdin && (
                 <div className="px-6 py-3 border-b border-white/5 bg-white/2">
@@ -128,7 +129,7 @@ const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code, conte
                     <div className="flex-1 flex flex-col items-center justify-center text-surface-600 gap-3">
                         <Terminal size={32} className="opacity-30" />
                         <p className="text-[10px] font-black uppercase tracking-widest">
-                            {context&&!executionTestId ? "Deterministic tests are not configured for this question. You can still submit your answer." : canExecute ? executionTestId==="binary-search-v1"?"Run the match, missing-value and empty-array cases":"Click Run to execute your code" : "This language does not support execution"}
+                            {context&&!executionTestId ? "Deterministic tests are not configured for this question. You can still submit your answer." : canExecute ? executionTestId?"Run the fixed cases for this question":"Click Run to execute your code" : "This language does not support execution"}
                         </p>
                     </div>
                 )}
@@ -157,12 +158,13 @@ const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code, conte
                             {result.timedOut ? (
                                 <><AlertTriangle size={12} /> Timed Out</>
                             ) : isSuccess ? (
-                                <><Check size={12} className="inline mr-1" /> Exit Code: 0</>
+                                <><Check size={12} className="inline mr-1" /> {result.tests?"All tests passed":"Execution completed"}</>
                             ) : (
-                                <><AlertTriangle size={12} /> Exit Code: {result.exitCode}</>
+                                <><AlertTriangle size={12} /> {result.executionStatus==="failed-tests"?"Failed tests": "Runtime error"}</>
                             )}
                         </div>
 
+                        {result.tests&&<ul className="px-6 py-2 text-sm" aria-label="Test case results">{result.tests.cases.map(c=><li key={c.id}>{c.id}: {c.passed?"Passed":"Failed"} — expected {JSON.stringify(c.expected)}, received {JSON.stringify(c.actual)??"no result"}{c.error?` (${c.error})`:""}</li>)}</ul>}
                         {/* Output Content */}
                         <pre
                             ref={outputRef}

@@ -20,7 +20,8 @@ export interface Question {
     evaluation?: RubricEvaluation;
     planItemId?: string;
     questionVersionId?: string;
-    executionTestId?: "binary-search-v1";
+    executionTestId?: "binary-search-v1"|"first-repeated-v1";
+    executionEvidence?: {status:"passed"|"failed";summary:string};
     category?: string;
     evidenceUnavailable?: boolean;
     language?: string;
