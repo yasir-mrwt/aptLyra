@@ -382,3 +382,32 @@ select::-webkit-scrollbar {
     flex: 1 1 auto;
   }
 }
+
+/* Editorial fields must shrink within narrow viewport cards. */
+.editorial-console { min-width: 0; overflow-wrap: anywhere; }
+.editorial-console input, .editorial-console textarea, .editorial-console select { min-width: 0; max-width: 100%; }
+.editorial-console label { min-width: 0; }
+.editorial-console button { white-space: normal; max-width: 100%; }
+
+@layer base {
+@media print {
+  @page { size: A4; margin: 16mm; }
+  .interview-report { color: #111 !important; background: white !important; max-width: none; padding: 0; animation: none; }
+  .interview-report * { color: #111 !important; background: transparent !important; box-shadow: none !important; text-shadow: none !important; overflow: visible !important; }
+  .interview-report pre { white-space: pre-wrap !important; overflow-wrap: anywhere; font-size: 9pt; }
+  .interview-report h1, .interview-report h2, .interview-report h3, .interview-report h4 { break-after: avoid; }
+  .interview-report p { orphans: 3; widows: 3; }
+  .interview-report .grid { display: block; }
+  .interview-report canvas { max-height: 70mm; break-inside: avoid; }
+  .interview-report .glass-card { border: 1px solid #ccc !important; margin: 10pt 0; padding: 12pt; border-radius: 0; }
+}
+
+@media print {
+ html, body { background: white !important; color: #111 !important; }
+ body header, body nav { display: none !important; }
+ .interview-report .glass-card { background-color: white !important; }
+ .interview-report h1 { font-size: 24pt !important; line-height: 1.2 !important; }
+ .interview-report h2, .interview-report h3, .interview-report h4 { font-size: 14pt !important; }
+ .interview-report .absolute { display: none !important; }
+}
+}

@@ -1,0 +1,16 @@
+import type {Question} from "../types/session";
+
+export function evaluationStatus(question:Question):string {
+  if(question.evaluation?.reasons.includes("practice_without_reviewed_scoring"))return "Provisional practice feedback — reviewed score withheld";
+  if(question.evaluation)return question.evaluation.status==="abstained"?"Evaluation abstained":"Evaluation complete";
+  if(question.isEvaluated)return "Evaluation complete · established starter feedback";
+  return question.isSubmitted?"Evaluation pending":"Not submitted";
+}
+export function executionStatus(question:Question):string {
+  if(question.questionType!=="coding")return "Execution not applicable to this oral/design answer";
+  if(question.executionEvidence)return `Execution completed — ${question.executionEvidence.status}: ${question.executionEvidence.summary}`;
+  const objective=question.evaluation?.objective;
+  if(objective?.status==="passed"||objective?.status==="failed")return `Execution completed — ${objective.status}`;
+  return question.executionTestId?"Execution not run":"Execution tests unavailable";
+}
+export const reviewedCoverageExplanation="Individual practice scores and the reviewed aggregate measure different things. Only eligible original questions with reviewed rubrics count toward that aggregate. Established starter feedback and provisional dynamic feedback remain visible individually; they do not imply reviewed evidence.";
