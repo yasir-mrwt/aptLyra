@@ -1,5 +1,5 @@
 import { Link, useParams } from "react-router-dom";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useAudioRecorder } from "../hooks/useAudioRecorder";
 import { useInterviewSession } from "../hooks/useInterviewSession";
 import { useInterviewerVoice } from "../hooks/useInterviewerVoice";
@@ -21,6 +21,7 @@ const InterviewRunnerSession = () => {
     const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
     const [isWhiteboardOpen, setIsWhiteboardOpen] = useState(false);
     const [isFinishing, setIsFinishing] = useState(false);
+    const finishInFlight=useRef(false);
 
     const {
         isRecording,
@@ -77,16 +78,19 @@ const InterviewRunnerSession = () => {
     );
 
     const handleConfirmFinish = async () => {
-        if (isFinishing) return;
+        if (finishInFlight.current) return;
+        finishInFlight.current=true;
         setIsFinishing(true);
         setIsFinishModalOpen(false);
         try {
 
             await confirmFinishInterview();
             setIsFinishing(false);
+            finishInFlight.current=false;
         } catch (error) {
             console.error("Failed to finish interview:", error);
             setIsFinishing(false);
+            finishInFlight.current=false;
             alert("Failed to finalize session. Please try again or refresh.");
         }
     };
@@ -100,7 +104,7 @@ const InterviewRunnerSession = () => {
     }
 
     if (!activeSession || !activeSession.questions || activeSession.questions.length === 0 || isFinishing) {
-        return <InterviewLoading sessionMessage={isFinishing ? "Finalizing Interview..." : sessionMessage} />;
+        return <InterviewLoading sessionMessage={(isFinishing || activeSession?.runtimeState==="finishing") ? "Finishing… Your answers are saved. Preparing your report." : sessionMessage} />;
     }
 
     const currentDraft = drafts[currentQuestionIndex] || {};
@@ -111,7 +115,7 @@ const InterviewRunnerSession = () => {
         <div className="max-w-7xl mx-auto px-4 pb-32">
             {activeSession.planId && <p className="mb-4">{activeSession.scoringVersion === "rubric-v1" ? "Trusted starters use established interview evaluation. Dynamic questions show their own rubric readiness." : "Planner-backed questions · Legacy evaluation"}</p>}
             <OperationStatusPanel session={activeSession} onAction={handleOperation} connection={socketConnection} />
-            {activeSession.runtimeState==="finishing" && <p role="status" className="mb-4">Lyra is finalizing your report. Answers are saved and locked. This page will restore progress after a reload.</p>}
+            {activeSession.runtimeState==="finishing"&&<p role="status" aria-live="polite" className="mb-4">Finishing… Your answers are saved. Preparing your report; you can safely reload.</p>}
             <InterviewHeader
                 role={activeSession.role}
                 startTime={activeSession.createdAt || activeSession.updatedAt || new Date().toISOString()}
@@ -158,7 +162,7 @@ const InterviewRunnerSession = () => {
                     <CodeEditorSection
                         language={selectedLanguage}
                         plannedLanguage={!!activeSession.planId}
-                        code={currentDraft.code || ""}
+                        code={currentDraft.code ?? currentQuestion?.userSubmittedCode ?? ""}
                         isQuestionLocked={isQuestionLocked}
                         setLanguage={setSelectedLanguage}
                         updateCode={updateDraftCode}
@@ -166,9 +170,10 @@ const InterviewRunnerSession = () => {
                     <CodeOutputPanel
                         context={activeSession.scoringVersion === "rubric-v1" ? {sessionId:activeSession._id,questionIndex:currentQuestionIndex}:undefined}
                         language={selectedLanguage}
-                        code={currentDraft.code || ""}
+                        code={currentDraft.code ?? currentQuestion?.userSubmittedCode ?? ""}
                         executionTestId={currentQuestion?.executionTestId}
                     />
+                    <div className="lg:col-span-2 glass-card p-5"><label htmlFor="coding-explanation" className="block font-semibold mb-2">Explain your approach</label><textarea id="coding-explanation" value={currentDraft.answerText ?? currentQuestion?.userAnswerText ?? ""} onChange={event=>updateDraftAnswer(event.target.value)} disabled={isQuestionLocked} maxLength={50000} rows={5} className="w-full rounded bg-surface-800 p-3" aria-describedby="coding-explanation-help"/><p id="coding-explanation-help" className="text-sm mt-2">Describe your approach, time and space complexity, and tradeoffs. Saved separately from your code and included with your submitted answer.</p></div>
                 </div>
             ) : (
                 <div className="grid gap-6 grid-cols-1">

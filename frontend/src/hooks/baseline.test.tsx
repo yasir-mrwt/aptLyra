@@ -99,7 +99,7 @@ describe("Lyra voice baseline", () => {
         const { result } = renderHook(() => useInterviewerVoice("session", 0, "Question"));
         await waitFor(() => expect(speech.speak).toHaveBeenCalledTimes(1));
         expect(apiClient.post).toHaveBeenCalledTimes(1);expect(resume).not.toHaveBeenCalled();
-        expect(result.current.isPreparing).toBe(false);
+        await waitFor(()=>expect(result.current.isPreparing).toBe(false));
     });
     it("plays valid server audio and replays the cached question without another request", async () => {
         const start = vi.fn(), stop = vi.fn(), decode = vi.fn().mockResolvedValue({ duration: 1 });
@@ -254,8 +254,11 @@ describe("answer controls", () => {
         act(() => result.current.setSelectedLanguage("python"));
         expect(result.current.selectedLanguage).toBe(language === "sql" ? "sql" : "python");
         act(() => result.current.updateDraftCode(language === "sql" ? "SELECT 1" : "print(1)"));
+        act(() => result.current.updateDraftAnswer("Binary search halves the range: O(log n) time and O(1) extra space."));
         await act(() => result.current.handleSubmitAnswer());
         const form = vi.mocked(api.post).mock.calls[0][1] as FormData;
+        expect(form.get("answerText")).toContain("O(log n)");
+        expect(form.get("code")).toBe(language === "sql" ? "SELECT 1" : "print(1)");
         expect(form.get("language")).toBe(language === "sql" ? "sql" : "python");
     });
     it("submits a typed oral draft without audio, preserves it for retry, and navigates after evaluation", async () => {

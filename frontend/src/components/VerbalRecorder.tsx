@@ -32,6 +32,7 @@ const VerbalRecorder: React.FC<VerbalRecorderProps> = ({
             
             {!isRecording && !hasAudio ? (
                 <button
+                    aria-label="Start recording"
                     onClick={startRecording}
                     disabled={isQuestionLocked}
                     className="w-32 h-32 bg-primary-500 rounded-full flex items-center justify-center text-white shadow-[0_0_30px_rgba(139,92,246,0.2)] hover:scale-105 active:scale-95 transition-all disabled:opacity-20 cursor-pointer relative z-10 group/btn"
@@ -44,6 +45,7 @@ const VerbalRecorder: React.FC<VerbalRecorderProps> = ({
                     <div className="relative">
                         <div className="absolute inset-0 bg-rose-500/20 rounded-full blur-2xl animate-pulse"></div>
                         <button 
+                            aria-label="Stop recording"
                             onClick={stopRecording}
                             className="w-32 h-32 bg-rose-500 rounded-full flex items-center justify-center text-white relative shadow-2xl active:scale-95 transition-all"
                         >
