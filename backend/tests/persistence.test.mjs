@@ -50,13 +50,13 @@ after(async () => {
   } finally { redis.disconnect(); await pool.end(); }
 });
 test('schema bootstrap, company transport, JSONB roundtrip and ownership', async () => {
-  let received;
-  ai.generateQuestions = async params => { received = params; return { questions: [{ question: 'Q', ideal_answer: 'A', question_type: 'oral' }] }; };
-  const s = await service.createInterviewSession(owner, 'Backend', 'Junior', 'company-specific', 1, 'Acme', 'Platform', undefined, io);
-  await until(async () => (await repo.findById(s._id)).status === 'in-progress');
+  // Legacy generation was retired; this test verifies the repository's persisted
+  // compatibility fields. Planner creation is covered by test:planner/test:e2e.
+  const s = await repo.create({user:owner,role:'Backend',level:'Junior',interviewType:'company-specific',company:'Acme',companyTrack:'Platform'});
+  s.questions=[{questionText:'Q',idealAnswer:'A',questionType:'oral',isSubmitted:false,isEvaluated:false}];
+  s.status='in-progress';await withSessionLock(s._id,()=>repo.save(s));
   const saved = await repo.findByIdForUser(s._id, owner);
   assert.equal(saved.company, 'Acme'); assert.equal(saved.companyTrack, 'Platform');
-  assert.equal(received.company, 'Acme'); assert.equal(received.companyTrack, 'Platform');
   assert.equal(saved.questions[0].questionText, 'Q');
   assert.equal(await repo.findByIdForUser(s._id, other), null);
   await assert.rejects(() => service.submitSessionAnswer(s._id, other, '0', 'code', 'js', null, null, io), /Session not found/);
