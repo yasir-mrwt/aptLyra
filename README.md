@@ -60,3 +60,5 @@ Current product identity is Aptlyra; the interviewer is Lyra. English Groq Orphe
 ### Durable interview execution
 
 Phase 8 connects planner-backed interviews to SQL-backed received claims, leased BullMQ execution, targeted retry, durable probes, report completion and idempotent SQL rewards. Reload/reconnect restores saved progress through owned REST. Apply migration 008 explicitly and share a private persistent audio staging volume across API/workers. Legacy scoring remains compatible, and missing approved scoring material still produces an abstention. See [runtime and recovery](docs/runtime-recovery.md). No provider invocation is promised to occur only once; committed grade/reward effects are protected against replay.
+
+Question management: normal users use **Submit question**. Linked reviewers use **Review Queue** to analyze with optional local AI or review manually, edit the expected answer, and **Approve for Interview Bank**. Search preparation retries are separate from approval. See [question review documentation](docs/editorial-ai-review.md#simple-question-review).
