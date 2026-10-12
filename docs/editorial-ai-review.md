@@ -57,3 +57,11 @@ Review APIs (authenticated, linked reviewer required):
 - `POST /api/content-intelligence/review/candidates/:id/retry-indexing`: exact published content hash; no approval decision.
 
 These use existing JSON metadata and audit storage. No migration or dependency change is needed. Question/answer drafts and approval snapshots are distinct; historical versions remain immutable.
+
+### Responsive actions and recovery
+
+The normal review screen loads candidates and taxonomy only. Every write shows a pending label, prevents duplicate/conflicting writes, and announces the result. Save draft never publishes. Approve & add to Interview Bank saves the latest editor revision before approving. Reject requires confirmation. A failed indexing operation retains approval and exposes Retry indexing, with no new approval decision.
+
+Mutation invalidation discards older in-flight cache reads so a stale request cannot restore an approved card or an older saved revision. Background refetch errors retain the last visible data and offer Retry.
+
+AI analysis has no automatic HTTP retry. Express allows a 90-second upstream request; the FastAPI editorial review shares a 75-second budget between the original response and its one schema-repair attempt, within the existing provider timeout. Browser analysis has a 95-second bound. Safe logs record request IDs, elapsed times, status and Ollama load/prompt/evaluation durations, never question text or credentials. A timeout leaves the question unapproved and manual review available.

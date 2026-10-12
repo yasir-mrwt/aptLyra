@@ -64,3 +64,13 @@ AND lease_expires_at <= now();
 ```
 
 Apply 008 explicitly after disposable checks, then restart the normal backend. Do not edit applied 001–007, reset the corpus or auto-approve scoring content. The configured 48-question corpus has no reviewed technical references/rubrics and therefore truthfully abstains. Genuine content review is a separate operator requirement. Broader monitoring, backups, external-volume release arrangements and security hardening remain later approved work. Phase 9 is not started.
+
+## Persistent local embedding configuration
+
+Set `NODE_ENV=development` and `EMBEDDING_MODEL_DIR=../.model-cache/l3` in the ignored `ai-service/.env` after provisioning that directory with `.venv/bin/python prepare_embedding_model.py --directory ../.model-cache/l3` (uses the pinned manifest selection). Model weights and `.env` remain outside Git.
+
+Start from `ai-service/` with `.venv/bin/python main.py`. Development gives the `.env` embedding path precedence over an inherited shell embedding path, resolves relative paths against `ai-service/`, and repeats this resolution in reload children. A safe warning reports the override without printing the environment. Production retains process-environment precedence. `PYTHON_DOTENV_DISABLED=1` disables file loading for isolated fixtures.
+
+Startup logs `embedding_readiness: ready` only after real pinned-artifact validation and inference. The authenticated `GET /internal/embeddings/readiness` returns a safe reason and recovery instruction if unavailable. The reviewer screen probes indexing readiness before approval. Human approval can persist during an outage; use Retry indexing after recovery. No fallback model, revision or dimension is substituted.
+
+Healthy embeddings do not alone prove corpus readiness: the active generation, exact content hash, source permissions and candidate eligibility must all match. The existing trusted-only fallback remains separate from dynamic readiness.
