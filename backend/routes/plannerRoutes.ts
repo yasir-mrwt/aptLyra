@@ -10,7 +10,7 @@ import type { AuthenticatedRequest } from "../types/express.js";
 const router=express.Router();
 router.use(protect);
 const previewLimiter=rateLimit({windowMs:15*60*1000,limit:10,message:{code:"planning_rate_limit",message:"Too many plan previews. Try again later."}});
-const messages: Record<string,string>={invalid_setup:"Choose 1–4 competencies, 3–10 questions, 15–60 minutes and the supported junior scope.",
+const messages: Record<string,string>={repeat_history_changed:"Another confirmed interview used a question in this preview. Preview again to keep Only new to me.",invalid_setup:"Choose 1–4 competencies, 3–10 questions, 15–60 minutes and the supported junior scope.",
   invalid_modifiers:"These modifiers are unsupported or invalid. Company/date constraints are never relaxed automatically.",
   plan_not_found:"Plan not found.",stale_corpus:"The corpus changed. Preview your plan again.",stale_retrieval:"Evidence changed. Preview your plan again.",
   plan_not_ready:"This plan cannot be confirmed. Review its coverage and warnings.",stale_revision:"This preview changed. Reload it before confirming.",
@@ -24,7 +24,8 @@ const handle=(operation:(userId:string,req:AuthenticatedRequest)=>Promise<unknow
   catch(error){const e=error instanceof PlannerError?error:new PlannerError("planner_unavailable",503);
     res.status(e.status).json({code:e.code,message:messages[e.code] || "Planning could not complete. Change your setup or retry."});}
 });
-router.get("/capabilities",handle(async()=>{
+router.get("/capabilities",handle(async(userId)=>{
+  const preference=(await query("SELECT setup_snapshot FROM interview_plans WHERE user_id=$1 AND contract_version='planner-v1' AND setup_snapshot ? 'competencies' ORDER BY created_at DESC,id DESC LIMIT 1",[userId])).rows[0]?.setup_snapshot;
   const companies=(await query(`SELECT DISTINCT p->>'company' AS label FROM retrieval_entities e,
     jsonb_array_elements(e.provenance) p WHERE e.purpose='question-selection' AND p->>'sourceType'='voluntary-experience'
       AND p->>'company' IS NOT NULL AND p->>'occurredOn' IS NOT NULL AND (p->>'occurredOn')::date<=CURRENT_DATE ORDER BY label LIMIT 100`)).rows.map(r=>r.label);
@@ -36,7 +37,7 @@ router.get("/capabilities",handle(async()=>{
     GROUP BY ready.inventory_class`);
   const counts=Object.fromEntries(readiness.rows.map(row=>[row.inventory_class,row.count]));
   const starterQuestions=counts.TRUSTED_BASELINE||0,approvedNewQuestions=counts.DYNAMIC_REVIEWED||0;
-  return {roles:ROLES,roots:ROOTS,companies,starterQuestions,approvedNewQuestions,totalAvailable:starterQuestions+approvedNewQuestions+(counts.DYNAMIC_PROVISIONAL||0),
+  return {savedSetup:preference?{...preference,selection:undefined}:undefined,roles:ROLES,roots:ROOTS,companies,starterQuestions,approvedNewQuestions,totalAvailable:starterQuestions+approvedNewQuestions+(counts.DYNAMIC_PROVISIONAL||0),
     eligibleReviewedQuestions:starterQuestions+approvedNewQuestions,provisionalQuestions:counts.DYNAMIC_PROVISIONAL||0,
     modifiers:{company:companies.length>0,resume:false,jd:false,designLite:true}};
 }));

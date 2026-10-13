@@ -7,6 +7,7 @@ import { MODEL, type RetrievalRequest, type RetrievalResponse } from "../retriev
 import { allocate } from "./allocate.js";
 import { adjacent, categories, estimateMinutes, CONTRACT_VERSION, PLANNER_VERSION, PlannerError, validateSetup,
   type Candidate, type Setup, type SelectionReason } from "./contracts.js";
+import { identityKeys, exposureFor, selectionHistory, selectionSnapshot, weightCandidates } from "./history.js";
 import {executionTestFor} from "../codeExecution/specifications.js";
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -54,13 +55,13 @@ export class PlannerService {
         for(const stage of stages) {
           if(semanticUnavailable && !stage.seed)continue;
           if(performance.now()-started>45000)throw new PlannerError("planning_timeout",503);
-          const response=await this.retriever.retrieveQuestions({query:`Junior ${root} technical practice`,limit:5,candidatePool:20,
+          const response=await this.retriever.retrieveQuestions({query:`Junior ${root} technical practice`,plannerPool:true,limit:2000,candidatePool:2000,
             expectedCorpusGeneration:corpus,expectedModelRevision:MODEL.modelRevision,ownership:{userId,sessionId:session._id},
             // Trusted taxonomy already establishes relevance. Healthy embeddings rank
             // that exact approved bank; only an outage uses structured selection.
             strategy:stage.seed&&semanticUnavailable?"structured-seed":stage.practice?"structured-practice":"semantic",
             filters:{interviewEligible:true,taxonomyVersion:setup.taxonomyVersion,competencies:[root],role:setup.role,categories:categories(setup),
-              difficulties:stage.difficulties,alreadySelectedIds:candidates.map(c=>c.hit.questionVersionId!),
+              difficulties:stage.difficulties,
               company:setup.modifiers.company,occurredAfter:setup.modifiers.occurredAfter,occurredBefore:setup.modifiers.occurredBefore,
               reviewedSeed:stage.seed?true:undefined,approvedPractice:stage.practice?true:undefined}});
           operations.push(response.operationId);
@@ -89,7 +90,10 @@ export class PlannerService {
           }
         }
       }
-      const allocation=allocate(setup,semanticUnavailable?candidates.filter(c=>c.inventoryClass==="TRUSTED_BASELINE"):candidates);
+      const history=await selectionHistory(userId);
+      const weighted=weightCandidates(semanticUnavailable?candidates.filter(c=>c.inventoryClass==="TRUSTED_BASELINE"):candidates,history,setup.repeatPolicy!);
+      const allocation=allocate(setup,weighted);
+      const selection=selectionSnapshot(allocation.items,setup.repeatPolicy!);
       allocation.shortages.push(...new Set(failures));
       const planId=await withDatabaseLock("ingestion:editorial:v1",()=>withDatabaseLock(`session:${session._id}`,async()=>{
         if(await generation()!==corpus)throw new PlannerError("stale_corpus",409);
@@ -97,7 +101,7 @@ export class PlannerService {
           taxonomyVersion:setup.taxonomyVersion,corpusVersion:corpus,role:setup.role,mode:setup.mode,requestedCount:setup.count,effectiveCount:allocation.items.length,
           requestedMinutes:setup.minutes,effectiveMinutes:allocation.timeBudget.totalMinutes,selectedCompetencies:setup.competencies,
           difficultyDistribution:allocation.difficultyDistribution,modifiers:setup.modifiers,coverage:allocation.coverage,timeBudget:allocation.timeBudget,shortages:allocation.shortages});
-        await query("UPDATE interview_plans SET setup_snapshot=$2 WHERE id=$1",[planId,JSON.stringify(setup)]);
+        await query("UPDATE interview_plans SET setup_snapshot=$2 WHERE id=$1",[planId,JSON.stringify({...setup,selection})]);
         for(let position=0;position<allocation.items.length;position++) {
           const c=allocation.items[position];
           const rubric=(await query(`SELECT rv.id FROM rubric_versions rv WHERE rv.question_version_id=$1
@@ -140,14 +144,14 @@ export class PlannerService {
       (await generation().catch(()=>null)!==p.corpus_version || currentItems.length!==items.length||
         currentItems.some(item=>!["TRUSTED_BASELINE","DYNAMIC_REVIEWED","DYNAMIC_PROVISIONAL"].includes(item.inventory_class))));
     return {id:p.id,sessionId:p.session_id,contractVersion:p.contract_version,plannerVersion:p.planner_version,taxonomyVersion:p.taxonomy_version,
-      corpusGeneration:p.corpus_version,role:p.role,level:p.level,mode:p.mode,setup:p.setup_snapshot,revision:p.revision,status:p.status,
+      selection:p.setup_snapshot.selection?{...p.setup_snapshot.selection,items:undefined}:undefined,corpusGeneration:p.corpus_version,role:p.role,level:p.level,mode:p.mode,setup:{...p.setup_snapshot,selection:undefined},revision:p.revision,status:p.status,
       requestedCount:p.requested_count,effectiveCount:p.effective_count,requestedMinutes:Number(p.requested_minutes),effectiveMinutes:Number(p.effective_minutes),
       coverage:p.coverage,difficultyDistribution:p.difficulty_distribution,timeBudget:p.time_budget,
       shortages:[...p.shortages,...(stale?["plan_stale_preview_again"]:[])],canConfirm:p.status==="ready" && !stale,
       confirmedAt:p.confirmed_at,modifierAvailability:{company:"requires_permitted_dated_reports",resume:"unavailable",jd:"unavailable",designLite:"mixed_only"},
       evaluationMode:p.confirmed_at?(await sessionRepository.findByIdForUser(p.session_id,userId))?.scoringVersion || "legacy":"rubric-v1",items:items.map(i=>({id:i.id,position:i.position,questionVersionId:i.question_version_id,retrievalId:i.retrieval_id,
         competency:i.primary_competency,category:i.category,difficulty:i.difficulty,origin:i.origin,selectionReason:i.selection_reason,
-        publicationClass:i.publication_class||"unavailable",inventoryClass:i.inventory_class||"unavailable",estimatedMinutes:Number(i.estimated_minutes),available:available.some(e=>e.entity_id===i.question_version_id),
+        repeat:p.setup_snapshot.selection?.items?.[String(i.position)]?{repeated:p.setup_snapshot.selection.items[String(i.position)].repeated,reason:p.setup_snapshot.selection.items[String(i.position)].reason}:undefined,publicationClass:i.publication_class||"unavailable",inventoryClass:i.inventory_class||"unavailable",estimatedMinutes:Number(i.estimated_minutes),available:available.some(e=>e.entity_id===i.question_version_id),
         provenance:available.some(e=>e.entity_id===i.question_version_id)?i.provenance_refs:[]}))};
   }
   async confirm(userId: string, value: unknown) {
@@ -170,6 +174,12 @@ export class PlannerService {
         await generation(p.corpus_version);
         const rows=await availableItems(id,p.corpus_version);
         if(rows.length!==p.effective_count || new Set(rows.map(r=>r.duplicate_group)).size!==rows.length)throw new PlannerError("stale_retrieval",409);
+        if(p.setup_snapshot.repeatPolicy==="only-new") {
+          const history=await selectionHistory(userId);
+          const keys=rows.map((r,index)=>[...identityKeys({questionId:r.question_id,familyKey:r.family_key,text:r.text,group:r.duplicate_group}),
+            ...(p.setup_snapshot.selection?.items?.[String(index)]?.keys || [])]);
+          if(rows.length!==p.requested_count || keys.some(k=>exposureFor(k,history).count))throw new PlannerError("repeat_history_changed",409);
+        }
         session.questions=rows.map(r=>({planItemId:r.id,questionVersionId:r.entity_id,inventoryClass:r.inventory_class,category:r.category,primaryCompetency:r.primary_competency,
           questionText:r.text,questionType:r.category==="coding" || r.category==="sql"?"coding":r.category==="system-design-lite"?"system-design":"oral",
           idealAnswer:"",language:r.category==="sql"?"sql":p.setup_snapshot.codeLanguage,

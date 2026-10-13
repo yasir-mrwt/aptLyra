@@ -19,10 +19,11 @@ function validDate(value:unknown) {
 }
 function validate(request:RetrievalRequest): Filters {
   const f=request.filters || {};
+  if(request.plannerPool && (!request.ownership || f.interviewEligible!==true))throw new RetrievalFailure("invalid_filters");
   if(!f || typeof f!=="object" || Array.isArray(f) || Object.keys(f).some(k=>!keys.has(k))
     || typeof request.query!=="string" || !request.query.trim() || request.query.length>4000
-    || (request.limit!==undefined && (!Number.isInteger(request.limit) || request.limit<1 || request.limit>5))
-    || (request.candidatePool!==undefined && (!Number.isInteger(request.candidatePool) || request.candidatePool<5 || request.candidatePool>20))
+    || (request.limit!==undefined && (!Number.isInteger(request.limit) || request.limit<1 || request.limit>(request.plannerPool?2000:5)))
+    || (request.candidatePool!==undefined && (!Number.isInteger(request.candidatePool) || request.candidatePool<5 || request.candidatePool>(request.plannerPool?2000:20)))
     || (request.minimumSimilarity!==undefined && (!Number.isFinite(request.minimumSimilarity) || request.minimumSimilarity<0 || request.minimumSimilarity>1))
     || (f.taxonomyVersion!==undefined && (typeof f.taxonomyVersion!=="string" || f.taxonomyVersion.length>100))
     || (request.expectedCorpusGeneration!==undefined && !/^corpus-[0-9a-f]{64}$/.test(request.expectedCorpusGeneration))
@@ -176,7 +177,7 @@ export class RetrievalService {
         else {
           const start=performance.now(),built=filterSql(filters,purpose);
           const add=(v:unknown)=>{built.params.push(v);return `$${built.params.length}`;};
-          const g=add(generation),v=structured?null:add(JSON.stringify(vector)),q=add(normalize(request.query)),pool=add(request.candidatePool || 20);
+          const g=add(generation),v=structured?null:add(JSON.stringify(vector)),q=add(normalize(request.query)),pool=add(request.plannerPool?2001:request.candidatePool || 20);
           candidates=(await query(`WITH scored AS MATERIALIZED (
             SELECT e.*,ev.duplicate_group,${structured?"NULL::double precision":`least(1.0,greatest(-1.0,1-(ev.value <=> ${v}::vector)))`} AS similarity,
               lower(regexp_replace(btrim(e.text),'\\s+',' ','g'))=${q} AS exact
@@ -188,10 +189,11 @@ export class RetrievalService {
           ), groups AS (
             SELECT duplicate_group FROM ranked WHERE representative=1 ORDER BY exact DESC,similarity DESC,entity_id LIMIT ${pool}
           ) SELECT r.* FROM ranked r JOIN groups USING(duplicate_group)
-            ORDER BY (r.representative=1) DESC,exact DESC,similarity DESC,entity_id LIMIT 100`,built.params)).rows as Candidate[];
+            ORDER BY (r.representative=1) DESC,exact DESC,similarity DESC,entity_id LIMIT ${request.plannerPool?2001:100}`,built.params)).rows as Candidate[];
+          if(request.plannerPool && candidates.length>2000)throw new RetrievalFailure("planner_pool_exceeded");
           databaseMs=performance.now()-start;
           const structuredReason:Reason=request.strategy==="structured-practice"?"approved_practice_available":"reviewed_seed_available";
-          for(const c of candidates) if(c.representative===1 && (structured || c.exact || (filters.interviewEligible && filters.reviewedSeed) || (c.similarity ?? -1)>=(request.minimumSimilarity ?? 0.3))
+          for(const c of candidates) if((request.plannerPool || c.representative===1) && (structured || c.exact || (filters.interviewEligible && filters.reviewedSeed) || (c.similarity ?? -1)>=(request.minimumSimilarity ?? 0.3))
             && selected.size<(request.limit || 5))selected.set(c.entity_id,structured?structuredReason:c.exact?"exact_match":"semantic_match");
           outcome=selected.size?"success":"no_match";
           reason=selected.size?(structured?structuredReason:candidates.some(c=>selected.get(c.entity_id)==="exact_match")?"exact_match":"semantic_match")

@@ -5,7 +5,9 @@ export const PLANNER_VERSION = "deterministic-v1";
 export const CONTRACT_VERSION = "planner-v1";
 export const ROOTS = ["dsa","oop","dbms-sql","os","networks","backend-web","design-lite","programming"] as const;
 export const ROLES = ["Software Engineer","Backend Developer","Full Stack Developer"] as const;
+export type RepeatPolicy = "fresh-first" | "only-new" | "revision";
 export interface Setup {
+  repeatPolicy?: RepeatPolicy;
   role: typeof ROLES[number]; level: "junior"; taxonomyVersion: "junior-se-v1";
   competencies: string[]; difficulty: Difficulty; mode: "oral" | "coding" | "mixed";
   count: number; minutes: number; language: "en"; codeLanguage: "python" | "javascript";
@@ -14,6 +16,7 @@ export interface Setup {
 }
 export type SelectionReason = "filtered_retrieval" | "adjacent_difficulty" | "reviewed_seed" | "approved_template" | "core_reviewed" | "recent_signal" | "coverage" | "difficulty" | "fallback";
 export interface Candidate {
+  history?: { keys: string[]; count: number; lastAssigned: number; weakness: number; priority: number };
   hit: RetrievalHit; root: string; group: string; reason: SelectionReason; minutes: number; publicationClass?: string;
   inventoryClass?: "TRUSTED_BASELINE" | "DYNAMIC_REVIEWED" | "DYNAMIC_PROVISIONAL";
 }
@@ -30,7 +33,7 @@ const validDate=(s: unknown): s is string => typeof s==="string" && /^\d{4}-\d{2
 export function validateSetup(value: unknown): Setup {
   if(!value || typeof value!=="object" || Array.isArray(value))throw new PlannerError("invalid_setup");
   const v=value as Record<string,unknown>;
-  const keys=["role","level","taxonomyVersion","competencies","difficulty","mode","count","minutes","language","codeLanguage","modifiers","includeRecentTrends"];
+  const keys=["role","level","taxonomyVersion","competencies","difficulty","mode","count","minutes","language","codeLanguage","modifiers","includeRecentTrends","repeatPolicy"];
   if(Object.keys(v).some(k=>!keys.includes(k)) || !ROLES.includes(v.role as Setup["role"]) || v.level!=="junior"
     || v.taxonomyVersion!=="junior-se-v1" || !["easy","standard","stretch"].includes(v.difficulty as string)
     || !["oral","coding","mixed"].includes(v.mode as string) || v.language!=="en" || !["python","javascript"].includes(v.codeLanguage as string)
@@ -39,6 +42,7 @@ export function validateSetup(value: unknown): Setup {
     || !Array.isArray(v.competencies) || v.competencies.length<1 || v.competencies.length>4
     || new Set(v.competencies).size!==v.competencies.length || v.competencies.some(c=>!ROOTS.includes(c))
     || v.count<v.competencies.length || (v.includeRecentTrends!==undefined&&typeof v.includeRecentTrends!=="boolean"))throw new PlannerError("invalid_setup");
+  if(v.repeatPolicy!==undefined && !["fresh-first","only-new","revision"].includes(v.repeatPolicy as string))throw new PlannerError("invalid_setup");
   const m=v.modifiers ?? {};
   if(!m || typeof m!=="object" || Array.isArray(m))throw new PlannerError("invalid_modifiers");
   const modifiers=m as Setup["modifiers"];
@@ -49,7 +53,7 @@ export function validateSetup(value: unknown): Setup {
     || (modifiers.occurredAfter && modifiers.occurredBefore && modifiers.occurredAfter>modifiers.occurredBefore)
     || (modifiers.designLite!==undefined && typeof modifiers.designLite!=="boolean")
     || (modifiers.designLite && v.mode!=="mixed"))throw new PlannerError("invalid_modifiers");
-  return {...v,includeRecentTrends:v.includeRecentTrends===true,competencies:[...v.competencies].sort(),modifiers:{...modifiers}} as Setup;
+  return {...v,repeatPolicy:v.repeatPolicy ?? "fresh-first",includeRecentTrends:v.includeRecentTrends===true,competencies:[...v.competencies].sort(),modifiers:{...modifiers}} as Setup;
 }
 export const adjacent=(d: Difficulty): Difficulty => d==="standard"?"easy":"standard";
 export function categories(setup: Setup): QuestionCategory[] {

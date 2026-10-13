@@ -20,7 +20,7 @@ export interface Filters {
   interviewEligible?: true;
   excludedFamilies?: string[]; excludedVersions?: string[]; alreadySelectedIds?: string[];
 }
-export interface RetrievalRequest { query: string; filters?: Filters; limit?: number; candidatePool?: number;
+export interface RetrievalRequest { plannerPool?: boolean; query: string; filters?: Filters; limit?: number; candidatePool?: number;
   minimumSimilarity?: number; expectedCorpusGeneration?: string; expectedModelRevision?: string;
   strategy?: "semantic" | "structured-seed" | "structured-practice"; ownership?: { userId: string; sessionId: string } }
 export interface EmbeddingBatch { modelId: string; modelRevision: string; dimension: number; normalization: string;
