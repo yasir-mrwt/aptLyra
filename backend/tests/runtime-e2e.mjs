@@ -50,6 +50,14 @@ try{
  assert.ok(!strategies.includes('structured-practice'));
  assert.ok(outage.shortages.some(code=>code.startsWith('retrieval_unavailable:')));
  assert.equal(new Set(outage.items.map(item=>item.questionVersionId)).size,3);
+ // Runtime recovery needs two reviewed dynamic questions and one trusted starter, not a lucky random order.
+ // Keep real retrieval/evidence and constrain this test-only candidate pool; planner policy has its own suite.
+ const trustedOral=(await f.query("SELECT e.entity_id FROM retrieval_entities e JOIN content_question_readiness r ON r.question_version_id=e.entity_id WHERE e.purpose='question-selection' AND r.inventory_class='TRUSTED_BASELINE' AND e.primary_competency LIKE 'programming.%' AND e.category='conceptual-oral' AND e.difficulty='easy' LIMIT 1")).rows[0];
+ assert.ok(trustedOral);
+ const runtimeIds=new Set([...selected.slice(0,2).map(r=>r.entity_id),trustedOral.entity_id]);
+ const {plannerService}=await import('../dist/planner/service.js');
+ const runtimeRetriever=new RetrievalService();
+ plannerService.retriever={retrieveQuestions:async input=>{const response=await runtimeRetriever.retrieveQuestions(input);return {...response,hits:response.hits.filter(h=>runtimeIds.has(h.questionVersionId))};}};
  const setup={role:'Software Engineer',level:'junior',taxonomyVersion:'junior-se-v1',competencies:['dsa','programming'],difficulty:'standard',mode:'oral',count:3,minutes:30,language:'en',codeLanguage:'javascript',modifiers:{}};
  const preview=await request('/interview-plans/preview',{method:'POST',body:setup});assert.equal(preview.status,201);const plan=preview.data;assert.equal(plan.canConfirm,true);assert.equal(plan.effectiveCount,3);
  assert.equal((await request('/interview-plans/confirm',{method:'POST',owner:other,body:{planId:plan.id,revision:plan.revision}})).status,404);

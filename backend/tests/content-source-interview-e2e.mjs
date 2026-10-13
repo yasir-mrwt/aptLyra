@@ -158,7 +158,10 @@ try{
   const planner=new PlannerService(deterministicRetriever),setup={role:'Backend Developer',level:'junior',taxonomyVersion:'junior-se-v1',competencies:['dsa'],difficulty:'standard',mode:'oral',
     count:4,minutes:30,language:'en',codeLanguage:'javascript',includeRecentTrends:true,modifiers:{}};
   const withoutRecent=await planner.preview(f.owner,{...setup,count:3,includeRecentTrends:false});
-  assert.equal(withoutRecent.items.some(item=>item.questionVersionId===versions[3]),false);
+  // Approved practice is eligible without trends opt-in; randomized ties need not prefer reviewed rows.
+  assert.equal(withoutRecent.canConfirm,true);assert.equal(withoutRecent.items.length,3);
+  assert.ok(withoutRecent.items.every(item=>versions.includes(item.questionVersionId)));
+  assert.equal(withoutRecent.selection.newCount,3);
   const plan=await planner.preview(f.owner,setup);
   assert.equal(plan.canConfirm,true);assert.equal(plan.effectiveCount,4);
   assert.equal(plan.items.filter(item=>item.publicationClass==='fresh/provisional').length,1);
@@ -182,6 +185,12 @@ try{
     session=await publicEvaluationSession(session);
     assert.equal(session.status,'completed');assert.ok(session.report);assert.equal(session.reviewedSummary.eligible,3,JSON.stringify({questions:session.questions.map(q=>({id:q.questionVersionId,status:q.evaluation?.rubricStatus,rubric:q.evaluation?.rubricVersionId})),items:(await f.query('SELECT question_version_id,rubric_version_id FROM plan_items WHERE plan_id=$1 ORDER BY position',[plan.id])).rows}));
     assert.equal(session.reviewedSummary.provisional,1);
+    const {selectionHistory}=await import('../dist/planner/history.js');
+    const history=(await selectionHistory(f.owner)).filter(h=>h.assignment===plan.id);
+    const provisionalQuestion=(await f.query('SELECT question_id FROM question_versions WHERE id=$1',[versions[3]])).rows[0].question_id;
+    assert.equal(history.find(h=>h.keys.includes('question:'+provisionalQuestion)).weakness,0,'provisional score cannot become a reviewed weakness');
+    assert.equal(history.filter(h=>h.weakness>0).length,3,'only the three human-reviewed evaluations supply weakness');
+
     const historicalQuestion=session.questions.find(q=>q.questionVersionId===versions[0]);
     const historicalText=historicalQuestion.questionText,historicalRubric=historicalQuestion.evaluation.rubricVersionId;
     const snapshot=(await f.query('SELECT questions,summary FROM interview_reports WHERE session_id=$1',[session._id])).rows[0];

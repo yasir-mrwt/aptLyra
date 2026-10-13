@@ -62,6 +62,7 @@ before(async()=>{
  aiService.draftRubric=originalDraft;aiService.reviewEditorialCandidate=originalReview;
  const {RetrievalService}=await import('../dist/retrieval/service.js'),{PlannerService,plannerService}=await import('../dist/planner/service.js');
  const retriever=new RetrievalService(fake);service=new PlannerService(retriever);
+ const preview=service.preview.bind(service);service.preview=async(...args)=>{try{return await preview(...args);}catch(e){if(e.cause)console.error("Planner fixture cause:",e.cause);throw e;}};
  // Actual authenticated router with controlled embedding computation only.
  plannerService.retriever=retriever;
  const express=(await import('express')).default,cookieParser=(await import('cookie-parser')).default;
@@ -107,8 +108,8 @@ test('owned preview persists complete plan/items/evidence; GET hides all questio
  const loaded=await service.get(owner,saved.id);assert.deepEqual(loaded.items,saved.items);
  await assert.rejects(()=>service.get(other,saved.id),e=>e.status===404);
 });
-test('same setup and corpus select identical question versions/order/reasons across previews',async()=>{
- const p=await service.preview(owner,setup());assert.deepEqual(p.items.map(i=>[i.questionVersionId,i.selectionReason]),saved.items.map(i=>[i.questionVersionId,i.selectionReason]));
+test('preview pins its selected order and reasons across reloads without consuming history',async()=>{
+ const p=await service.preview(owner,setup());assert.deepEqual((await service.get(owner,p.id)).items,p.items);assert.equal(p.selection.repeatedCount,0);
  assert.ok(p.items.every((i,n)=>i.id!==saved.items[n].id)); // IDs belong to each immutable owned plan.
 });
 test('complete 48-question preflight accepts supported three-question setup; absent/incomplete/model-mismatched corpus fails before session writes',async()=>{
@@ -222,8 +223,9 @@ test('owned draft/session deletion still cascades plans; legacy JSONB sessions r
  const loaded=await sessionRepository.findByIdForUser(old._id,owner);assert.equal(loaded.planId,undefined);assert.deepEqual(loaded.questions,old.questions);
 });
 test('withdrawn preview items are redacted from fresh preview reads and cannot be confirmed',async()=>{
- const p=await service.preview(owner,setup({mode:'oral',count:3}));const q=p.items[0].questionVersionId;
- const active=await service.preview(owner,setup({mode:'oral',count:3}));await service.confirm(owner,{planId:active.id,revision:1});
+ const p=await service.preview(owner,setup({competencies:['oop'],mode:'oral',count:10}));
+ const active=await service.preview(owner,setup({competencies:['oop'],mode:'oral',count:10}));await service.confirm(owner,{planId:active.id,revision:1});
+ const q=active.items.find(i=>p.items.some(j=>j.questionVersionId===i.questionVersionId)).questionVersionId;
  const record=(await f.query('SELECT id FROM ingestion_candidates WHERE question_version_id=$1',[q])).rows[0];await f.r.withdrawQuestion(record.id,'muhammad-yasir','phase6-withdrawal-check');
  const loaded=await service.get(owner,p.id);assert.equal(loaded.canConfirm,false);assert.ok(loaded.items.some(i=>!i.available && i.provenance.length===0));
  await assert.rejects(()=>service.confirm(owner,{planId:p.id,revision:1}),e=>e.code==='stale_retrieval');
@@ -252,4 +254,114 @@ test('unclassified unindexed content cannot block the intact trusted interview c
   assert.ok(plan.items.every(item=>item.inventoryClass==='TRUSTED_BASELINE'&&item.questionVersionId!==row.entity_id));
   throw rollback;
  }),error=>error===rollback);
+});
+
+test('history policies reserve only confirmed assignments, isolate users, disclose exhaustion and serialize strict confirmation',async()=>{
+ const a=randomUUID(),b=randomUUID();
+ for(const id of [a,b])await f.query('INSERT INTO users(id,name,email) VALUES($1,$2,$3)',[id,'Repeat policy fixture',id+'@example.invalid']);
+ const s=setup({competencies:['programming'],mode:'coding',count:3,minutes:45,repeatPolicy:'only-new'});
+ const first=await service.preview(a,s),parallel=await service.preview(a,s);
+ assert.equal(first.selection.newCount,3);assert.equal(first.selection.repeatedCount,0);
+ const outcomes=await Promise.allSettled([service.confirm(a,{planId:first.id,revision:1}),service.confirm(a,{planId:parallel.id,revision:1})]);
+ assert.equal(outcomes.filter(r=>r.status==='fulfilled').length,1);
+ assert.equal(outcomes.find(r=>r.status==='rejected').reason.code,'repeat_history_changed');
+ const winner=outcomes[0].status==='fulfilled'?first:parallel;
+ const again=await service.confirm(a,{planId:winner.id,revision:1});assert.equal(again.sessionId,winner.sessionId);
+ const shortage=await service.preview(a,s);assert.equal(shortage.canConfirm,false);assert.equal(shortage.effectiveCount,0);
+ assert.ok(shortage.shortages.includes('only_new_shortage:0:3'));assert.deepEqual(shortage.setup.competencies,s.competencies);
+ await assert.rejects(()=>service.confirm(a,{planId:shortage.id,revision:1}),e=>e.code==='plan_not_ready');
+ const independent=await service.preview(b,s);assert.equal(independent.canConfirm,true);assert.equal(independent.selection.newCount,3);
+ const revision=await service.preview(a,{...s,repeatPolicy:'revision'});assert.equal(revision.selection.repeatedCount,3);assert.ok(revision.items.every(i=>i.repeat.reason==='revision_due'));
+ const fresh=await service.preview(a,{...s,repeatPolicy:'fresh-first'});assert.equal(fresh.selection.repeatedCount,3);
+ const capabilities=await request(app).get('/api/interview-plans/capabilities').set('Cookie',await cookie(a));
+ assert.equal(capabilities.body.savedSetup.repeatPolicy,'fresh-first');assert.equal(capabilities.body.savedSetup.selection,undefined);
+ assert.equal(JSON.stringify(fresh).includes('duplicate:'),false);
+ const {RetrievalService}=await import('../dist/retrieval/service.js'),{PlannerService}=await import('../dist/planner/service.js');
+ const offline=new PlannerService(new RetrievalService({embed:async()=>{throw new Error('controlled embedding outage');}}));
+ const fallback=await offline.preview(a,s);assert.equal(fallback.canConfirm,false);assert.equal(fallback.effectiveCount,0);
+ assert.ok(fallback.shortages.some(s=>s.startsWith('retrieval_unavailable:')));
+});
+
+test('fresh allocation finds unseen feasible combinations rather than greedy repeats; strict reports two of three',async()=>{
+ const {weightCandidates,identityKeys,exposureFor}=await import('../dist/planner/history.js');
+ const s=validateSetup(setup({competencies:['dsa'],mode:'oral',count:3,minutes:30}));
+ const cs=[candidate('dsa',1),candidate('dsa',2),candidate('dsa',3,'easy'),candidate('dsa',4,'easy')];
+ cs[0].hit.questionId='original';cs[0].hit.text='Original question';cs[1].hit.text='Different question';
+ const hist=[{assignment:'past',at:1,keys:identityKeys({questionId:'original',text:'Original question',familyKey:cs[0].hit.familyKey,group:cs[0].group}),weakness:0}];
+ const weighted=weightCandidates(cs,hist,'fresh-first',100,()=>0.5);
+ // Exact difficulty needs two standard: one repeat is unavoidable under that constraint.
+ const first=allocate(s,weighted);assert.equal(first.items.filter(c=>c.history.count).length,1);
+ const extra=candidate('dsa',5);extra.hit.text='Another fresh question';
+ const allFresh=allocate(s,weightCandidates([...cs,extra],hist,'fresh-first',100,()=>0.5));assert.equal(allFresh.items.filter(c=>c.history.count).length,0);
+ const strict=allocate({...s,repeatPolicy:'only-new'},weightCandidates(cs.slice(0,3),hist,'only-new',100,()=>0.5));
+ assert.equal(strict.items.length,2);assert.equal(strict.canConfirm,false);assert.ok(strict.shortages.includes('only_new_shortage:2:3'));
+ assert.equal(exposureFor(identityKeys({questionId:'original',familyKey:'new-family',text:'Changed version'}),hist).count,1);
+ assert.equal(exposureFor(identityKeys({questionId:'new-id',familyKey:cs[0].hit.familyKey,text:'Changed wording'}),hist).count,1);
+ assert.equal(exposureFor(identityKeys({text:'  ORIGINAL   question '}),hist).count,1);
+ assert.equal(exposureFor(identityKeys({text:'Unrelated question'}),hist).count,0);
+ const collision=[...cs,extra];collision[1]={...collision[1],group:extra.group};
+ const unique=allocate(s,weightCandidates(collision,hist,'fresh-first'));assert.equal(new Set(unique.items.map(c=>c.group)).size,unique.items.length);
+});
+
+test('revision weights age and reviewed weakness; unscored exposures are neutral and fresh fallback is explicit',async()=>{
+ const {weightCandidates,identityKeys}=await import('../dist/planner/history.js');
+ const cs=[candidate('dsa',1),candidate('dsa',2),candidate('dsa',3,'easy')];
+ const at=Date.now()-10*86400000;
+ const histories=cs.map((c,i)=>({keys:identityKeys({familyKey:c.hit.familyKey}),assignment:String(i),at,weakness:i===0?0.8:0}));
+ const weighted=weightCandidates(cs,histories,'revision',Date.now(),()=>0.5);
+ assert.ok(weighted[0].history.priority>weighted[1].history.priority);assert.equal(weighted[1].history.priority,weighted[2].history.priority);
+ const fresh=allocate(validateSetup(setup({competencies:['dsa'],mode:'oral',count:3,repeatPolicy:'revision'})),weightCandidates(cs,[],'revision'));
+ assert.ok(fresh.shortages.includes('revision_fresh_fallback'));
+ assert.throws(()=>validateSetup(setup({repeatPolicy:'anything'})));
+});
+
+test('fresh search backtracks across root/family conflicts and randomizes equivalent choices',async()=>{
+ const {weightCandidates}=await import('../dist/planner/history.js');
+ const s=validateSetup(setup({competencies:['dsa','programming'],mode:'oral',count:3}));
+ const a=candidate('dsa',1),b=candidate('dsa',2),c=candidate('dsa',3,'easy'),d=candidate('programming',4);
+ a.group=d.group='shared-duplicate';a.hit.familyKey=d.hit.familyKey='shared-family';
+ const weighted=weightCandidates([a,b,c,d],[],'fresh-first',100,()=>0.5);
+ const result=allocate(s,weighted);assert.equal(result.items.length,3);assert.equal(result.canConfirm,true);
+ assert.ok(!result.items.includes(weighted[0]));assert.ok(result.items.every(c=>c.history.count===0));
+ const pool=Array.from({length:6},(_,i)=>candidate('dsa',i,i<3?'standard':'easy'));
+ const only=validateSetup(setup({competencies:['dsa'],mode:'oral',count:3}));
+ let n=0;const left=allocate(only,weightCandidates(pool,[],'fresh-first',100,()=>++n/10));
+ n=6;const right=allocate(only,weightCandidates(pool,[],'fresh-first',100,()=>--n/10));
+ assert.notDeepEqual(left.items.map(c=>c.hit.questionVersionId),right.items.map(c=>c.hit.questionVersionId));
+});
+
+test('same-user successive Fresh first sessions exhaust compatible unseen questions before repeating',async()=>{
+ const id=randomUUID();await f.query('INSERT INTO users(id,name,email) VALUES($1,$2,$3)',[id,'Back-to-back fixture',id+'@example.invalid']);
+ const s=setup({competencies:['os','networks'],mode:'oral',count:3,minutes:30,repeatPolicy:'fresh-first'});
+ const first=await service.preview(id,s);assert.equal(first.canConfirm,true);assert.equal(first.selection.newCount,3);
+ await service.confirm(id,{planId:first.id,revision:1});
+ const next=await service.preview(id,s);assert.equal(next.canConfirm,true);assert.equal(next.selection.newCount,3);
+ assert.ok(next.items.every(i=>!first.items.some(j=>i.questionVersionId===j.questionVersionId)));
+ const {selectionHistory}=await import('../dist/planner/history.js');
+ const history=await selectionHistory(id);assert.ok(history.length===3 && history.every(h=>h.weakness===0));
+});
+
+test('repeat-budget search agrees with exhaustive feasible subsets, including repeats in the last slot',async()=>{
+ for(let trial=0;trial<32;trial++){
+  const cs=Array.from({length:6},(_,i)=>({...candidate('dsa',i,i<3?'standard':'easy'),history:{keys:['key'+i],count:(trial>>i)&1,lastAssigned:1,weakness:0,priority:(i*3+trial)%7}}));
+  let minimum=Infinity;
+  for(let a=0;a<cs.length;a++)for(let b=a+1;b<cs.length;b++)for(let c=b+1;c<cs.length;c++){
+   const items=[cs[a],cs[b],cs[c]];
+   if(items.filter(i=>i.hit.difficulty==='standard').length===2)minimum=Math.min(minimum,items.filter(i=>i.history.count).length);
+  }
+  const result=allocate(validateSetup(setup({competencies:['dsa'],mode:'oral',count:3,repeatPolicy:'fresh-first'})),cs);
+  assert.equal(result.items.length,3);assert.equal(result.items.filter(i=>i.history.count).length,minimum,`trial ${trial}`);
+ }
+});
+
+test('retained historical sessions exclude exact bank content without trusting legacy scores',async()=>{
+ const id=randomUUID();await f.query('INSERT INTO users(id,name,email) VALUES($1,$2,$3)',[id,'Historical fixture',id+'@example.invalid']);
+ const {sessionRepository}=await import('../dist/models/Session.js');
+ const session=await sessionRepository.create({user:id,role:'Software Engineer',level:'Junior',interviewType:'coding-mix'});
+ const bank=(await f.query("SELECT text FROM retrieval_entities WHERE purpose='question-selection' AND primary_competency LIKE 'programming.%' AND category='coding'")).rows;
+ assert.equal(bank.length,3);
+ session.status='completed';session.questions=bank.map(row=>({questionText:row.text,questionType:'coding',idealAnswer:'',technicalScore:1,isSubmitted:true,isEvaluated:true}));await sessionRepository.save(session);
+ const p=await service.preview(id,setup({competencies:['programming'],mode:'coding',count:3,repeatPolicy:'only-new'}));
+ assert.equal(p.canConfirm,false);assert.equal(p.effectiveCount,0);
+ const {selectionHistory}=await import('../dist/planner/history.js');assert.ok((await selectionHistory(id)).every(h=>h.weakness===0));
 });
