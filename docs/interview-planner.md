@@ -2,9 +2,9 @@
 
 ## Current behavior
 
-The dashboard previews an owned persisted `planner-v1` plan before starting practice. Express runs the deterministic planner; FastAPI supplies compatible embeddings. Confirmation projects pinned question versions into the existing runner. See [runtime recovery](runtime-recovery.md) and [rubric evaluation](rubric-evaluation.md) for current durable execution and scoring.
+The dashboard previews an owned persisted `planner-v1` plan before starting practice. Express runs the history-aware constraint planner; FastAPI supplies compatible embeddings. Confirmation projects pinned question versions into the existing runner. See [runtime recovery](runtime-recovery.md) and [rubric evaluation](rubric-evaluation.md) for current durable execution and scoring.
 
-The bank includes the trusted 48-question starter path, human-approved practice questions, and questions with reviewed scoring. Practice questions no longer require a recent-trends opt-in or evidence/scoring guide. Reviewed questions remain preferred within the existing difficulty ordering; practice answers without a guide receive descriptive provisional feedback and do not contribute to reviewed aggregate scoring. Preview labels each item's inventory class. All root coverage, time, mode, difficulty, family and source constraints remain explicit.
+The bank includes the trusted 48-question starter path, human-approved practice questions, and questions with reviewed scoring. Practice questions no longer require a recent-trends opt-in or evidence/scoring guide. History policy and bounded randomized ties select among eligible questions; practice answers without a guide receive descriptive provisional feedback and do not contribute to reviewed aggregate scoring. Preview labels each item's inventory class. All root coverage, time, mode, difficulty, family and source constraints remain explicit.
 
 ## Inputs and validation
 
@@ -14,7 +14,7 @@ Modifiers are separate from mode. Company and valid occurrence-date bounds remai
 
 ## Retrieval and fallback
 
-Each sorted root queries retrieval with role, taxonomy/root, category/mode, difficulty, prior selections, company/date and expected model/corpus identity. Stages are requested difficulty, adjacent junior difficulty, trusted starter ranking, then approved dynamic practice. The duplicate approved-template stage is retired.
+Each sorted root queries retrieval with role, taxonomy/root, category/mode, difficulty, company/date and expected model/corpus identity. Stages are requested difficulty, adjacent junior difficulty, trusted starter ranking, then approved dynamic practice. The duplicate approved-template stage is retired.
 
 Healthy embeddings rank the exact trusted starter bank even when a broad root query has low or negative similarity: reviewed taxonomy and mode establish eligibility, while similarity orders eligible questions. This exception applies only to the hash-bound starter stage, never arbitrary dynamic content or technical grounding. A temporary semantic outage skips further model requests and dynamic lookup, selecting only `TRUSTED_BASELINE` through structured metadata with null similarity. The preview states the outage and fallback. Selected competencies, mode, difficulty preference, company/date constraints and duplicate prevention remain enforced.
 
@@ -24,13 +24,27 @@ The final `structured-practice` stage handles generic root queries whose similar
 
 Retrieval operations are owned by the candidate/session and linked to the plan. Query text is not stored, only hashes. Item provenance comes from actual selected retrieval results; source quality and dates remain genuine editorial metadata. Provider errors are recorded as shortages; lack of an active compatible complete index is an error, not fabricated evidence. All sources and corpus identity are checked again under the editorial lock during persistence and confirmation. Withdrawn preview provenance is redacted on fresh reads. Confirmed runner reads redact unavailable originals; submission and speech reject those items. Historical persisted snapshots remain unchanged. A response already delivered cannot be recalled; complete stale-result/retention runtime work belongs to the later runtime phase.
 
-Per stage: five returned candidates, pool of twenty duplicate groups. A 45-second elapsed-budget check occurs between retrieval calls; it is not hard cancellation of a running provider call. Browser preview timeout is 90 seconds. These are bounded requests in the API process, with no recovery/outbox guarantee.
+General retrieval still returns five candidates from twenty duplicate groups. The internal owned planner pool considers all eligible rows up to 2,000 per stage, retaining duplicate variants until allocation so an early representative cannot discard a feasible difficulty/mode combination. Overflow fails closed instead of silently truncating. A 45-second elapsed-budget check occurs between retrieval calls; it is not hard cancellation of a running provider call. Browser preview timeout is 90 seconds. These are bounded requests in the API process, with no recovery/outbox guarantee.
 
-## Deterministic allocation
+## History-aware allocation
 
-Every selected root must receive an original question. Roots are sorted; slots alternate round-robin. Exclude repeated question families and indexed duplicate groups. Stable ordering considers desired difficulty, fallback stage, estimated minutes, real similarity when present, then question-version ID. Same validated setup and unchanged corpus produce the same versions, ordering and reasons; each independently created plan has its own UUID item identities.
+Every selected root must receive an original question. Roots are sorted; slots alternate round-robin. Exclude repeated question families and indexed duplicate groups. Fresh-first searches increasing repeat budgets, using an admissible remaining-fresh-capacity bound and memoized failed subsets. It minimizes repeats within the existing topic/difficulty/time allocation, rather than greedily sorting and accepting an avoidable repeat. Older, less frequent assignments break repeat ties; bounded random jitter breaks otherwise comparable choices. Revision uses elapsed days (capped at 90) weighted by reviewed weakness, with bounded jitter and fresh fallback. Every preview pins its selected order and reasons: reload never reshuffles a plan. New previews can differ.
 
-Target requested difficulty count is `round(0.6 × effectiveCount)`, with the remainder adjacent: easy→standard, standard→easy, stretch→standard. For each proposed count, first search for that distribution, then an explicitly labeled difficulty shortfall. Reduce count from requested down to root count before sacrificing coverage. Search is bounded at 50,000 nodes; exhaustion is an explicit retry/error rather than an optimality claim. A mode/coverage failure or missing root yields a non-confirmable correction. Underfilled plans can be confirmed only if every requested root and core mode remain satisfied. Mixed requires actual coding/SQL and spoken/design items. Design-lite never becomes an implicit core mode.
+Target requested difficulty count is `round(0.6 × effectiveCount)`, with the remainder adjacent: easy→standard, standard→easy, stretch→standard. For each proposed count, first search for that distribution, then an explicitly labeled difficulty shortfall. Reduce count from requested down to root count before sacrificing coverage. Search is bounded at 50,000 nodes; exhaustion is an explicit retry/error rather than an optimality claim. A mode/coverage failure or missing root yields a non-confirmable correction. Fresh-first and revision underfilled plans can be confirmed only if every requested root and core mode remain satisfied. Only-new underfilled plans are never confirmable; the requested count and filters remain unchanged. Mixed requires actual coding/SQL and spoken/design items. Design-lite never becomes an implicit core mode.
+
+## Repetition choices and history
+
+- **Fresh first** (default): maximize feasible unseen selections while preserving the existing allocation rules; disclose any necessary repeats.
+- **Only new to me**: exclude all identities assigned in retained confirmed sessions before allocation. A shortage such as 2/3 disables confirmation and suggests changing competencies/difficulty, choosing Fresh first, or waiting for approved questions. A preview never consumes history.
+- **Revision practice**: revisit older assignments, preferring valid reviewed weaknesses. Unanswered, abstained, legacy and provisional scores do not become technical weakness evidence. With insufficient compatible history, fresh items are labeled as fallback.
+
+History is queried in batches for the authenticated user. Identity matches any stable question ID, trustworthy family key, indexed duplicate group (including keys pinned in past previews), or normalized exact question-text hash. Version changes therefore retain identity without treating an entire competency as a family. Historical pre-planner sessions use exact normalized text only. Unknown paraphrases without a known family/duplicate link cannot be inferred reliably.
+
+A question is used once its plan is confirmed, including still-active sessions; answering is not required. Revision weakness requires a succeeded, medium/high-confidence evaluation against a known rubric with hash-bound human approval; latest revisions supersede earlier results. Other scores remain neutral. Retention follows existing session deletion: deleting history removes its repeat protection, which is disclosed in the form and preview.
+
+The labeled native select sits below competencies, before Preview. Per-user tab drafts preserve unsent changes across reload/back; the latest persisted owned plan supplies the durable setup on another visit. Preview displays `New: N · Repeated: M` and marks repeated items. These counts describe selection-time history. The snapshot stores `selection.algorithmVersion=history-weighted-v1`, policy, counts, identity keys and reasons; public responses omit identity keys and priorities. The database’s existing `deterministic-v1` compatibility identifier remains unchanged because its invariant trigger requires it. No migration is needed.
+
+Confirmation keeps the existing global editorial transaction lock followed by the session lock. This serializes competing confirmations across processes. Only-new rechecks both pinned and current identities against committed history inside that transaction; a conflicting second confirmation returns `repeat_history_changed` and requires a new preview. Duplicate confirmation returns the original session before consuming another assignment. Structured trusted-only fallback applies the same history policy.
 
 ## Time budget
 
@@ -43,7 +57,7 @@ Target requested difficulty count is `round(0.6 × effectiveCount)`, with the re
 | Setup/wrap-up | 2 |
 | Probe reserve | 4 total |
 
-Persist question minutes, overhead, total and slack; total must fit requested duration. Count is reduced before dropping coverage. Impossible minimum coverage needs a setup change. These frozen estimates do not enforce a wall-clock deadline or change legacy follow-up behavior. The reserved four minutes is preparatory; no Phase 7/8 probe policy is added.
+Persist question minutes, overhead, total and slack; total must fit requested duration. For fresh-first/revision, count is reduced before dropping coverage. Only-new reports feasible counts but cannot confirm a reduced count. Impossible minimum coverage needs a setup change. These frozen estimates do not enforce a wall-clock deadline or change legacy follow-up behavior. The reserved four minutes is preparatory; no Phase 7/8 probe policy is added.
 
 ## Persistence and API
 
@@ -53,7 +67,7 @@ Database guards enforce immutable snapshots/items after creation, owned compatib
 
 | Authenticated owned endpoint | Behavior |
 |---|---|
-| GET `/api/interview-plans/capabilities` | Supported modifiers and eligible company labels |
+| GET `/api/interview-plans/capabilities` | Supported modifiers, eligible company labels and the authenticated user’s latest saved setup |
 | POST `/api/interview-plans/preview` | Strict setup; 201 persisted preview; no runnable questions before confirmation |
 | GET `/api/interview-plans/:id` | Owned snapshot, metadata/coverage/time/shortages; no question text or answers |
 | POST `/api/interview-plans/confirm` | `{planId, revision}` only; recheck compatibility/availability; atomically start linked session |
@@ -83,7 +97,7 @@ Ignored backend/frontend build outputs contain generated copies of the retained 
 
 ## Validation and limitations
 
-Planner tests use the real approved seed, PostgreSQL/pgvector, Redis, authentication and HTTP routes with a controlled embedding fixture. They verify deterministic selection, persistence/invariants, ownership, preview/confirm separation and idempotency, stale and withdrawn data, shortages, fallback, budgets and legacy coexistence. Frontend tests verify setup, pending/retry, warnings, states and confirmation navigation. Regression suites cover ingestion/seed, retrieval, schema, persistence and server smoke. CPU model checks are functional measurements, not held-out quality research. External voice/grading providers and browser microphone/whiteboard interaction are not certified by fixture tests. Corpus coverage remains small and uneven; reviewed rubrics/company reports/technical-reference coverage is zero.
+Planner tests use the real approved seed, PostgreSQL/pgvector, Redis, authentication and HTTP routes with a controlled embedding fixture. They verify pinned selection, repeat policies, exhaustive small-pool repeat optimality, strict confirmation races, per-user history, persistence/invariants, ownership, preview/confirm separation and idempotency, stale and withdrawn data, shortages, fallback, budgets and legacy coexistence. Frontend tests verify setup, pending/retry, warnings, states and confirmation navigation. Regression suites cover ingestion/seed, retrieval, schema, persistence and server smoke. CPU model checks are functional measurements, not held-out quality research. External voice/grading providers and browser microphone/whiteboard interaction are not certified by fixture tests. Corpus coverage remains small and uneven; reviewed rubrics/company reports/technical-reference coverage is zero.
 
 Functional local check: the selected pinned CPU model embedded all 48 approved questions. Two identical mixed-mode previews selected the same five versions/reasons with 36 estimated minutes and explicit difficulty/fallback shortages; measured previews took 2.522 and 2.544 seconds in that run. Confirmation/retry was idempotent. These two samples are not a p95, held-out retrieval evaluation or provider grading measurement.
 
