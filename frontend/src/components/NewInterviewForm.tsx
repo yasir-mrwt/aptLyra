@@ -1,5 +1,5 @@
 import { useCallback,useEffect,useRef,useState,type SyntheticEvent } from "react";
-import { ROOT_LABELS,PLANNER_ROLES,setupError,type PlannerSetup } from "../planner/contracts";
+import { ROOT_LABELS,REPEAT_LABELS,REPEAT_HELP,PLANNER_ROLES,setupError,type PlannerSetup } from "../planner/contracts";
 import { getPlannerCapabilities,plannerMessage,previewPlan } from "../services/plannerApi";
 import AIInterviewer from "./AIInterviewer";
 import type { NewInterviewFormProps } from "../types/forms";
@@ -7,17 +7,30 @@ import { useSelector } from "react-redux";
 import type { RootState } from "../app/store";
 import { Link } from "react-router-dom";
 
-export default function NewInterviewForm({preferredRole,onCreated}:NewInterviewFormProps) {
-  const [setup,setSetup]=useState<PlannerSetup>({role:PLANNER_ROLES.includes(preferredRole || "")?preferredRole!:PLANNER_ROLES[0],level:"junior",taxonomyVersion:"junior-se-v1",
-    competencies:["dsa","programming"],difficulty:"standard",mode:"mixed",count:5,minutes:30,language:"en",codeLanguage:"javascript",modifiers:{},includeRecentTrends:false});
+export default function NewInterviewForm({preferredRole,onCreated,initialSetup}:NewInterviewFormProps) {
+  const userId=useSelector((state:RootState)=>state.auth.user?.id || state.auth.user?._id);
+  const storageKey=`aptlyra:planner-setup:${userId || "anonymous"}`;
+  const edited=useRef(!!initialSetup);
+  const [setup,setSetup]=useState<PlannerSetup>(()=>{
+    if(initialSetup && !setupError(initialSetup))return initialSetup;
+    try {const saved=JSON.parse(sessionStorage.getItem(storageKey)||"null");if(saved && !setupError(saved))return saved;}catch { /* A malformed draft must not block planning. */ }
+    return {role:PLANNER_ROLES.includes(preferredRole || "")?preferredRole!:PLANNER_ROLES[0],level:"junior",taxonomyVersion:"junior-se-v1",
+    competencies:["dsa","programming"],difficulty:"standard",mode:"mixed",count:5,minutes:30,language:"en",codeLanguage:"javascript",modifiers:{},includeRecentTrends:false,repeatPolicy:"fresh-first"};});
+  useEffect(()=>{if(initialSetup)try{sessionStorage.setItem(storageKey,JSON.stringify(initialSetup));}catch { /* Optional tab draft. */ }},[initialSetup,storageKey]);
   const [companies,setCompanies]=useState<string[]>([]),[eligibleReviewed,setEligibleReviewed]=useState<number|null>(null),[provisionalCount,setProvisionalCount]=useState(0),[capabilityError,setCapabilityError]=useState(false),[pending,setPending]=useState(false),[error,setError]=useState<string|null>(null);
   const roleState=useSelector((state:RootState)=>state.role);
   const canReview=roleState.status==="ready"&&roleState.reviewerLinked&&["owner","admin","reviewer"].includes(roleState.role||"");
   const inFlight=useRef(false);
-  const applyCapabilities=useCallback((data:Awaited<ReturnType<typeof getPlannerCapabilities>>)=>{setCompanies(data.companies);setEligibleReviewed(data.totalAvailable ?? data.eligibleReviewedQuestions);setProvisionalCount(data.provisionalQuestions);setCapabilityError(false);},[]);
+  const applyCapabilities=useCallback((data:Awaited<ReturnType<typeof getPlannerCapabilities>>)=>{setCompanies(data.companies);setEligibleReviewed(data.totalAvailable ?? data.eligibleReviewedQuestions);setProvisionalCount(data.provisionalQuestions);setCapabilityError(false);
+    if(!edited.current) {
+      let local:PlannerSetup|undefined;try {local=JSON.parse(sessionStorage.getItem(storageKey)||"null") || undefined;}catch { /* Optional browser draft. */ }
+      const saved=local || data.savedSetup;
+      try {if(saved && !setupError(saved))setSetup(saved);}catch { /* Ignore malformed or obsolete saved drafts. */ }
+    }
+  },[storageKey]);
   useEffect(()=>{let alive=true;getPlannerCapabilities().then(data=>{if(alive)applyCapabilities(data);}).catch(()=>{if(alive)setCapabilityError(true);});return()=>{alive=false;};},[applyCapabilities]);
   const retryCapabilities=()=>{setCapabilityError(false);void getPlannerCapabilities().then(applyCapabilities).catch(()=>setCapabilityError(true));};
-  const patch=(value:Partial<PlannerSetup>)=>{setSetup(s=>({...s,...value}));setError(null);};
+  const patch=(value:Partial<PlannerSetup>)=>{edited.current=true;setSetup(s=>{const next={...s,...value};try{sessionStorage.setItem(storageKey,JSON.stringify(next));}catch { /* Server preview still persists preferences. */ }return next;});setError(null);};
   const submit=async(e:SyntheticEvent)=>{
     e.preventDefault();if(inFlight.current)return;
     const invalid=setupError(setup);if(invalid){setError(invalid);return;}
@@ -37,6 +50,10 @@ export default function NewInterviewForm({preferredRole,onCreated}:NewInterviewF
       <label>Duration (minutes)<input className={field} type="number" min={15} max={60} value={setup.minutes} onChange={e=>patch({minutes:Number(e.target.value)})}/></label>
       <label>Coding language<select className={field} value={setup.codeLanguage} onChange={e=>patch({codeLanguage:e.target.value as PlannerSetup["codeLanguage"]})}><option value="javascript">JavaScript</option><option value="python">Python</option></select></label></div>
       <fieldset><legend>Choose 1–4 competencies</legend><div className="grid gap-3 sm:grid-cols-2 mt-3">{Object.entries(ROOT_LABELS).map(([id,label])=><label key={id} className="flex gap-3 items-center"><input type="checkbox" checked={setup.competencies.includes(id)} onChange={e=>patch({competencies:e.target.checked?[...setup.competencies,id]:setup.competencies.filter(c=>c!==id)})}/>{label}</label>)}</div></fieldset>
+      <div className="rounded-xl border border-cyan-300/30 p-4 min-w-0"><label htmlFor="question-repetition" className="font-semibold">Question repetition</label>
+        <select id="question-repetition" aria-describedby="repetition-help" className={field} value={setup.repeatPolicy || "fresh-first"} onChange={e=>patch({repeatPolicy:e.target.value as PlannerSetup["repeatPolicy"]})}>{Object.entries(REPEAT_LABELS).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select>
+        <p id="repetition-help" className="mt-2 text-sm">{REPEAT_HELP[setup.repeatPolicy || "fresh-first"]} History covers retained confirmed sessions; deleting a session removes its repeat protection.</p>
+      </div>
       <label className="flex gap-3"><input type="checkbox" disabled={setup.mode!=="mixed"} checked={!!setup.modifiers.designLite} onChange={e=>patch({modifiers:{...setup.modifiers,designLite:e.target.checked}})}/>Allow one design-lite exercise (mixed mode)</label>
       <label className="flex gap-3 items-center"><input type="checkbox" checked={!!setup.includeRecentTrends} onChange={e=>patch({includeRecentTrends:e.target.checked})}/>Include recent interview trends (human-approved practice questions; provisional scoring)</label>
       {companies.length>0?<div className="grid gap-4 sm:grid-cols-3"><label>Company preference<select className={field} value={setup.modifiers.company || ""} onChange={e=>patch({modifiers:{...setup.modifiers,company:e.target.value || undefined}})}><option value="">Core practice</option>{companies.map(c=><option key={c}>{c}</option>)}</select></label>

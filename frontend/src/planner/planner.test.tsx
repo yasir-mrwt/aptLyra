@@ -15,7 +15,7 @@ const setup:PlannerSetup={role:"Software Engineer",level:"junior",taxonomyVersio
 const plan:PlanPreviewData={id:"plan",sessionId:"session",revision:1,status:"ready",role:setup.role,mode:setup.mode,setup,effectiveCount:3,requestedCount:5,effectiveMinutes:23,requestedMinutes:30,
  coverage:{dsa:2,programming:1},difficultyDistribution:{easy:1,standard:2,stretch:0},timeBudget:{setupWrapMinutes:2,probeReserveMinutes:4,questionMinutes:17,slackMinutes:7},shortages:["count_reduced_for_time_or_evidence"],canConfirm:true,confirmedAt:null,evaluationMode:"legacy",
  items:[{id:"stable-item",position:0,competency:"dsa.structures",category:"coding",difficulty:"standard",selectionReason:"filtered_retrieval",estimatedMinutes:8,available:true}]};
-beforeEach(()=>{vi.clearAllMocks();vi.mocked(getPlannerCapabilities).mockResolvedValue({companies:[],eligibleReviewedQuestions:4,provisionalQuestions:0});});
+beforeEach(()=>{sessionStorage.clear();vi.clearAllMocks();vi.mocked(getPlannerCapabilities).mockResolvedValue({companies:[],eligibleReviewedQuestions:4,provisionalQuestions:0});});
 afterEach(cleanup);
 describe("supported planner setup",()=>{
  it("shows junior scope, hides unsupported roles/resume context and only supported languages",async()=>{
@@ -100,4 +100,42 @@ describe("owned plan preview and confirmation",()=>{
   await waitFor(()=>expect(screen.getByRole("button",{name:"Confirm and start"})).toBeTruthy());fireEvent.click(screen.getByRole("button",{name:"Confirm and start"}));
   await waitFor(()=>expect(screen.getAllByRole("alert").some(e=>e.textContent?.includes("retry"))).toBe(true));expect((screen.getByRole("button",{name:"Confirm and start"}) as HTMLButtonElement).disabled).toBe(false);
  });
+});
+
+
+describe("question repetition preferences",()=>{
+ it("labels all policies, preserves a changed draft after remount and submits the exact policy",async()=>{
+  vi.mocked(previewPlan).mockResolvedValue(plan);
+  const view=renderForm({onCreated:vi.fn()});
+  await waitFor(()=>expect(getPlannerCapabilities).toHaveBeenCalled());
+  const select=screen.getByRole("combobox",{name:"Question repetition"});
+  expect((select as HTMLSelectElement).value).toBe("fresh-first");
+  expect(select.getAttribute("aria-describedby")).toBe("repetition-help");
+  fireEvent.change(select,{target:{value:"only-new"}});
+  expect(screen.getByText(/Never repeat retained confirmed/)).toBeTruthy();
+  view.unmount();renderForm({onCreated:vi.fn()});
+  await waitFor(()=>expect((screen.getByRole("combobox",{name:"Question repetition"}) as HTMLSelectElement).value).toBe("only-new"));
+  fireEvent.click(screen.getByRole("button",{name:"Preview plan"}));
+  await waitFor(()=>expect(previewPlan).toHaveBeenCalled());
+  expect(vi.mocked(previewPlan).mock.calls[0][0].repeatPolicy).toBe("only-new");
+ });
+ it("restores the server preference and exposes counts, repeat labels and strict shortages",async()=>{
+  vi.mocked(getPlannerCapabilities).mockResolvedValue({companies:[],eligibleReviewedQuestions:48,provisionalQuestions:0,savedSetup:{...setup,repeatPolicy:"revision"}});
+  const view=renderForm({onCreated:vi.fn()});
+  await waitFor(()=>expect((screen.getByLabelText("Question repetition") as HTMLSelectElement).value).toBe("revision"));
+  view.unmount();
+  render(<PlanPreview plan={{...plan,canConfirm:false,selection:{policy:"only-new",newCount:2,repeatedCount:0,historyWindow:"Retained sessions only"},shortages:["only_new_shortage:2:3"],items:[{...plan.items[0],repeat:{repeated:true,reason:"fresh_fallback_repeat"}}]}} confirming={false} error={null} onConfirm={vi.fn()} onEdit={vi.fn()}/>);
+  expect(screen.getByText("New: 2 · Repeated: 0")).toBeTruthy();
+  expect(screen.getByRole("alert").textContent).toContain("Only 2 of 3");
+  expect((screen.getByRole("button",{name:"Confirm and start"}) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getByText(/1. Repeated/)).toBeTruthy();
+ });
+});
+
+
+it("editing a pinned preview restores its policy rather than a newer saved preference",async()=>{
+ vi.mocked(getPlannerCapabilities).mockResolvedValue({companies:[],eligibleReviewedQuestions:48,provisionalQuestions:0,savedSetup:{...setup,repeatPolicy:"revision"}});
+ renderForm({onCreated:vi.fn(),initialSetup:{...setup,repeatPolicy:"only-new"}});
+ await waitFor(()=>expect(getPlannerCapabilities).toHaveBeenCalled());
+ expect((screen.getByLabelText("Question repetition") as HTMLSelectElement).value).toBe("only-new");
 });

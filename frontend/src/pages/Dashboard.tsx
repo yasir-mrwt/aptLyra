@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { useSelector, useDispatch } from "react-redux"
-import { useNavigate } from "react-router-dom"
+import { useLocation, useNavigate } from "react-router-dom"
 import { deleteSession, getSession } from "../features/session/sessionSlice"
 import type { RootState, AppDispatch } from "../app/store"
 import { toast } from "react-toastify"
@@ -26,6 +26,7 @@ import { motion } from "framer-motion"
 const Dashboard = () => {
     const dispatch = useDispatch<AppDispatch>()
     const navigate = useNavigate()
+    const location = useLocation()
     const { user } = useSelector((state: RootState) => state.auth)
     const { sessions, isLoading, isError, message, pagination, stats } = useSelector((state: RootState) => state.session)
     const [modalConfig, setModalConfig] = useState({
@@ -178,7 +179,7 @@ const Dashboard = () => {
             >
                 <div className="absolute -inset-1 bg-white/5 rounded-[2.5rem] blur-xl opacity-0 group-hover:opacity-50 transition duration-1000"></div>
                 <div className="relative">
-                    <NewInterviewForm preferredRole={user?.preferredRole} onCreated={id => { dispatch(getSession()); navigate(`/plans/${id}`); }} />
+                    <NewInterviewForm initialSetup={location.state?.plannerSetup} preferredRole={user?.preferredRole} onCreated={id => { dispatch(getSession()); navigate(`/plans/${id}`); }} />
                 </div>
             </motion.div>
 

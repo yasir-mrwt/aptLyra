@@ -13,5 +13,6 @@ export type FormChangeEvent =
  */
 export interface NewInterviewFormProps {
     preferredRole?: string;
+    initialSetup?: import("../planner/contracts").PlannerSetup;
     onCreated: (planId: string) => void;
 }

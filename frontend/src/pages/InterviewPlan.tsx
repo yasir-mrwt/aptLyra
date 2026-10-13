@@ -15,5 +15,5 @@ export default function InterviewPlan() {
     catch(e){setError(plannerMessage(e));}finally{busy.current=false;setConfirming(false);}
   };
   if(!plan)return <section className="p-6"><AIInterviewer state={error?"error/retry":"preparing"}/>{error && <><p role="alert">{error}</p><button onClick={()=>{setError(null);setRetry(n=>n+1);}}>Retry loading preview</button><button onClick={()=>navigate('/dashboard')}>Change setup</button></>}</section>;
-  return <PlanPreview plan={plan} confirming={confirming} error={error} onConfirm={()=>void confirm()} onEdit={()=>navigate('/dashboard')}/>;
+  return <PlanPreview plan={plan} confirming={confirming} error={error} onConfirm={()=>void confirm()} onEdit={()=>navigate('/dashboard',{state:{plannerSetup:plan.setup}})}/>;
 }
