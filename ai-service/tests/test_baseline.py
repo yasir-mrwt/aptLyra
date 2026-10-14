@@ -174,3 +174,25 @@ def test_callback_default_port_is_same_origin(monkeypatch):
     monkeypatch.setenv("RESUME_CALLBACK_BASE_URL", "https://backend.example.test:443")
     url = "https://backend.example.test" + CALLBACK_PATH
     assert fetch_security.validate_callback_url(url) == url
+
+
+def test_coding_prompt_preserves_empty_map_explanation(monkeypatch):
+    from app.api import interview
+    seen = []
+    def provider(system, prompt, **kwargs):
+        seen.append((system, prompt))
+        return '{"technical_score":90,"confidence_score":80,"ai_feedback":"Correct grouping; explanation explicitly covers empty input.","ideal_answer":"Use length buckets."}'
+    monkeypatch.setattr(interview, "call_groq", provider)
+    explanation = "For [] the function returns an empty Map. Order within each bucket is preserved."
+    result = interview.evaluate_answer(interview.EvaluationRequest(question="Group words by length", question_type="coding", user_code="function groupWordsByLength(words) { return new Map(); }", user_answer=explanation, selected_language="javascript"))
+    assert explanation in seen[0][1]
+    assert "criterion-level" in seen[0][0]
+    assert result.technical_score == 90
+
+
+def test_design_prompt_preserves_optional_code():
+    from app.prompts import get_evaluation_user_prompt_system_design
+    prompt = get_evaluation_user_prompt_system_design("Design a parking lot", "Separate spot allocation and payment", None, "class ParkingLot: pass")
+    assert "class ParkingLot: pass" in prompt
+    assert "Separate spot allocation and payment" in prompt
+    assert "not verified execution" in prompt

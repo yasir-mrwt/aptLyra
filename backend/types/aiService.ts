@@ -22,6 +22,7 @@ export interface GenerateQuestionsResponse {
 }
 
 export interface EvaluateAnswerParams {
+  execution_evidence?: string;
   question: string;
   question_type: "oral" | "coding" | "system-design";
   user_answer: string;

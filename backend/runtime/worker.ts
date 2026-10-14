@@ -286,7 +286,8 @@ export class InterviewRuntime {
     const session=await sessionRepository.findByIdForUser(op.session_id,op.user_id);
     const question=session?.questions[op.question_index];
     if(!session||!question)throw new RuntimeFailure("stale_operation");
-    const legacy=await aiService.evaluateAnswer({question:question.questionText,
+    const execution=answer.code_text?(await query("SELECT summary FROM coding_execution_evidence WHERE session_id=$1 AND user_id=$2 AND question_index=$3 AND code_hash=$4 AND language=$5 ORDER BY created_at DESC LIMIT 1",[session._id,session.user,op.question_index,hash(answer.code_text.replace(/\r\n/g,"\n")),question.language])).rows[0]:null;
+    const legacy=await aiService.evaluateAnswer({execution_evidence:execution?.summary,question:question.questionText,
       question_type:question.questionType as "coding"|"oral"|"system-design",
       user_answer:answer.extracted_text??answer.answer_text??"",user_code:answer.code_text||"",
       selected_language:question.language||"plaintext",diagram_payload:answer.artifact_refs.find((a:any)=>a.kind==="diagram")?.url,

@@ -57,6 +57,7 @@ class QuestionResponse(BaseModel):
 
 
 class EvaluationRequest(BaseModel):
+    execution_evidence: Optional[str] = Field(default=None, max_length=2000)
     question: str = Field(..., max_length=2000)
     question_type: Literal["oral", "coding", "system-design"]
     role: str = Field(default="Full-Stack Developer", max_length=100)
@@ -241,7 +242,7 @@ def evaluate_answer(req: EvaluationRequest):
             )
         system_prompt = EVALUATION_SYSTEM_PROMPT_CODING
         user_prompt = get_evaluation_user_prompt_coding(
-            req.question, req.user_code, req.selected_language or "unknown"
+            req.question, req.user_code, req.selected_language or "unknown", req.user_answer or "", req.execution_evidence or ""
         )
     elif req.question_type == "system-design":
         system_prompt = EVALUATION_SYSTEM_PROMPT_SYSTEM_DESIGN
@@ -253,6 +254,7 @@ def evaluate_answer(req: EvaluationRequest):
             req.question,
             req.user_answer or "No text answer provided.",
             "Diagram attached inline." if image_base64 else req.diagram_payload,
+            req.user_code or "",
         )
     else:
         if not req.user_answer or not req.user_answer.strip():

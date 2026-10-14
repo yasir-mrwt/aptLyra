@@ -7,7 +7,7 @@ interface CodeOutputPanelProps {
     language: string;
     code: string;
     context?: {sessionId:string;questionIndex:number};
-    executionTestId?: "binary-search-v1"|"first-repeated-v1";
+    executionTestId?: "binary-search-v1"|"first-repeated-v1"|"collapse-repeats-v1"|"group-words-v1";
 }
 
 const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code, context, executionTestId }) => {
@@ -18,7 +18,7 @@ const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code, conte
     const [executionTime, setExecutionTime] = useState<number | null>(null);
     const outputRef = useRef<HTMLPreElement>(null);
 
-    const canExecute = isExecutable(language) && (!context || !!executionTestId);
+    const canExecute = isExecutable(language) && (!context || ["javascript","python"].includes(language));
 
     useEffect(() => {
         if (outputRef.current) {
@@ -26,7 +26,7 @@ const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code, conte
         }
     }, [result]);
 
-    const handleRun = async () => {
+    const handleRun = async (mode:"run"|"tests"="run") => {
         if (!canExecute || isRunning) return;
 
         setIsRunning(true);
@@ -34,7 +34,7 @@ const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code, conte
         setExecutionTime(null);
 
         const startTime = performance.now();
-        const res = await executeCode(language, code, stdin, context);
+        const res = await executeCode(language, code, mode==="tests"?"":stdin, context, mode);
         const elapsed = performance.now() - startTime;
 
         setExecutionTime(Math.round(elapsed));
@@ -53,7 +53,7 @@ const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code, conte
     return (
         <div className="bg-surface-900 rounded-[2.5rem] group/form h-125 flex flex-col border border-white/5 overflow-hidden">
             {/* Toolbar */}
-            <div className="flex justify-between items-center px-8 py-3 bg-white/5 border-b border-white/5">
+            <div className="flex flex-wrap gap-3 justify-between items-center px-4 py-3 bg-white/5 border-b border-white/5">
                 <div className="flex items-center gap-3">
                     <Terminal size={14} className="text-primary-400" />
                     <span className="text-[10px] font-black text-surface-500 uppercase tracking-widest">Output</span>
@@ -64,9 +64,9 @@ const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code, conte
                         </span>
                     )}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     {!executionTestId&&context?<span className="text-xs text-amber-200">Automated execution tests are not available for this question.</span>:null}
-                    {!context&&<button
+                    {<button
                         onClick={() => setShowStdin(!showStdin)}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-surface-400 hover:text-white bg-white/5 hover:bg-white/10 transition-all cursor-pointer border border-white/5"
                         title="Toggle stdin input"
@@ -83,8 +83,9 @@ const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code, conte
                             <Trash2 size={12} />
                         </button>
                     )}
+                    {executionTestId&&canExecute&&<button className="btn-secondary text-xs" disabled={isRunning} onClick={()=>void handleRun("tests")}>Run verified tests</button>}
                     {canExecute && <button
-                        onClick={handleRun}
+                        onClick={()=>void handleRun("run")}
                         disabled={!canExecute || isRunning}
                         className={`flex items-center gap-2 px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-[0.96] border ${
                             isRunning
@@ -102,14 +103,15 @@ const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code, conte
                         ) : (
                             <>
                                 <Play size={12} />
-                                {executionTestId?"Run tests":"Run"}
+                                Run code
                             </>
                         )}
                     </button>}
                 </div>
             </div>
 
-            {executionTestId&&<p className="px-6 py-2 text-sm">{executionTestId==="first-repeated-v1"?(language==="python"?"Define first_repeated(values); return None when unique.":"Define firstRepeated(values); return null or undefined when unique."):(language==="python"?"Define binary_search(arr, target); return the index or -1.":"Define binarySearch(arr, target); return the index or -1.")}</p>}
+            {executionTestId&&<p className="px-6 py-2 text-sm">{executionTestId==="collapse-repeats-v1"?(language==="python"?"Define remove_consecutive_repeats(text); return a string.":"Define removeConsecutiveRepeats(text); return a string."):executionTestId==="group-words-v1"?(language==="python"?"Define group_words_by_length(words); return a dictionary of lists.":"Define groupWordsByLength(words); return a Map or object of arrays."):executionTestId==="first-repeated-v1"?(language==="python"?"Define first_repeated(values); return None when unique.":"Define firstRepeated(values); return null or undefined when unique."):(language==="python"?"Define binary_search(arr, target); return the index or -1.":"Define binarySearch(arr, target); return the index or -1.")}</p>}
+            {result&&<p className="px-6 text-xs" role="status">{result.runtime||language} · Exit status {result.exitCode}{!result.tests?" · Execution only; correctness is not verified.":""}</p>}
             {/* Stdin Input */}
             {showStdin && (
                 <div className="px-6 py-3 border-b border-white/5 bg-white/2">
@@ -129,7 +131,7 @@ const CodeOutputPanel: React.FC<CodeOutputPanelProps> = ({ language, code, conte
                     <div className="flex-1 flex flex-col items-center justify-center text-surface-600 gap-3">
                         <Terminal size={32} className="opacity-30" />
                         <p className="text-[10px] font-black uppercase tracking-widest">
-                            {context&&!executionTestId ? "Deterministic tests are not configured for this question. You can still submit your answer." : canExecute ? executionTestId?"Run the fixed cases for this question":"Click Run to execute your code" : "This language does not support execution"}
+                            {context&&!executionTestId ? "Run code to inspect your output. No reviewed test suite is configured." : canExecute ? executionTestId?"Run the fixed cases for this question":"Click Run to execute your code" : "This language does not support execution"}
                         </p>
                     </div>
                 )}

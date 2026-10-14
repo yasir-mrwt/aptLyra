@@ -26,6 +26,13 @@ GENERATION_SYSTEM_PROMPT = (
 EVALUATION_SYSTEM_PROMPT_CODING = (
     f"{BASE_EVALUATION_INSTRUCTION}"
     "You are a strict technical interviewer. Evaluate the candidate's code for logic and efficiency. "
+    "Read BOTH the code and the separate explanation before alleging missing coverage. "
+    "In ai_feedback give criterion-level reasons for correctness, complexity, edge cases, and explanation; "
+    "anchor every deduction to specific submitted evidence and state the points lost for each deduction so they explain the technical score. "
+    "Do not deduct for hypothetical requirements, an unstated preferred container, or style preferences. "
+    "If no actual defect or missing requirement is found, do not invent a deduction; a fully supported correct answer may earn full marks. "
+    "Distinguish static reasoning from actual execution. Do not invent test outcomes. "
+    "If evidence is insufficient, explicitly describe the uncertainty and lower confidence; never default to 100. "
     "Respond ONLY in this JSON format with no extra text:\n"
     '{"technical_score": <0-100>, "confidence_score": <0-100>, '
     '"ai_feedback": "<feedback>", "ideal_answer": "<ideal code>"}'
@@ -133,15 +140,18 @@ def get_followup_user_prompt(
 
 
 def get_evaluation_user_prompt_coding(
-    question: str, user_code: str, language: str
+    question: str, user_code: str, language: str, explanation: str = "", execution_evidence: str = ""
 ) -> str:
     """Constructs prompt for coding answer evaluation."""
-    s_code = sanitize_input(user_code, 10000)
+    s_code = sanitize_input(user_code, 50000)
+    s_explanation = sanitize_input(explanation, 50000)
     s_lang = sanitize_input(language, 50)
     return (
         f"Question: {question}\n"
         f"Candidate Selected Language: {s_lang}\n"
         f"Candidate Code:\n{s_code}\n"
+        f"Candidate explanation (separate evidence):\n{s_explanation or 'Not provided'}\n"
+        f"Provider execution evidence for this exact code: {sanitize_input(execution_evidence, 2000) or 'No execution recorded; use static reasoning only.'}\n"
         "Evaluate and respond in the required JSON format. Ensure you check if the code matches the selected language. "
         "If the code is in a different language than selected, mark it as incorrect or note the mismatch."
     )
@@ -158,11 +168,13 @@ def get_evaluation_user_prompt_conceptual(question: str, user_answer: str) -> st
 
 
 def get_evaluation_user_prompt_system_design(
-    question: str, user_answer: str, diagram_payload: str = None
+    question: str, user_answer: str, diagram_payload: str = None, user_code: str = ""
 ) -> str:
     """Constructs prompt for system design answer evaluation."""
     s_answer = sanitize_input(user_answer, 10000)
     prompt = f"Question: {question}\n" f"Candidate Text Explanation:\n{s_answer}\n"
+    if user_code:
+        prompt += f"Optional Candidate Code (design evidence, not verified execution):\n{sanitize_input(user_code, 50000)}\n"
     if diagram_payload:
         s_diagram = sanitize_input(diagram_payload, 20000)
         prompt += f"Candidate Diagram Payload (JSON or Summary):\n{s_diagram}\n"

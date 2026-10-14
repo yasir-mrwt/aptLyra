@@ -6,7 +6,7 @@ import { AuthenticatedRequest } from "../types/express.js";
 import {sessionRepository} from "../models/Session.js";
 import {evaluationService} from "../evaluation/service.js";
 import {query} from "../config/db.js";
-import {canonicalCodeLanguage,executionTestFor,parseBinarySearchResults,withExecutionTests,type ExecutionTestId} from "../codeExecution/specifications.js";
+import {executionCaseCount,canonicalCodeLanguage,executionTestFor,parseBinarySearchResults,withExecutionTests,type ExecutionTestId} from "../codeExecution/specifications.js";
 
 // JDoodle API language mapping
 // Maps our standard language strings to JDoodle's language identifiers
@@ -42,11 +42,12 @@ const languageMap: Record<string, string> = {
  * @access  Private
  */
 export const executeCode = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const { language, code, stdin, sessionId, questionIndex } = req.body;
+  const { language, code, stdin, sessionId, questionIndex, mode = "tests" } = req.body;
   const userId=(req.user?.id || req.user?._id)?.toString();
   if (typeof language!=="string" || typeof code!=="string" || !language || !code || code.length>50000 || (stdin!==undefined && (typeof stdin!=="string" || stdin.length>10000))) {
     throw new AppError("VALIDATION_ERROR", "Language and code are required", undefined, 400);
   }
+  if(!["run","tests"].includes(mode))throw new AppError("VALIDATION_ERROR","Choose run or tests",undefined,400);
   const normalizedLanguage=canonicalCodeLanguage(language);
   let capture=false;
   let testId:ExecutionTestId|null=null;
@@ -56,7 +57,7 @@ export const executeCode = asyncHandler(async (req: AuthenticatedRequest, res: R
     const session=userId?await sessionRepository.findByIdForUser(sessionId,userId):null;
     if(!session)throw new AppError("VALIDATION_ERROR","Session not found",undefined,404);
     const q=session.questions[questionIndex];
-    if(session.status!=="in-progress" || !q || q.questionType!=="coding" || q.isSubmitted)throw new AppError("VALIDATION_ERROR","Question is not available for execution",undefined,409);
+    if(session.status!=="in-progress" || !q || !["coding","system-design"].includes(q.questionType) || q.isSubmitted)throw new AppError("VALIDATION_ERROR","Question is not available for execution",undefined,409);
     if(!session.planId||!q.planItemId||!q.questionVersionId)throw new AppError("VALIDATION_ERROR","A pinned interview question is required for test execution",undefined,409);
     if(!["javascript","python"].includes(normalizedLanguage))throw new AppError("VALIDATION_ERROR","Choose JavaScript or Python",undefined,400);
     const pinned=(await query(`SELECT ready.inventory_class,e.content_hash,e.category FROM plan_items i
@@ -66,10 +67,11 @@ export const executeCode = asyncHandler(async (req: AuthenticatedRequest, res: R
     [q.planItemId,session.planId,sessionId,userId,q.questionVersionId])).rows[0];
     if(!pinned)throw new AppError("VALIDATION_ERROR","The selected question version is no longer available",undefined,409);
     testId=executionTestFor(pinned.inventory_class,pinned.content_hash,pinned.category,normalizedLanguage);
-    if(!testId)throw new AppError("VALIDATION_ERROR","Run is unavailable because this question has no approved deterministic test definition. You can still submit your answer.",undefined,409);
-    submittedCode=withExecutionTests(code,normalizedLanguage,testId);
-    if(stdin?.trim())throw new AppError("VALIDATION_ERROR","This question uses fixed test cases and does not accept custom input",undefined,400);
-    capture=true;
+    if(mode==="run")testId=null;
+    if(mode==="tests"&&!testId)throw new AppError("VALIDATION_ERROR","Run is unavailable because this question has no approved deterministic test definition. You can still submit your answer.",undefined,409);
+    if(testId)submittedCode=withExecutionTests(code,normalizedLanguage,testId);
+    if(testId&&stdin?.trim())throw new AppError("VALIDATION_ERROR","This question uses fixed test cases and does not accept custom input",undefined,400);
+    capture=!!testId; // Standalone stdout is not a reviewed correctness result.
   }
   const jdoodleLanguage = languageMap[normalizedLanguage];
 
@@ -94,6 +96,7 @@ export const executeCode = asyncHandler(async (req: AuthenticatedRequest, res: R
     });
 
     const data: any = await jdoodleResponse.json();
+    data.output=String(data.output||"").slice(0,64000);
 
     if (!jdoodleResponse.ok) {
       logger.error("JDoodle request unavailable");
@@ -109,7 +112,7 @@ export const executeCode = asyncHandler(async (req: AuthenticatedRequest, res: R
     let tests:ReturnType<typeof parseBinarySearchResults>["result"] = null;
     let testOutput="";
     if(testId){const parsed=parseBinarySearchResults(String(data.output||""),testId);tests=parsed.result;testOutput=parsed.userOutput;}
-    const total=testId==="first-repeated-v1"?5:3;
+    const total=testId?executionCaseCount(testId):0;
     const runtimeError=Boolean(testId&&(!tests||tests.error));
     const passed=Boolean(!isError&&(!testId||tests?.passed));
     if(capture && userId)await evaluationService.recordExecution(sessionId,userId,questionIndex,code,normalizedLanguage,passed?"passed":"failed",
@@ -118,12 +121,13 @@ export const executeCode = asyncHandler(async (req: AuthenticatedRequest, res: R
     res.json({
       run: {
         stdout: runtimeError?"Execution failed before valid test results were produced.":testId?(testOutput?`${testOutput}\n`:"")+`Tests passed: ${tests?.cases.filter(item=>item.passed).length??0}/${total}`:(isError ? "" : data.output),
-        stderr: testId&&!passed?(isError||runtimeError?(tests?.error||String(data.output||"Execution did not produce test results. Check syntax and function signature.")):`Tests passed: ${tests?.cases.filter(item=>item.passed).length??0}/${total}. Check the ${testId==="first-repeated-v1"?(normalizedLanguage==="python"?"first_repeated":"firstRepeated"):(normalizedLanguage==="python"?"binary_search":"binarySearch")} implementation and exact function name.`):(isError ? data.output : ""),
+        stderr: testId&&!passed?(isError||runtimeError?(tests?.error||String(data.output||"Execution did not produce test results. Check syntax and function signature.")):`Tests passed: ${tests?.cases.filter(item=>item.passed).length??0}/${total}. Check the ${({"first-repeated-v1":["firstRepeated","first_repeated"],"binary-search-v1":["binarySearch","binary_search"],"collapse-repeats-v1":["removeConsecutiveRepeats","remove_consecutive_repeats"],"group-words-v1":["groupWordsByLength","group_words_by_length"]} as const)[testId][normalizedLanguage==="python"?1:0]} implementation and exact function name.`):(isError ? data.output : ""),
         code: passed ? 0 : 1,
         signal: null,
         cpuTime: data.cpuTime,
         memory: data.memory,
       },
+      runtime:normalizedLanguage==="python"?"Python 3 (JDoodle version index 6)":"Node.js",
       ...(testId?{tests,executionStatus:runtimeError?"runtime-error":passed?"passed":"failed-tests",runtime:normalizedLanguage==="python"?"Python 3 (JDoodle version index 6)":"Node.js"}:{}),
     });
   } catch (error: any) {

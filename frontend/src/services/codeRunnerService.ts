@@ -22,7 +22,8 @@ export const executeCode = async (
     language: string,
     code: string,
     stdin: string = "",
-    context?: {sessionId:string;questionIndex:number}
+    context?: {sessionId:string;questionIndex:number},
+    mode: "run"|"tests" = "run"
 ): Promise<ExecutionResult> => {
     if (!isExecutable(language)) {
         return {
@@ -35,11 +36,12 @@ export const executeCode = async (
     }
 
     try {
-        const response = await apiClient.post("/code/execute", { language, code, stdin, ...context });
+        const response = await apiClient.post("/code/execute", { language, code, stdin, ...context, mode });
         const data = response.data;
         const run = data.run;
 
         return {
+            runtime:data.runtime,
             tests: data.tests,
             executionStatus: data.executionStatus,
             stdout: run?.stdout || "",

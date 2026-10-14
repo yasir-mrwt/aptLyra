@@ -99,3 +99,21 @@ test("multipart CRLF and editor LF share execution identity without erasing inde
  expect(normalizedExecutionCode("def f():\r\n    return 1")).toBe("def f():\n    return 1");
  expect(normalizedExecutionCode("def f():\n  return 1")).not.toBe(normalizedExecutionCode("def f():\n    return 1"));
 });
+
+test("standalone run accepts an owned question without a harness, never records verified evidence",async()=>{
+ (query as any).mockResolvedValue({rows:[{inventory_class:"DYNAMIC_PROVISIONAL",content_hash:"other",category:"coding"}]});
+ const result=await request(app).post("/execute").send({...body,mode:"run",stdin:"custom"});
+ expect(result.status).toBe(200);expect(result.body.tests).toBeUndefined();
+ expect(JSON.parse((globalThis.fetch as any).mock.calls[0][1].body).script).toBe(body.code);
+ expect(evaluationService.recordExecution).not.toHaveBeenCalled();
+});
+test.each([
+ ["collapse-repeats-v1","function removeConsecutiveRepeats(s){return s.split('').filter((c,i)=>i===0||c!==s[i-1]).join('');}","def remove_consecutive_repeats(s):\n    return ''.join(c for i,c in enumerate(s) if i==0 or c!=s[i-1])"],
+ ["group-words-v1","function groupWordsByLength(words){const m=new Map();for(const w of words){if(!m.has(w.length))m.set(w.length,[]);m.get(w.length).push(w);}return m;}","def group_words_by_length(words):\n    result={}\n    for word in words: result.setdefault(len(word),[]).append(word)\n    return result"]
+])("%s preserves edge cases in JavaScript and Python",(id,js,py)=>{
+ let output="";const testId=id as import("./codeExecution/specifications.js").ExecutionTestId;
+ vm.runInNewContext(withExecutionTests(js,"javascript",testId),{console:{log:(s:string)=>{output=s;}}});
+ expect(parseBinarySearchResults(output,testId).result?.passed).toBe(true);
+ const python=spawnSync("python3",["-c",withExecutionTests(py,"python",testId)],{encoding:"utf8"});
+ expect(python.status).toBe(0);expect(parseBinarySearchResults(python.stdout,testId).result?.passed).toBe(true);
+});
