@@ -193,7 +193,7 @@ export class RetrievalService {
           if(request.plannerPool && candidates.length>2000)throw new RetrievalFailure("planner_pool_exceeded");
           databaseMs=performance.now()-start;
           const structuredReason:Reason=request.strategy==="structured-practice"?"approved_practice_available":"reviewed_seed_available";
-          for(const c of candidates) if((request.plannerPool || c.representative===1) && (structured || c.exact || (filters.interviewEligible && filters.reviewedSeed) || (c.similarity ?? -1)>=(request.minimumSimilarity ?? 0.3))
+          for(const c of candidates) if((request.plannerPool || c.representative===1) && (request.plannerPool || structured || c.exact || (filters.interviewEligible && filters.reviewedSeed) || (c.similarity ?? -1)>=(request.minimumSimilarity ?? 0.3))
             && selected.size<(request.limit || 5))selected.set(c.entity_id,structured?structuredReason:c.exact?"exact_match":"semantic_match");
           outcome=selected.size?"success":"no_match";
           reason=selected.size?(structured?structuredReason:candidates.some(c=>selected.get(c.entity_id)==="exact_match")?"exact_match":"semantic_match")

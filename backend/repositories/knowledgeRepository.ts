@@ -139,8 +139,7 @@ export const knowledgeRepository = {
         input.role,input.mode,input.requestedCount,input.effectiveCount,input.requestedMinutes,input.effectiveMinutes,
         json(input.difficultyDistribution || {}),json(input.modifiers || {}),json(input.coverage || {}),
         json(input.timeBudget || {}),json(input.shortages || [])]);
-      for (const competency of input.selectedCompetencies) await query(
-        "INSERT INTO plan_competencies(plan_id,taxonomy_version,competency_id) VALUES($1,$2,$3)", [id,input.taxonomyVersion,competency]);
+      await query("INSERT INTO plan_competencies(plan_id,taxonomy_version,competency_id) SELECT $1,$2,unnest($3::text[])",[id,input.taxonomyVersion,input.selectedCompetencies]);
       return id;
     });
   },
@@ -167,6 +166,26 @@ export const knowledgeRepository = {
         question.primary_competency,question.category,question.difficulty,question.origin,nullable(input.retrievalId),
         input.selectionReason,input.estimatedMinutes,nullable(input.parentItemId),json(input.provenanceRefs || [])]);
       return id;
+    });
+  },
+  /** Bulk snapshot insertion retains database lineage guards for every row. */
+  async addPlannerItems(userId:string,planId:string,items:{questionVersionId:string;retrievalId:string;reason:string;minutes:number;provenance:unknown}[]) {
+    return withDatabaseLock(`plan:${planId}`,async()=>{
+      if(!await this.findPlanForUser(planId,userId))throw new Error("Owned plan not found");
+      const input=items.map((item,position)=>({...item,id:randomUUID(),position}));
+      const result=await query(`INSERT INTO plan_items(id,plan_id,session_id,user_id,position,question_version_id,rubric_version_id,
+        taxonomy_version,primary_competency,category,difficulty,origin,retrieval_id,selection_reason,estimated_minutes,provenance_refs)
+        SELECT x.id,p.id,p.session_id,p.user_id,x.position,q.id,rubric.id,q.taxonomy_version,q.primary_competency,q.category,q.difficulty,q.origin,
+          x."retrievalId",x.reason,x.minutes,x.provenance
+        FROM jsonb_to_recordset($3::jsonb) AS x(id uuid,position int,"questionVersionId" uuid,"retrievalId" uuid,reason text,minutes numeric,provenance jsonb)
+        JOIN question_versions q ON q.id=x."questionVersionId" AND q.status='published'
+        JOIN interview_plans p ON p.id=$1 AND p.user_id=$2
+        LEFT JOIN LATERAL (SELECT rv.id FROM rubric_versions rv WHERE rv.question_version_id=q.id
+          AND rv.scoring_policy_version='rubric-v1' AND rv.status IN ('reviewed','provisional')
+          AND (rv.kind='provisional' OR EXISTS(SELECT 1 FROM rubric_review_approvals ra WHERE ra.rubric_version_id=rv.id AND ra.content_hash=rv.content_hash))
+          ORDER BY (rv.kind='known') DESC,rv.version DESC,rv.created_at DESC,rv.id LIMIT 1) rubric ON true
+        ORDER BY x.position RETURNING id`,[planId,userId,JSON.stringify(input)]);
+      if(result.rows.length!==items.length)throw new Error("Published question version not found");
     });
   },
   async recordRetrieval(userId: string | null, input: RetrievalInput): Promise<string> {

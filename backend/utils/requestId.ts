@@ -16,5 +16,5 @@ export const generateRequestId = (): string => {
  * Extract request ID from headers or generate one
  */
 export const getOrGenerateRequestId = (headerValue?: string): string => {
-  return headerValue || generateRequestId();
+  return headerValue && /^[A-Za-z0-9_-]{1,80}$/.test(headerValue) ? headerValue : generateRequestId();
 };

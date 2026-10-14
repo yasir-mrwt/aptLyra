@@ -161,7 +161,8 @@ test('healthy trusted ranking covers three exact starters without structured out
  const seedRetriever={retrieveQuestions:async request=>{calls.push(request);return ranker.retrieveQuestions(request);}};
  const p=await new PlannerService(seedRetriever).preview(owner,setup({competencies:['programming'],mode:'coding',count:3}));
  assert.equal(p.canConfirm,true);assert.equal(p.items.length,3);assert.ok(p.items.every(i=>i.inventoryClass==='TRUSTED_BASELINE'));
- assert.ok(calls.some(c=>c.filters.reviewedSeed===true&&c.strategy==='semantic'));
+ assert.equal(calls.length,1,'one complete root pool replaces repeated stage retrieval');
+ assert.ok(calls.every(c=>c.plannerPool&&c.filters.interviewEligible));
  assert.ok(calls.every(c=>c.strategy!=='structured-seed'));
 });
 test('difficulty fallback records reasons while the trusted baseline does not need dynamic scoring readiness',async()=>{
@@ -364,4 +365,17 @@ test('retained historical sessions exclude exact bank content without trusting l
  const p=await service.preview(id,setup({competencies:['programming'],mode:'coding',count:3,repeatPolicy:'only-new'}));
  assert.equal(p.canConfirm,false);assert.equal(p.effectiveCount,0);
  const {selectionHistory}=await import('../dist/planner/history.js');assert.ok((await selectionHistory(id)).every(h=>h.weakness===0));
+});
+
+test('activation starts server time once after confirmation; refresh and concurrent retry cannot extend it',async()=>{
+ const p=await service.preview(other,setup({competencies:['os','networks'],mode:'oral',count:3,minutes:30,repeatPolicy:'revision'}));
+ assert.equal(p.canConfirm,true);await service.confirm(other,{planId:p.id,revision:p.revision});
+ const before=(await f.query('SELECT activation_required,activated_at FROM sessions WHERE id=$1',[p.sessionId])).rows[0];
+ assert.equal(before.activation_required,true);assert.equal(before.activated_at,null);
+ const {activateInterview}=await import('../dist/runtime/activation.js');
+ await assert.rejects(()=>activateInterview(p.sessionId,owner),e=>e.status===404);
+ const [a,b]=await Promise.all([activateInterview(p.sessionId,other),activateInterview(p.sessionId,other)]);
+ assert.equal(a.activatedAt,b.activatedAt);assert.equal(a.deadline,b.deadline);
+ const refreshed=await activateInterview(p.sessionId,other);assert.deepEqual(refreshed,a);
+ assert.ok(Date.parse(a.deadline)>Date.parse(a.activatedAt));
 });

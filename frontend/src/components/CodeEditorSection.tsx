@@ -4,6 +4,7 @@ import { SUPPORTED_LANGUAGES } from "../constants/interview";
 import CustomSelect from "./CustomSelect";
 
 interface CodeEditorSectionProps {
+    onReady?:()=>void;
     language: string;
     plannedLanguage?: boolean;
     code: string;
@@ -13,12 +14,14 @@ interface CodeEditorSectionProps {
 }
 
 const CodeEditorSection: React.FC<CodeEditorSectionProps> = ({
-    language, plannedLanguage,
+    language, plannedLanguage, onReady,
     code,
     isQuestionLocked,
     setLanguage,
     updateCode
 }) => {
+    // A native editor is usable immediately while syntax tooling initializes.
+    useEffect(()=>{onReady?.();},[onReady]);
     // Local state for immediate feedback
     const [localCode, setLocalCode] = useState(code);
 
@@ -53,6 +56,7 @@ const CodeEditorSection: React.FC<CodeEditorSectionProps> = ({
             </div>
             <div className="flex-1 opacity-90 overflow-visible relative z-10">
                 <MonacoEditor
+                    loading={<textarea aria-label="Code editor while syntax tools load" spellCheck={false} value={localCode} disabled={isQuestionLocked} onChange={event=>handleCodeChange(event.target.value)} className="w-full h-full min-h-96 p-4 font-mono text-sm bg-surface-900 text-surface-100"/>}
                     height="100%"
                     language={language}
                     theme="vs-dark"

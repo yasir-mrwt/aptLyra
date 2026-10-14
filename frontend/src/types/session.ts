@@ -20,7 +20,7 @@ export interface Question {
     evaluation?: RubricEvaluation;
     planItemId?: string;
     questionVersionId?: string;
-    executionTestId?: "binary-search-v1"|"first-repeated-v1";
+    executionTestId?: "binary-search-v1"|"first-repeated-v1"|"collapse-repeats-v1"|"group-words-v1";
     executionEvidence?: {status:"passed"|"failed";summary:string};
     category?: string;
     evidenceUnavailable?: boolean;
@@ -44,6 +44,9 @@ export interface Question {
 }
 
 export interface Session {
+    individualScoredAnswers?: number;
+    activationRequired?: boolean;
+    activatedAt?: string;
     runtimeVersion?: string;
     runtimeState?: "active"|"finishing"|"completed";
     revision?: number;

@@ -12,6 +12,7 @@
  */
 
 import pg from "pg";
+import {timed} from "../utils/timings.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 
 const { Pool } = pg;
@@ -39,23 +40,26 @@ pool.on("error", (err) => {
 });
 
 /** Convenience query helper used by all repositories. */
+const transactionLocks = new AsyncLocalStorage<Set<string>>();
 const transactionClient = new AsyncLocalStorage<pg.PoolClient>();
 export const query = async (text: string, params: any[] = []): Promise<pg.QueryResult> =>
-  (transactionClient.getStore() || pool).query(text, params);
+  timed("database",()=>(transactionClient.getStore() || pool).query(text, params));
 
 /** Serialize repository mutations across API processes, on one transaction/client.
  * Never hold this lock while waiting for an AI/provider request. */
 export async function withDatabaseLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
   const existing = transactionClient.getStore();
   if (existing) {
-    await existing.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [key]);
+    if(transactionLocks.getStore()?.has(key))return fn();
+    await timed("database_lock",()=>existing.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [key]));
+    transactionLocks.getStore()?.add(key);
     return fn();
   }
-  const client = await pool.connect();
+  const client = await timed("database_pool",()=>pool.connect());
   try {
     await client.query("BEGIN");
-    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [key]);
-    const result = await transactionClient.run(client, fn);
+    await timed("database_lock",()=>client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [key]));
+    const result = await transactionClient.run(client,()=>transactionLocks.run(new Set([key]),fn));
     await client.query("COMMIT");
     return result;
   } catch (error) {

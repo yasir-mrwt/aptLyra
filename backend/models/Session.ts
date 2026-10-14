@@ -35,7 +35,7 @@ export interface IQuestion {
   planItemId?: string;
   questionVersionId?: string;
   inventoryClass?: "TRUSTED_BASELINE" | "DYNAMIC_REVIEWED" | "DYNAMIC_PROVISIONAL";
-  executionTestId?: "binary-search-v1"|"first-repeated-v1";
+  executionTestId?: "binary-search-v1"|"first-repeated-v1"|"collapse-repeats-v1"|"group-words-v1";
     executionEvidence?: {status:"passed"|"failed";summary:string};
   category?: string;
   evidenceUnavailable?: boolean;
@@ -63,6 +63,9 @@ export interface IQuestion {
 }
 
 export interface ISession {
+  individualScoredAnswers?: number;
+  activationRequired?: boolean;
+  activatedAt?: string;
   runtimeVersion?: string;
   runtimeState?: "active"|"finishing"|"completed";
   revision?: number;
@@ -96,6 +99,8 @@ const toISO = (v: any): string | null =>
   v == null ? null : v instanceof Date ? v.toISOString() : v;
 
 const rowToSession = (row: any): ISession => ({
+  activationRequired: row.activation_required && !row.activated_at,
+  activatedAt: toISO(row.activated_at) || undefined,
   runtimeVersion: row.runtime_version || undefined,
   runtimeState: row.runtime_state || undefined,
   revision: row.runtime_revision===undefined?undefined:Number(row.runtime_revision),
@@ -231,15 +236,20 @@ export const sessionRepository = {
   ): Promise<Omit<ISession, "questions">[]> {
     const offset = (page - 1) * limit;
     const { rows } = await query(
-      `SELECT * FROM sessions WHERE user_id = $1
-       ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
-      [userId.toString(), limit, offset]
-    );
-    return Promise.all(rows.map(async (r) => {
-      const { questions: _questions, ...rest } = await publicEvaluationSession(rowToSession(r));
-      void _questions; // intentionally omit the large question payload from lists
-      return rest;
-    }));
+      `SELECT s.*,r.summary AS saved_summary,r.questions AS saved_questions FROM sessions s
+       LEFT JOIN interview_reports r ON r.session_id=s.id AND r.user_id=s.user_id
+       WHERE s.user_id=$1 ORDER BY s.created_at DESC,s.id DESC LIMIT $2 OFFSET $3`,
+      [userId.toString(),limit,offset]);
+    return rows.map(r=>{
+      const session=rowToSession(r), questions=r.saved_questions||session.questions;
+      session.individualScoredAnswers=questions.filter((q:IQuestion)=>q.isEvaluated && typeof q.technicalScore==="number").length;
+      if(session.scoringVersion==="rubric-v1"){
+        session.reviewedSummary=r.saved_summary?.reviewedSummary;
+        session.overallScore=session.status==="completed"?r.saved_summary?.reviewedSummary?.technicalScore??null:null;
+        session.metrics={avgTechnical:session.overallScore,avgConfidence:null};
+      }
+      const {questions:_questions,...rest}=session;void _questions;return rest;
+    });
   },
 
   /** All sessions for a user, full documents (used by analytics + badges). */

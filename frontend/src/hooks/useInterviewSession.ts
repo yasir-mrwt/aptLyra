@@ -90,10 +90,12 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
         if(activeSession.status==="completed"){
             localStorage.removeItem(`draft_code_${sessionId}`);void deleteDrafts(sessionId);navigate(`/review/${sessionId}`);return;
         }
-        const timer=window.setInterval(refresh,2000);
+        let inFlight=false;
+        const boundedRefresh=async()=>{if(inFlight||document.hidden)return;inFlight=true;try{await dispatch(getSessionById(sessionId));}finally{inFlight=false;}};
+        const timer=window.setInterval(()=>void boundedRefresh(),unfinished||activeSession.runtimeState==="finishing"?3000:30000);
         window.addEventListener("online",refresh);window.addEventListener("focus",refresh);
         return()=>{window.clearInterval(timer);window.removeEventListener("online",refresh);window.removeEventListener("focus",refresh);};
-    },[sessionId,durable,activeSession?._id,activeSession?.status,dispatch,navigate]);
+    },[sessionId,durable,activeSession?._id,activeSession?.status,activeSession?.runtimeState,unfinished,dispatch,navigate]);
 
     useEffect(()=>{
         if(!sessionId || activeSession?._id!==sessionId || restoredSession.current===sessionId)return;
@@ -118,7 +120,7 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
         }
     }, [isEvaluationError, isLocallySubmitted, currentQuestionIndex, sessionMessage]);
 
-    const isQuestionLocked = activeSession?.status !== "in-progress" || activeSession?.runtimeState==="finishing" || !!unfinished || isSubmitting || isReduxSubmitted || (isLocallySubmitted && !isEvaluationError);
+    const isQuestionLocked = !!activeSession?.activationRequired || activeSession?.status !== "in-progress" || activeSession?.runtimeState==="finishing" || !!unfinished || isSubmitting || isReduxSubmitted || (isLocallySubmitted && !isEvaluationError);
     const isProcessing = activeSession?.status === "in-progress" && !currentQuestion?.isEvaluated && (durable?
         isSubmitting || !!(currentOperation && (["queued","running"].includes(currentOperation.status) || currentOperation.nextRetryAt)):
         (isSubmitting || isReduxSubmitted || (isLocallySubmitted && !isEvaluationError)));

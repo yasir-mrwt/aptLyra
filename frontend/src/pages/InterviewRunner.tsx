@@ -1,9 +1,13 @@
 import { Link, useParams } from "react-router-dom";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useAudioRecorder } from "../hooks/useAudioRecorder";
 import { useInterviewSession } from "../hooks/useInterviewSession";
 import { useInterviewerVoice } from "../hooks/useInterviewerVoice";
 
+import api from "../services/apiClient";
+import {useDispatch} from "react-redux";
+import type {AppDispatch} from "../app/store";
+import {getSessionById} from "../features/session/sessionSlice";
 import ConfirmModal from "../components/ConfirmModal";
 import InterviewHeader from "../components/InterviewHeader";
 import QuestionSection from "../components/QuestionSection";
@@ -18,6 +22,10 @@ import WhiteboardModal from "../components/WhiteboardModal";
 import OperationStatusPanel from "../components/OperationStatusPanel";
 
 const InterviewRunnerSession = () => {
+    const dispatch=useDispatch<AppDispatch>();
+    const [editorReady,setEditorReady]=useState(false);
+    const [activationError,setActivationError]=useState(false);
+    const [activationAttempt,setActivationAttempt]=useState(0);
     const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
     const [isWhiteboardOpen, setIsWhiteboardOpen] = useState(false);
     const [isFinishing, setIsFinishing] = useState(false);
@@ -60,6 +68,18 @@ const InterviewRunnerSession = () => {
         unfinished,socketConnection
     } = useInterviewSession(stopRecording, setRecordingTime);
 
+    useEffect(()=>{
+        if(!activeSession?.activationRequired || !currentQuestion || (currentQuestion.questionType==="coding"&&!editorReady))return;
+        let cancelled=false;
+        const frame=requestAnimationFrame(()=>{
+            performance.mark("aptlyra-interview-workspace-ready");
+            void api.post(`/sessions/${activeSession._id}/activate`,{}, {timeout:15000})
+              .then(()=>{if(!cancelled)void dispatch(getSessionById(activeSession._id));})
+              .catch(()=>{if(!cancelled)setActivationError(true);});
+        });
+        return()=>{cancelled=true;cancelAnimationFrame(frame);};
+    },[activeSession?._id,activeSession?.activationRequired,currentQuestion,editorReady,activationAttempt,dispatch]);
+
     // AI interviewer voice (Groq TTS + live lip-sync amplitude)
     const {
         isSpeaking,
@@ -74,7 +94,7 @@ const InterviewRunnerSession = () => {
         activeSession?._id,
         currentQuestionIndex,
         currentQuestion?.questionText,
-        activeSession?.status === "in-progress" && activeSession.runtimeState!=="finishing" && !currentQuestion?.evidenceUnavailable && !isRecording && !isStarting && !isProcessing
+        !activeSession?.activationRequired && activeSession?.status === "in-progress" && activeSession.runtimeState!=="finishing" && !currentQuestion?.evidenceUnavailable && !isRecording && !isStarting && !isProcessing
     );
 
     const handleConfirmFinish = async () => {
@@ -114,18 +134,19 @@ const InterviewRunnerSession = () => {
     return (
         <div className="max-w-7xl mx-auto px-4 pb-32">
             {activeSession.planId && <p className="mb-4">{activeSession.scoringVersion === "rubric-v1" ? "Trusted starters use established interview evaluation. Dynamic questions show their own rubric readiness." : "Planner-backed questions · Legacy evaluation"}</p>}
+            {activeSession.activationRequired&&<div role="status" className="p-4 border rounded-xl">{activationError?<>Unable to start the clock. Your plan is saved. <button onClick={()=>{setActivationError(false);setActivationAttempt(n=>n+1);}}>Retry activation</button></>:"Preparing your interview… The clock starts when your workspace is ready."}</div>}
             <OperationStatusPanel session={activeSession} onAction={handleOperation} connection={socketConnection} />
             {activeSession.runtimeState==="finishing"&&<p role="status" aria-live="polite" className="mb-4">Finishing… Your answers are saved. Preparing your report; you can safely reload.</p>}
             <InterviewHeader
                 role={activeSession.role}
-                startTime={activeSession.createdAt || activeSession.updatedAt || new Date().toISOString()}
+                startTime={activeSession.activationRequired?undefined:activeSession.activatedAt || (activeSession.startTime?String(activeSession.startTime):undefined)}
                 questions={activeSession.questions}
                 currentQuestionIndex={currentQuestionIndex}
                 submittedLocal={submittedLocal}
                 handleNavigation={(index) => { if (!isStarting) void handleNavigation(index); }}
                 handleFinishInterview={() => setIsFinishModalOpen(true)}
                 isLoading={isLoading || isSubmitting}
-                finishDisabled={activeSession.status !== "in-progress" || activeSession.runtimeState==="finishing" || !!unfinished || isStarting || isRecording || isSubmitting || activeSession.questions.some(q => (q.isSubmitted && !q.isEvaluated) || q.followUpPending)}
+                finishDisabled={!!activeSession.activationRequired || activeSession.status !== "in-progress" || activeSession.runtimeState==="finishing" || !!unfinished || isStarting || isRecording || isSubmitting || activeSession.questions.some(q => (q.isSubmitted && !q.isEvaluated) || q.followUpPending)}
                 questionsCount={activeSession.questions.length}
                 company={activeSession.company}
             />
@@ -159,7 +180,7 @@ const InterviewRunnerSession = () => {
             )}
             {isCodingQuestion ? (
                 <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
-                    <CodeEditorSection
+                    <CodeEditorSection onReady={()=>setEditorReady(true)}
                         language={selectedLanguage}
                         plannedLanguage={!!activeSession.planId}
                         code={currentDraft.code ?? currentQuestion?.userSubmittedCode ?? ""}
@@ -200,6 +221,7 @@ const InterviewRunnerSession = () => {
                         />
                         <p id="typed-answer-help" className="mt-2 text-sm text-surface-300">Use a recording or a typed answer. Clear your text to record, or remove the recording to type.</p>
                     </div>
+                    {currentQuestion?.questionType === 'system-design' && <details className="glass-card p-4"><summary>Optional code workspace · execution does not verify the design</summary><div className="grid gap-4 mt-4 lg:grid-cols-2"><CodeEditorSection language={selectedLanguage} plannedLanguage code={currentDraft.code??currentQuestion.userSubmittedCode??""} isQuestionLocked={isQuestionLocked} setLanguage={setSelectedLanguage} updateCode={updateDraftCode}/><CodeOutputPanel context={{sessionId:activeSession._id,questionIndex:currentQuestionIndex}} language={selectedLanguage} code={currentDraft.code??currentQuestion.userSubmittedCode??""}/></div></details>}
                     {currentQuestion?.questionType === 'system-design' && (
                         <div className="flex justify-center mt-2">
                             <button
