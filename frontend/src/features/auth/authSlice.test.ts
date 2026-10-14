@@ -25,6 +25,10 @@ describe("startup auth restoration",()=>{
     expect(store.getState().auth.isInitializing).toBe(false);
     expect(store.getState().auth.user?.id).toBe(savedUser.id);
   });
+  it("keeps the saved identity during a service outage so retry remains possible",async()=>{
+    post.mockRejectedValue({isAxiosError:true,response:{status:503}});const store=makeStore();
+    await store.dispatch(restoreSession()).unwrap();expect(store.getState().auth.user?.id).toBe(savedUser.id);expect(localStorage.getItem("user")).not.toBeNull();
+  });
   it("clears stale local identity when refresh fails",async()=>{
     post.mockRejectedValue(new Error("expired refresh cookie"));
     const store=makeStore();

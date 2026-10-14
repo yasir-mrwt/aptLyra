@@ -31,7 +31,9 @@ export const restoreSession=createAsyncThunk<User|null,void,{state:{auth:AuthSta
         try {
             await authApi.post("user/refresh",{});
             return stored;
-        } catch {
+        } catch(error) {
+            // A service/network outage does not prove the refresh cookie expired.
+            if(axios.isAxiosError(error) && error.response?.status!==401)return stored;
             localStorage.removeItem("user");
             return thunkAPI.rejectWithValue("Your saved session has expired. Please sign in again.");
         }

@@ -72,10 +72,10 @@ connectDB();
 
 const app: Express = express();
 const server = http.createServer(app);
-const allowOrigin = process.env.FRONTEND_URL || "";
+const allowOrigin = process.env.FRONTEND_URL || "http://localhost:5173";
 const io = new SocketIOServer(server, {
   cors: {
-    origin: allowOrigin,
+    origin: allowOrigin.split(",").map(origin=>origin.trim().replace(/\/$/,"")),
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -100,8 +100,7 @@ app.use(
         .map((o) => o.trim().replace(/\/$/, "")); // Strip trailing slashes
 
       if (
-        allowedOrigins.includes(origin) ||
-        process.env.NODE_ENV === "development"
+        allowedOrigins.includes(origin)
       ) {
         callback(null, true);
       } else {

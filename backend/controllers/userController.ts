@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import asyncHandler from "express-async-handler";
 import bcrypt from "bcrypt";
 import { userRepository } from "../models/User.js";
+import {verifyGoogleChallenge,googleCookieOptions} from "../authGoogle.js";
+import {withDatabaseLock,query} from "../config/db.js";
 import { OAuth2Client } from "google-auth-library";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
@@ -343,83 +345,34 @@ const loginUser = asyncHandler(async (req: Request, res: Response) => {
  */
 const googleLogin = asyncHandler(async (req: Request, res: Response) => {
     const { token } = req.body;
-    if (!token) {
-        res.status(400);
-        throw new Error("Please provide token");
+    if (typeof token!=="string" || !token || token.length>20000) {
+        res.status(400);throw new Error("A Google sign-in credential is required.");
     }
-
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-
-    if (!clientId) {
-        res.status(500);
-        throw new Error("Google Client ID not configured");
-    }
-
-    const client = new OAuth2Client(clientId, clientSecret);
-
-    const ticket = await client.verifyIdToken({
-        idToken: token,
-        audience: clientId,
-    });
-
-    const payload = ticket.getPayload();
-    if (!payload) {
-        res.status(400);
-        throw new Error("Invalid Google token");
-    }
-
-    const { email_verified, name, email, sub: googleId, picture } = payload;
-
-    if (!email_verified || !email) {
-        res.status(400);
-        throw new Error("Email not verified by Google");
-    }
-
-    const user = await userRepository.findByEmail(email);
-
-    if (user) {
-        // Link googleId + keep the Google profile photo fresh
-        if (!user.googleId || (picture && user.avatarUrl !== picture)) {
-            user.googleId = user.googleId || googleId;
-            if (picture) user.avatarUrl = picture;
-            await userRepository.save(user);
+    const clientId=process.env.GOOGLE_CLIENT_ID?.trim();
+    if(!clientId){res.status(503);throw new Error("Google sign-in is not configured. Use email sign-in or contact the operator.");}
+    let payload;
+    try {payload=(await new OAuth2Client(clientId).verifyIdToken({idToken:token,audience:clientId})).getPayload();}
+    catch {res.status(401);throw new Error("Google could not verify this sign-in. Reload and try again.");}
+    if(!payload?.email_verified || !payload.email || !payload.sub){res.status(401);throw new Error("A verified Google email is required.");}
+    verifyGoogleChallenge(req,(payload as typeof payload & {nonce?:string}).nonce);
+    res.clearCookie("google_challenge",googleCookieOptions());
+    const {email,sub:googleId,name,picture}=payload;
+    const user=await withDatabaseLock(`google-login:${googleId}`,()=>withDatabaseLock(`account-email:${email.toLowerCase()}`,async()=>{
+        const identity=await userRepository.findByGoogleId(googleId);
+        if(identity)return identity;
+        const existing=await userRepository.findByEmail(email);
+        if(existing){
+            if(existing.googleId && existing.googleId!==googleId){res.status(409);throw new Error("This account is linked to a different Google identity. Use its existing sign-in method.");}
+            // Google is authoritative for Gmail/Workspace addresses. For third-party
+            // email addresses require the existing account's sign-in, not automatic linking.
+            if(!email.toLowerCase().endsWith("@gmail.com") && !payload.hd){res.status(409);throw new Error("Use your existing email sign-in for this account. Automatic Google linking requires a Google-managed email.");}
+            await query("UPDATE users SET google_id=$2,avatar_url=coalesce(avatar_url,$3),updated_at=now() WHERE id=$1 AND (google_id IS NULL OR google_id=$2)",[existing._id,googleId,picture||null]);
+            return existing;
         }
-        await generateTokenInCookie(res, user._id);
-        res.json({
-            _id: user._id,
-            name: user.name,
-            email: user.email,
-            preferredRole: user.preferredRole,
-            avatarUrl: user.avatarUrl,
-            provider: "google",
-        });
-    } else {
-        const newUser = await userRepository.create({
-            name: name || email,
-            email,
-            googleId,
-            avatarUrl: picture || undefined,
-        });
-
-        if (newUser) {
-            await generateTokenInCookie(res, newUser._id);
-            emailService.sendWelcomeEmail(newUser.email, newUser.name).catch((err) =>
-                console.error("[Email] Welcome email failed:", err.message)
-            );
-            res.status(201).json({
-                _id: newUser._id,
-                name: newUser.name,
-                email: newUser.email,
-                preferredRole: newUser.preferredRole,
-                avatarUrl: newUser.avatarUrl,
-                provider: "google",
-            });
-        } else {
-            res.status(400);
-            throw new Error("Invalid user data");
-        }
-    }
+        return userRepository.create({name:name||email,email,googleId,avatarUrl:picture});
+    }));
+    await generateTokenInCookie(res,user._id);
+    res.json({_id:user._id,name:user.name,email:user.email,preferredRole:user.preferredRole,avatarUrl:user.avatarUrl,provider:"google"});
 });
 
 /**

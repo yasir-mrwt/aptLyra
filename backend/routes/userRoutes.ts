@@ -1,3 +1,4 @@
+import {googleChallenge} from "../authGoogle.js";
 import express, { Router } from "express";
 import multer from "multer";
 import {
@@ -41,6 +42,7 @@ router.post("/forgot-password", otpLimiter, forgotPassword);
 router.post("/reset-password", otpLimiter, resetPassword);
 router.post("/login", authLimiter, loginValidation, validateResult, loginUser);
 router.post("/logout", protect, logoutUser);
+router.get("/google/challenge", otpLimiter, googleChallenge);
 router.post("/google", authLimiter, googleLogin);
 router.post("/refresh", refreshUserToken);
 router.route("/profile")

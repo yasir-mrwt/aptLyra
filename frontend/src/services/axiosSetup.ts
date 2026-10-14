@@ -49,7 +49,7 @@ export const setupInterceptors = (apiInstance: AxiosInstance) => {
                 isRefreshing = true;
 
                 try {
-                    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+                    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5002/api";
                     // Call the refresh endpoint. It will automatically use the refresh_jwt cookie
                     // and set the new jwt cookie on success.
                     await axios.post(
@@ -68,6 +68,7 @@ export const setupInterceptors = (apiInstance: AxiosInstance) => {
                     processQueue(refreshError, null);
 
                     // Refresh failed (token expired/invalid) -> Logout
+                    if(!axios.isAxiosError(refreshError)||refreshError.response?.status!==401)return Promise.reject(refreshError);
                     localStorage.removeItem("user");
                     if (window.location.pathname !== "/login") {
                         window.location.href = "/login";

@@ -7,9 +7,10 @@ import { googleLogin, register, verifyOtp, resendOtp, clearPendingVerification, 
 import type { AppDispatch, RootState } from "../app/store";
 import { toast } from "react-toastify";
 import type { User } from "../types/user";
-import { GoogleLogin, type CredentialResponse } from "@react-oauth/google";
+import type { CredentialResponse } from "@react-oauth/google";
+import GoogleSignIn from "../components/GoogleSignIn";
 import PasswordInput from "../components/PasswordInput";
-import { googleLoginConfigured } from "../services/googleLoginConfig";
+
 
 const RESEND_COOLDOWN = 60;
 
@@ -211,8 +212,8 @@ const Register = () => {
                         <p className="text-surface-400 text-sm font-medium">Join the next generation of top talent</p>
                     </div>
 
-                    {googleLoginConfigured&&<div className="w-full flex items-center justify-center relative z-10">
-                        <GoogleLogin
+                    {<div className="w-full flex items-center justify-center relative z-10">
+                        <GoogleSignIn
                             onSuccess={handleGoogleSuccess}
                             onError={() => {
                                 toast.error("Google Login Failed");
@@ -223,7 +224,7 @@ const Register = () => {
                             text="continue_with"
                             width={280}
                         />
-                    </div>}{!googleLoginConfigured&&import.meta.env.DEV&&<p className="mb-4 text-center text-xs text-surface-500">Google sign-in is not configured. Use email and password.</p>}
+                    </div>}
 
                     <div className="my-8 flex items-center relative z-10">
                         <div className="grow border-t border-white/5"></div>

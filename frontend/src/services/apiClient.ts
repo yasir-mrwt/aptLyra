@@ -6,7 +6,7 @@ import { setupInterceptors } from "./axiosSetup";
  * Automatically handles Refresh Token Rotation and standardized error formatting.
  */
 const apiClient = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
+    baseURL: import.meta.env.VITE_API_URL || "http://localhost:5002/api",
     withCredentials: true,
 });
 

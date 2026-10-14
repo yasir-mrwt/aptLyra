@@ -7,9 +7,10 @@ import { toast } from "react-toastify";
 import { login, reset, googleLogin } from "../features/auth/authSlice";
 import type { RootState, AppDispatch } from "../app/store";
 import type { User } from "../types/user";
-import { GoogleLogin, type CredentialResponse } from "@react-oauth/google";
+import type { CredentialResponse } from "@react-oauth/google";
+import GoogleSignIn from "../components/GoogleSignIn";
 import PasswordInput from "../components/PasswordInput";
-import { googleLoginConfigured } from "../services/googleLoginConfig";
+
 
 const Login = () => {
     const [formData, setFormData] = useState({
@@ -81,8 +82,8 @@ const Login = () => {
                         <p className="text-surface-400 text-sm font-medium">Sign in to your {BRAND.name} account</p>
                     </div>
 
-                    {googleLoginConfigured&&<div className="w-full flex items-center justify-center relative z-10">
-                        <GoogleLogin
+                    {<div className="w-full flex items-center justify-center relative z-10">
+                        <GoogleSignIn
                             onSuccess={handleGoogleSuccess}
                             onError={() => {
                                 toast.error("Google Login Failed");
@@ -93,7 +94,7 @@ const Login = () => {
                             text="continue_with"
                             width={280}
                         />
-                    </div>}{!googleLoginConfigured&&import.meta.env.DEV&&<p className="mb-4 text-center text-xs text-surface-500">Google sign-in is not configured. Use email and password.</p>}
+                    </div>}
 
                     <div className="my-8 flex items-center relative z-10">
                         <div className="grow border-t border-white/5"></div>
