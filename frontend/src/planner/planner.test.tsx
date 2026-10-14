@@ -139,3 +139,17 @@ it("editing a pinned preview restores its policy rather than a newer saved prefe
  await waitFor(()=>expect(getPlannerCapabilities).toHaveBeenCalled());
  expect((screen.getByLabelText("Question repetition") as HTMLSelectElement).value).toBe("only-new");
 });
+
+it("grouped form preserves Python, repetition and optional context in the real preview contract",async()=>{
+ vi.mocked(getPlannerCapabilities).mockResolvedValue({companies:["Permitted example"],eligibleReviewedQuestions:4,provisionalQuestions:0});
+ vi.mocked(previewPlan).mockResolvedValue(plan);
+ renderForm({onCreated:vi.fn()});
+ await waitFor(()=>expect(screen.getByLabelText("Company preference")).toBeTruthy());
+ fireEvent.change(screen.getByLabelText("Coding language"),{target:{value:"python"}});
+ fireEvent.change(screen.getByLabelText("Question repetition"),{target:{value:"revision"}});
+ fireEvent.change(screen.getByLabelText("Company preference"),{target:{value:"Permitted example"}});
+ fireEvent.change(screen.getByLabelText("Occurred on or after"),{target:{value:"2026-01-01"}});
+ fireEvent.click(screen.getByRole("button",{name:"Preview interview plan"}));
+ await waitFor(()=>expect(previewPlan).toHaveBeenCalled());
+ expect(vi.mocked(previewPlan).mock.calls[0][0]).toMatchObject({codeLanguage:"python",repeatPolicy:"revision",modifiers:{company:"Permitted example",occurredAfter:"2026-01-01"}});
+});

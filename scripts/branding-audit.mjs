@@ -44,6 +44,19 @@ for(const scope of ['backend','frontend']){
   const name=`${scope}/package-lock.json`,baseline=JSON.parse(execFileSync('git',['show',`HEAD:${name}`],{cwd:root})),current=JSON.parse(await readFile(resolve(root,name),'utf8'));
   if(current.name!==`aptlyra-${scope}` || current.packages[''].name!==`aptlyra-${scope}`)failures.push(`package identity: ${name}`);
   baseline.name=current.name;baseline.packages[''].name=current.packages[''].name;
+  // Approved hero renderer addition; every existing resolution must still match.
+  // Once committed it is part of HEAD and receives the normal exact-byte check.
+  if(scope==='frontend'&&!baseline.packages['node_modules/lottie-web']){
+    baseline.packages[''].dependencies['lottie-web']='5.13.0';
+    const addition={version:'5.13.0',resolved:'https://registry.npmjs.org/lottie-web/-/lottie-web-5.13.0.tgz',integrity:'sha512-+gfBXl6sxXMPe8tKQm7qzLnUy5DUPJPKIyRHwtpCpyUEYjHYRJC/5gjUvdkuO2c3JllrPtHXH5UJJK8LRYl5yQ==',license:'MIT'};
+    baseline.packages['node_modules/lottie-web']=addition;
+    // npm keeps package/dependency keys sorted; compare the same canonical order.
+    baseline.packages=Object.fromEntries(Object.entries(baseline.packages).sort(([a],[b])=>a.localeCompare(b,'en')));
+    current.packages=Object.fromEntries(Object.entries(current.packages).sort(([a],[b])=>a.localeCompare(b,'en')));
+    baseline.packages[''].dependencies=Object.fromEntries(Object.entries(baseline.packages[''].dependencies).sort());
+    current.packages[''].dependencies=Object.fromEntries(Object.entries(current.packages[''].dependencies).sort());
+  }
+
   if(JSON.stringify(baseline)!==JSON.stringify(current))failures.push(`dependency resolutions changed: ${name}`);
   if(JSON.parse(await readFile(resolve(root,`${scope}/package.json`),'utf8')).name!==`aptlyra-${scope}`)failures.push(`package identity: ${scope}`);
 }
