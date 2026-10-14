@@ -1,3 +1,4 @@
+import AptlyraMark from "../components/AptlyraMark";
 import { useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import type { RootState, AppDispatch } from "../app/store";
@@ -73,6 +74,7 @@ const SessionReview = () => {
 
     return (
         <div className="interview-report max-w-7xl mx-auto px-4 py-12 space-y-16 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+            <div className="flex items-center gap-3 text-white text-xl font-semibold"><AptlyraMark/> Aptlyra · Interview report</div>
             <div className="flex flex-col gap-8">
                 <div className="w-full">
                     <span className="text-primary-400 font-black uppercase tracking-[0.4rem] text-[10px] bg-primary-500/10 px-4 py-1.5 rounded-full border border-primary-500/20 shadow-[0_0_15px_rgba(139,92,246,0.1)]">Report Terminal</span>

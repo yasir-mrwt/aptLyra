@@ -62,6 +62,9 @@ const SessionCard = ({ session, onClick, onDelete }: SessionCardProps) => {
 
     return (
         <div
+            role="link"
+            tabIndex={0}
+            onKeyDown={(e) => { if(e.target===e.currentTarget && (e.key==="Enter" || e.key===" ")){e.preventDefault();onClick(session);} }}
             onClick={() => onClick(session)}
             className="group glass-card hover-lift rounded-3xl p-6 flex flex-col items-stretch gap-6 active:scale-[0.99] cursor-pointer relative will-change-transform overflow-hidden"
         >
@@ -94,6 +97,8 @@ const SessionCard = ({ session, onClick, onDelete }: SessionCardProps) => {
                     </div>
                 </div>
                 <button
+                    aria-label="Delete interview"
+                    disabled={!isDeletable}
                     onClick={(e) => { e.stopPropagation(); if (isDeletable) onDelete(e, session._id) }}
                     className="p-2.5 text-surface-600 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer border border-transparent hover:border-red-500/20"
                 >
@@ -101,9 +106,10 @@ const SessionCard = ({ session, onClick, onDelete }: SessionCardProps) => {
                 </button>
             </div>
 
+            {session.status==='completed'&&session.overallScore==null&&<p className="text-sm text-surface-300">{session.individualScoredAnswers||0} individually scored answers. A reviewed aggregate requires eligible reviewed originals; open the report for answer feedback.</p>}
             <div className="flex items-center justify-between mt-2 pt-5 border-t border-white/5 relative z-10">
                 <div className="space-y-1">
-                    <p className="text-[9px] font-black text-surface-500 uppercase tracking-widest mb-1">Overall Proficiency</p>
+                    <p className="text-[9px] font-black text-surface-500 uppercase tracking-widest mb-1">Reviewed aggregate</p>
                     <div className="flex items-center gap-3">
                         <div className="relative w-8 h-8 flex items-center justify-center shrink-0">
                             <svg className="w-8 h-8 -rotate-90 transform" viewBox="0 0 36 36">
@@ -116,7 +122,7 @@ const SessionCard = ({ session, onClick, onDelete }: SessionCardProps) => {
                         </div>
                         <div className="flex flex-col">
                             <span className={`text-base leading-none font-black ${scoreColor}`}>
-                                {session.status === 'completed' ? session.overallScore == null ? 'Unscored' : session.overallScore.toFixed(1) : '—'}
+                                {session.status === 'completed' ? session.overallScore == null ? 'Unavailable' : session.overallScore.toFixed(1) : '—'}
                             </span>
                         </div>
                     </div>

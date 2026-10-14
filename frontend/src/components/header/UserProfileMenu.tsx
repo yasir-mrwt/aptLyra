@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useDispatch } from "react-redux";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { logout } from "../../features/auth/authSlice";
 import type { AppDispatch } from "../../app/store";
 
@@ -67,13 +67,15 @@ export const UserProfileMenu = ({ user, onOpenModal }: UserProfileMenuProps) => 
   // Close on outside click
   useEffect(() => {
     if (!isOpen) return;
+    const handleKey=(e:KeyboardEvent)=>{if(e.key==="Escape")setIsOpen(false);};
+    document.addEventListener("keydown",handleKey);
     const handleClick = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setIsOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    return () => {document.removeEventListener("mousedown", handleClick);document.removeEventListener("keydown",handleKey);};
   }, [isOpen]);
 
   const handleLogout = async () => {
@@ -88,6 +90,7 @@ export const UserProfileMenu = ({ user, onOpenModal }: UserProfileMenuProps) => 
     <div className="relative" ref={menuRef}>
       {/* Chip — avatar + name + status */}
       <button
+        aria-label="Account menu" aria-expanded={isOpen}
         onClick={() => setIsOpen((v) => !v)}
         className="flex items-center gap-3 rounded-full border border-white/10 bg-white/[0.04] backdrop-blur-xl pl-1.5 pr-4 py-1.5 hover:border-white/25 hover:bg-white/[0.07] transition-all duration-300 group cursor-pointer shadow-[0_4px_24px_rgba(0,0,0,0.4)]"
       >
@@ -143,6 +146,8 @@ export const UserProfileMenu = ({ user, onOpenModal }: UserProfileMenuProps) => 
 
           <div className="h-px bg-white/5 mx-4"></div>
 
+          <p className="px-5 py-3 text-xs text-surface-400">Ranking unavailable · no verified global ranking</p>
+          <div className="flex gap-4 px-5 py-2 text-sm"><Link to="/analytics" onClick={()=>setIsOpen(false)}>Analytics</Link><Link to="/history" onClick={()=>setIsOpen(false)}>History</Link></div>
           {/* Actions */}
           <div className="p-2 space-y-1">
             <button

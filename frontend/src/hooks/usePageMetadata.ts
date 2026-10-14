@@ -3,7 +3,7 @@ import { BRAND } from "../constants/brand";
 import { publicSiteURL } from "../constants/seo";
 
 const pageTitles: Record<string, string> = {
-  login: "Sign in", register: "Create account", "forgot-password": "Reset password",
+  history:"Interview history", login: "Sign in", register: "Create account", "forgot-password": "Reset password",
   "reset-password": "Reset password", dashboard: "Dashboard", plans: "Interview plan",
   interview: "Interview", review: "Interview feedback", analytics: "Analytics",
   "resume-analyzer": "Resume analysis",

@@ -411,3 +411,30 @@ select::-webkit-scrollbar {
  .interview-report .absolute { display: none !important; }
 }
 }
+
+/* Original Aptlyra practice workbench. Existing palette, typography and navigation. */
+.signature-home { color:var(--color-surface-300); }
+.home-hero { display:grid;grid-template-columns:1fr 1.12fr;align-items:center;gap:3rem;padding:4rem 0 5rem; }
+.home-eyebrow {font:600 .65rem/1.6 var(--font-mono,monospace);letter-spacing:.17em;color:#a78bfa;}
+.home-hero h1 {font-family:var(--font-display);font-size:clamp(2.6rem,4.2vw,4.25rem);line-height:1.09;letter-spacing:-.055em;font-weight:750;color:#fafafa;margin-top:1.5rem;}
+.home-hero h1 span {color:#a1a1aa;}
+.home-intro {font-size:1.06rem;line-height:1.8;max-width:32rem;margin-top:1.5rem;color:#a1a1aa;}
+.home-secondary {display:inline-flex;align-items:center;gap:1rem;padding:.85rem 1rem;border-radius:.9rem;color:#e4e4e7;transition:background .2s;}
+.home-secondary:hover {background:rgba(255,255,255,.07);}
+.journey-scene {margin:0;min-width:0;border:1px solid #3f3f46;border-radius:1.5rem;background:#0c0c11;box-shadow:0 30px 80px #0006;overflow:hidden;}
+.journey-step {border:1px solid #3f3f46;padding:.5rem .65rem;border-radius:.6rem;font-size:.75rem;color:#a1a1aa;transition:background .2s,color .2s;}
+.journey-step.selected {background:#8b5cf620;border-color:#a78bfa;color:#ddd6fe;}
+.home-planner {border-top:1px solid #ffffff18;padding-top:2rem;outline:none;}
+.home-planner:focus-visible {outline:2px solid #a78bfa;outline-offset:8px;}
+.home-planner .glass-card {background:#111116;border-color:#ffffff1f;padding:clamp(1rem,3vw,2.5rem);}
+.home-planner input,.home-planner select,.home-planner textarea {transition:border-color .2s,box-shadow .2s;}
+:is(input,select,textarea,button,a):focus-visible {outline:2px solid #c4b5fd;outline-offset:3px;}
+.guest-plan {display:grid;grid-template-columns:1fr 1fr;gap:3rem;padding:2rem 0;}
+.guest-plan-outline {display:flex;flex-direction:column;justify-content:center;gap:1.8rem;border-left:1px solid #ffffff18;padding-left:2rem;}
+.guest-plan-outline li {display:flex;gap:1rem;}.guest-plan-outline li>span {color:#a78bfa;font-family:monospace;}.guest-plan-outline strong {color:#e4e4e7;font-weight:600;}.guest-plan-outline p {font-size:.875rem;color:#a1a1aa;margin-top:.3rem;}
+.home-process {display:grid;grid-template-columns:1fr 1fr;gap:4rem;padding:6rem 0;}.home-process h2 {font-size:clamp(2rem,3.5vw,3.3rem);line-height:1.15;letter-spacing:-.04em;color:#fafafa;margin-top:1rem;font-weight:650;}
+.home-principle {display:flex;gap:2rem;padding:2.5rem;border:1px solid #ffffff18;border-radius:1.5rem;background:#8b5cf607;}
+.home-footer {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:1.5rem;margin-top:5rem;padding:2rem 0;border-top:1px solid #ffffff18;color:#a1a1aa;font-size:.8rem;}
+@media(max-width:900px){.home-hero{grid-template-columns:1fr;gap:2rem;padding-top:2rem;}.home-hero h1{max-width:650px;}.journey-scene{max-width:620px;width:100%;justify-self:center;}.home-process{gap:2rem;}.guest-plan{gap:2rem;}}
+@media(max-width:560px){.home-hero{padding-bottom:2.5rem;}.home-hero h1{font-size:2.6rem;}.home-intro{font-size:1rem;}.guest-plan,.home-process{grid-template-columns:1fr;}.guest-plan-outline{border-left:0;padding:1rem 0 0;}.home-process{padding:3.5rem 0;}.home-principle{padding:1.4rem;gap:1rem;flex-direction:column;}.journey-step{font-size:.7rem;padding:.5rem;}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;}}

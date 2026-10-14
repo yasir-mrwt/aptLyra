@@ -30,7 +30,7 @@ const Header = () => {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const isActive = (path: string) => location.pathname === path;
+  const isActive = (path: string) => path.includes("#") ? location.pathname+location.hash===path : location.pathname===path&&!location.hash;
 
   return (
     <>
@@ -55,6 +55,7 @@ const Header = () => {
               roleLoading={roleLoading}
             />
 
+            {!user&&<div className="xl:hidden flex gap-3 ml-auto mr-3 text-xs"><a href="/login">Log in</a><a href="/register" className="text-white font-bold">Join</a></div>}
             {/* Mobile Menu Button + Navigation Dropdown */}
             <MobileNav
               user={user}

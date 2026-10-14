@@ -67,6 +67,8 @@ const AnalyticsDashboard: React.FC = () => {
     dispatch(getAnalytics());
   }, [dispatch]);
 
+  useEffect(()=>{if(data&&window.location.hash==="#ranking")document.getElementById("ranking")?.scrollIntoView();},[data]);
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center min-h-[70vh] w-full">
@@ -169,12 +171,13 @@ const AnalyticsDashboard: React.FC = () => {
         <div>
           <h1 className="text-4xl md:text-5xl font-black text-white tracking-tight mb-3 font-display">Performance Insights</h1>
           <p className="text-surface-300 font-medium max-w-2xl text-[15px]">
-            Executive-level analysis of your interview performance, skill evolution, and readiness metrics.
+            Your saved practice, reviewed scoring coverage and participation progress.
           </p>
         </div>
       </div>
 
       <section className="glass-card p-6 rounded-2xl"><h2>Reviewed rubric evaluation</h2><p>{data.evaluation?.reviewedMean == null ? "Insufficient reviewed coverage" : `Reviewed mean: ${data.evaluation.reviewedMean}/100`} · {data.evaluation?.reviewedScoredSessions || 0} eligible sessions · {data.evaluation?.provisional || 0} provisional · {data.evaluation?.abstained || 0} abstained</p><p>Score trends below use historical legacy evaluations only. Delivery feedback is separate from evaluator confidence.</p></section>
+      <section id="ranking" tabIndex={-1} className="glass-card p-6 rounded-2xl scroll-mt-28"><h2 className="text-xl text-white font-semibold">Ranking & verified skills</h2><p className="mt-3">Ranking unavailable. Aptlyra does not currently have a verified global skill-ranking policy.</p><p className="mt-2 text-surface-400">Verified skill credentials are unavailable. Level, XP and consistency below track participation; provisional feedback does not certify a skill or establish proficiency.</p></section>
       {/* Top 3 Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Professional Development */}
@@ -190,8 +193,8 @@ const AnalyticsDashboard: React.FC = () => {
           </div>
           <div className="mb-10 relative z-10">
             <div className="flex items-baseline gap-2">
-              <span className="text-5xl font-black text-white font-display">Lvl. {gamification?.currentLevel || 0}</span>
-              <span className="text-surface-400 font-bold text-sm">{gamification?.currentTitle || 'Beginner'}</span>
+              <span className="text-5xl font-black text-white font-display">Lvl. {gamification?.currentLevel ?? "—"}</span>
+              <span className="text-surface-400 font-bold text-sm">{gamification?.currentTitle || 'Unavailable'}</span>
             </div>
           </div>
           <div className="relative z-10">

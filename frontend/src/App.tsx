@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { useEffect, lazy, Suspense } from "react";
+import { Routes, Route } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import type { RootState } from "./app/store";
 import type { AppDispatch } from "./app/store";
@@ -14,24 +14,26 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import InterviewHistory from "./pages/InterviewHistory";
 import Dashboard from "./pages/Dashboard";
 import InterviewPlan from "./pages/InterviewPlan";
-import InterviewRunner from "./pages/InterviewRunner";
-import SessionReview from "./pages/SessionReview";
+const InterviewRunner=lazy(()=>import("./pages/InterviewRunner"));
+const SessionReview=lazy(()=>import("./pages/SessionReview"));
 import PrivateRoute from "./components/PrivateRoute";
 import PublicRoute from "./components/PublicRoute";
 import NotFound from "./pages/NotFound";
 
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useLocation } from "react-router-dom";
-import ResumeAnalyzer from "./pages/ResumeAnalyzer";
-import AnalyticsDashboard from "./pages/AnalyticsDashboard";
+const ResumeAnalyzer=lazy(()=>import("./pages/ResumeAnalyzer"));
+const AnalyticsDashboard=lazy(()=>import("./pages/AnalyticsDashboard"));
 import ShareInterviewExperience from "./pages/ShareInterviewExperience";
-import ContentEditorialConsole from "./pages/ContentEditorialConsole";
-import AdminTeamManagement from "./pages/AdminTeamManagement";
+const ContentEditorialConsole=lazy(()=>import("./pages/ContentEditorialConsole"));
+const AdminTeamManagement=lazy(()=>import("./pages/AdminTeamManagement"));
 import EditorialErrorBoundary from "./components/EditorialErrorBoundary";
 
 function App() {
+  const reduced=useReducedMotion();
   const dispatch=useDispatch<AppDispatch>();
   useSocket();
   const location = useLocation();
@@ -39,18 +41,6 @@ function App() {
   const { user,isInitializing } = useSelector((state: RootState) => state.auth);
   const userId=user?.id||user?._id||null;
   useEffect(()=>{if(isInitializing)return;if(userId)void dispatch(fetchCurrentRole({userId}));else dispatch(clearRole());},[dispatch,isInitializing,userId]);
-
-  // The landing page is a full-bleed experience with its own navbar —
-  // rendered outside the app shell (Header + constrained <main>).
-  if (location.pathname === "/") {
-    if (user) return <Navigate to="/dashboard" replace />;
-    return (
-      <>
-        <ToastContainer position="bottom-right" autoClose={2200} theme="dark" transition={Slide} />
-        <Landing />
-      </>
-    );
-  }
 
   return (
     <>
@@ -82,13 +72,15 @@ function App() {
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}
-              initial={{ opacity: 0, y: 10 }}
+              initial={reduced?false:{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              exit={reduced?{opacity:1}:{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2, ease: "easeInOut" }}
               className="w-full"
             >
+              <Suspense fallback={<p role="status" className="p-8">Preparing your workspace…</p>}>
               <Routes location={location} key={location.pathname}>
+                <Route path="/" element={<Landing />} />
                 <Route element={<PublicRoute />}>
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
@@ -97,6 +89,7 @@ function App() {
                 </Route>
 
                 <Route element={<PrivateRoute />} >
+                  <Route path="/history" element={<InterviewHistory />} />
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/plans/:planId" element={<InterviewPlan />} />
                   <Route path="/resume-analyzer" element={<ResumeAnalyzer />} />
@@ -109,6 +102,7 @@ function App() {
                 </Route>
                 <Route path="*" element={<NotFound />} />
               </Routes>
+              </Suspense>
             </motion.div>
           </AnimatePresence>
         </main>

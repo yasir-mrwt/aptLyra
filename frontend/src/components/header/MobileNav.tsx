@@ -40,8 +40,9 @@ export const MobileNav = ({
     <>
       {/* Mobile Menu Button */}
       <button
+        aria-label="Toggle navigation" aria-expanded={isOpen} aria-controls="mobile-navigation"
         onClick={onToggle}
-        className="md:hidden p-2 rounded-xl bg-white/5 border border-white/10 hover:border-primary-400 transition-all duration-300 cursor-pointer group"
+        className="xl:hidden p-2 rounded-xl bg-white/5 border border-white/10 hover:border-primary-400 transition-all duration-300 cursor-pointer group"
       >
         <div className="w-6 h-6 flex flex-col justify-center items-center space-y-1.5">
           <span
@@ -60,8 +61,8 @@ export const MobileNav = ({
       </button>
 
       {/* Mobile Navigation Dropdown */}
-      <div
-        className={`md:hidden absolute top-full left-0 w-full overflow-hidden transition-all duration-500 ease-in-out ${isOpen ? "max-h-125 border-b border-white/10 shadow-2xl" : "max-h-0"
+      <div id="mobile-navigation" inert={!isOpen}
+        className={`xl:hidden absolute top-full left-0 w-full overflow-hidden transition-all duration-500 ease-in-out ${isOpen ? "max-h-[80vh] overflow-y-auto border-b border-white/10 shadow-2xl" : "max-h-0"
           }`}
       >
         <div className="bg-surface-900/95 backdrop-blur-2xl px-6 py-8 space-y-6">
@@ -112,6 +113,9 @@ export const MobileNav = ({
               >
                 Analytics
               </Link>
+              <p className="text-sm text-surface-400">Ranking unavailable · no verified global ranking</p>
+              <Link to="/history" onClick={onClose} className="block py-2">History</Link>
+              <Link to="/analytics#ranking" onClick={onClose} className="block py-2">Rank</Link>
               <button
                 onClick={handleLogout}
                 className="block w-full text-left py-3 text-sm font-black uppercase tracking-[0.2em] text-rose-400 hover:text-rose-300 transition-colors cursor-pointer"
@@ -127,7 +131,7 @@ export const MobileNav = ({
                 className={`block py-3 text-sm font-black uppercase tracking-[0.2em] transition-colors ${isActive("/login") ? "text-primary-400" : "text-surface-400 hover:text-white"
                   }`}
               >
-                Login
+                Log in
               </Link>
               <Link
                 to="/register"
@@ -135,7 +139,7 @@ export const MobileNav = ({
                 className={`block py-3 text-sm font-black uppercase tracking-[0.2em] transition-colors ${isActive("/register") ? "text-primary-400" : "text-surface-400 hover:text-white"
                   }`}
               >
-                Register
+                Join
               </Link>
             </>
           )}

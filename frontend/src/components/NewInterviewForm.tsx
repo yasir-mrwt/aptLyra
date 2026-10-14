@@ -65,6 +65,6 @@ export default function NewInterviewForm({preferredRole,onCreated,initialSetup}:
       {eligibleReviewed===0&&<div role="status" className="rounded-xl border border-amber-300/25 bg-amber-950/20 p-4 text-sm"><p>{canReview?"No questions are currently available for this setup. Approve a new question for practice or check the starter bank retrieval status.":"Not enough questions are available for this setup yet."}</p>{canReview&&<Link to="/content-editorial" className="mt-2 inline-block text-cyan-200 underline">Open editorial review</Link>}{canReview&&provisionalCount>0&&<p className="mt-2 text-xs text-surface-400">{provisionalCount} practice questions exist; their feedback remains provisional until reviewed scoring is added.</p>}</div>}
       <p>We reserve 2 minutes for setup/wrap-up and 4 for probes. The preview explains count, difficulty and evidence shortages before you start.</p>
       {error && <p role="alert" className="text-rose-300">{error}</p>}
-      <button className="btn-primary" type="submit" disabled={pending}>{pending?"Preparing plan…":error?"Retry preview":"Preview plan"}</button>
+      <button className="btn-primary" type="submit" disabled={pending}>{pending?"Preparing plan…":error?"Retry preview":"Preview interview plan"}</button>
     </fieldset></form></section>;
 }

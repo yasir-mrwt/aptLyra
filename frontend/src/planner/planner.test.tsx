@@ -29,28 +29,28 @@ describe("supported planner setup",()=>{
  it("validates 1–4 topics and count/time before contacting server",async()=>{
   renderForm({onCreated:vi.fn()});
   fireEvent.click(screen.getByLabelText("Data Structures & Algorithms"));fireEvent.click(screen.getByLabelText("Programming / Coding"));
-  fireEvent.click(screen.getByRole("button",{name:"Preview plan"}));
+  fireEvent.click(screen.getByRole("button",{name:"Preview interview plan"}));
   expect(screen.getByRole("alert").textContent).toContain("one and four");expect(previewPlan).not.toHaveBeenCalled();
   expect(setupError({...setup,competencies:["a","b","c","d","e"]})).toBeTruthy();expect(setupError({...setup,count:2})).toBeTruthy();expect(setupError({...setup,minutes:61})).toBeTruthy();
  });
  it("preparing state follows the actual request, prevents duplicate previews and returns persisted plan ID",async()=>{
   let resolve:(p:PlanPreviewData)=>void=()=>{};vi.mocked(previewPlan).mockImplementation(()=>new Promise(r=>{resolve=r;}));const created=vi.fn();
   renderForm({onCreated:created});
-  fireEvent.click(screen.getByRole("button",{name:"Preview plan"}));expect(screen.getByRole("status").textContent).toBe("Preparing your plan");
+  fireEvent.click(screen.getByRole("button",{name:"Preview interview plan"}));expect(screen.getByRole("status").textContent).toBe("Preparing your plan");
   expect((screen.getByRole("button",{name:"Preparing plan…"}) as HTMLButtonElement).disabled).toBe(true);
   await act(async()=>resolve(plan));expect(previewPlan).toHaveBeenCalledTimes(1);expect(created).toHaveBeenCalledWith("plan");
   expect(vi.mocked(previewPlan).mock.calls[0][0].modifiers).toEqual({});
  });
  it("reports planning failure, allows retry and never claims a ready plan",async()=>{
   vi.mocked(previewPlan).mockRejectedValueOnce(new Error("fixture failure")).mockResolvedValueOnce(plan);const created=vi.fn();
-  renderForm({onCreated:created});fireEvent.click(screen.getByRole("button",{name:"Preview plan"}));
+  renderForm({onCreated:created});fireEvent.click(screen.getByRole("button",{name:"Preview interview plan"}));
   await waitFor(()=>expect(screen.getByRole("alert").textContent).toContain("retry"));expect(screen.getByRole("status").textContent).toBe("Retry available");
   fireEvent.click(screen.getByRole("button",{name:"Retry preview"}));await waitFor(()=>expect(created).toHaveBeenCalledWith("plan"));
  });
  it("company/date availability uses actual capability response and modifiers leave core mode unchanged",async()=>{
   vi.mocked(getPlannerCapabilities).mockResolvedValue({companies:["Permitted example"],eligibleReviewedQuestions:4,provisionalQuestions:0});vi.mocked(previewPlan).mockResolvedValue(plan);
   renderForm({onCreated:vi.fn()});await waitFor(()=>expect(screen.getByLabelText("Company preference")).toBeTruthy());
-  fireEvent.change(screen.getByLabelText("Company preference"),{target:{value:"Permitted example"}});fireEvent.click(screen.getByRole("button",{name:"Preview plan"}));
+  fireEvent.change(screen.getByLabelText("Company preference"),{target:{value:"Permitted example"}});fireEvent.click(screen.getByRole("button",{name:"Preview interview plan"}));
   await waitFor(()=>expect(previewPlan).toHaveBeenCalled());expect(vi.mocked(previewPlan).mock.calls[0][0].mode).toBe("mixed");expect(vi.mocked(previewPlan).mock.calls[0][0].modifiers.company).toBe("Permitted example");
  });
  it("explains empty reviewed readiness without treating provisional content as reviewed",async()=>{
@@ -115,7 +115,7 @@ describe("question repetition preferences",()=>{
   expect(screen.getByText(/Never repeat retained confirmed/)).toBeTruthy();
   view.unmount();renderForm({onCreated:vi.fn()});
   await waitFor(()=>expect((screen.getByRole("combobox",{name:"Question repetition"}) as HTMLSelectElement).value).toBe("only-new"));
-  fireEvent.click(screen.getByRole("button",{name:"Preview plan"}));
+  fireEvent.click(screen.getByRole("button",{name:"Preview interview plan"}));
   await waitFor(()=>expect(previewPlan).toHaveBeenCalled());
   expect(vi.mocked(previewPlan).mock.calls[0][0].repeatPolicy).toBe("only-new");
  });

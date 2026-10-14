@@ -1,4 +1,5 @@
 /** Reject current branding leaks while retaining documented compatibility and attribution. */
+import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -29,9 +30,12 @@ for (const name of ['frontend/index.html', 'frontend/public/logo.svg', 'ai-servi
   if (legacy.test(await readFile(resolve(root, name), 'utf8'))) failures.push(name);
 }
 // Legal notices, reviewed bytes, migrations and dependency resolutions must remain exact.
-const protectedFiles = ['LICENSE', 'THIRD_PARTY_NOTICES.md', 'ai-service/requirements.txt', 'docs/seed-review.md',
+const protectedFiles = [ 'THIRD_PARTY_NOTICES.md', 'ai-service/requirements.txt', 'docs/seed-review.md',
   ...(await readdir(resolve(root, 'backend/migrations'))).filter(name=>/^00[1-7]_/.test(name)).map(name => `backend/migrations/${name}`),
   ...(await readdir(resolve(root, 'backend/data/ingestion'))).map(name => `backend/data/ingestion/${name}`)];
+const license=await readFile(resolve(root,'LICENSE'),'utf8');
+const upstreamHash='eb2eafda206b3fca205051e93d50f06006af11d292dd1b3dff46eb307962999a';
+if(createHash('sha256').update(license.replace('Copyright (c) 2026 Muhammad Yasir (original Aptlyra contributions)\n','')).digest('hex')!==upstreamHash || !license.includes('Copyright (c) 2026 Muhammad Yasir (original Aptlyra contributions)')) failures.push('MIT/upstream notice or scoped Aptlyra attribution changed');
 for (const name of protectedFiles) {
   const baseline = execFileSync('git', ['show', `HEAD:${name}`], { cwd: root });
   if (!baseline.equals(await readFile(resolve(root, name)))) failures.push(`protected bytes changed: ${name}`);

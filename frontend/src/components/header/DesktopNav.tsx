@@ -14,12 +14,14 @@ const NAV_LINKS = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/resume-analyzer", label: "Resume Analyzer" },
   { to: "/analytics", label: "Analytics" },
+  { to: "/history", label: "History" },
+  { to: "/analytics#ranking", label: "Rank" },
 ];
 
 export const DesktopNav = ({ user, isActive, onOpenModal,role,roleLoading }: DesktopNavProps) => {
   const restrictedLinks=roleNavigation(role);
   return (
-    <nav className="hidden md:flex items-center gap-4">
+    <nav className="hidden xl:flex items-center gap-4">
       {user ? (
         <>
           {/* Floating pill nav — active page gets the solid white pill */}
@@ -28,7 +30,7 @@ export const DesktopNav = ({ user, isActive, onOpenModal,role,roleLoading }: Des
               <Link
                 key={link.to}
                 to={link.to}
-                className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.18em] transition-all duration-300 whitespace-nowrap ${
+                className={`px-3 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.18em] transition-all duration-300 whitespace-nowrap ${
                   isActive(link.to)
                     ? "bg-white text-black shadow-[0_2px_12px_rgba(255,255,255,0.15)]"
                     : "text-surface-400 hover:text-white hover:bg-white/5"
@@ -38,7 +40,7 @@ export const DesktopNav = ({ user, isActive, onOpenModal,role,roleLoading }: Des
               </Link>
             ))}
             {roleLoading&&<span aria-label="Loading account navigation" className="mx-2 h-7 w-24 animate-pulse rounded-full bg-white/10"/>}
-            {!roleLoading&&restrictedLinks.map(link=><Link key={link.to} to={link.to} className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.18em] transition-all duration-300 whitespace-nowrap ${isActive(link.to)?"bg-white text-black":"text-surface-400 hover:text-white hover:bg-white/5"}`}>{link.label}</Link>)}
+            {!roleLoading&&restrictedLinks.map(link=><Link key={link.to} to={link.to} className={`px-3 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.18em] transition-all duration-300 whitespace-nowrap ${isActive(link.to)?"bg-white text-black":"text-surface-400 hover:text-white hover:bg-white/5"}`}>{link.label}</Link>)}
           </div>
 
           <UserProfileMenu user={user} onOpenModal={onOpenModal} />
@@ -47,19 +49,19 @@ export const DesktopNav = ({ user, isActive, onOpenModal,role,roleLoading }: Des
         <div className="flex items-center gap-2">
           <Link
             to="/login"
-            className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.18em] transition-all duration-300 ${
+            className={`px-3 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.18em] transition-all duration-300 ${
               isActive("/login")
                 ? "text-white bg-white/10"
                 : "text-surface-400 hover:text-white hover:bg-white/5"
             }`}
           >
-            Login
+            Log in
           </Link>
           <Link
             to="/register"
-            className="px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.18em] bg-white text-black hover:bg-zinc-200 transition-all duration-300 shadow-[0_2px_12px_rgba(255,255,255,0.15)]"
+            className="px-3 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.18em] bg-white text-black hover:bg-zinc-200 transition-all duration-300 shadow-[0_2px_12px_rgba(255,255,255,0.15)]"
           >
-            Register
+            Join
           </Link>
         </div>
       )}

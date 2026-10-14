@@ -1,6 +1,6 @@
 import {evaluationStatus,executionStatus,reviewedCoverageExplanation} from "../utils/reportStatus";
 import { BRAND } from "../constants/brand";
-import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+import { Document, Page, Text, View, Svg, Path, Circle, StyleSheet } from '@react-pdf/renderer';
 import type { Session, Question } from '../types/session';
 
 /**
@@ -221,7 +221,7 @@ const ReportCardPDF = ({ session }: ReportCardPDFProps) => {
         : new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
     return (
-        <Document title={`${BRAND.name} Report Card — ${session.role}`} author={`${BRAND.name} AI Interviewer`}>
+        <Document title={`${BRAND.name} Report Card — ${session.role}`} author="Muhammad Yasir">
             <Page size="A4" style={styles.page}>
                 {/* Footer */}
                 <View style={styles.footer} fixed>
@@ -233,6 +233,7 @@ const ReportCardPDF = ({ session }: ReportCardPDFProps) => {
                 </View>
                 {/* Header */}
                 <View style={styles.headerBar}>
+                    <Svg width={28} height={28} viewBox="0 0 48 48"><Path d="M24 3.8 44.2 39H3.8L24 3.8Z" stroke="#818CF8" strokeWidth={2.8} fill="none"/><Path d="m15.4 31.6 8.6-15 8.6 15M19.1 25.5h9.8" stroke="#67E8F9" strokeWidth={3} fill="none"/><Circle cx={24} cy={39} r={2.1} fill="#67E8F9"/></Svg>
                     <Text style={styles.brand}>{BRAND.name.toUpperCase()}</Text>
                     <Text style={styles.reportLabel}>Interview Report Card</Text>
                 </View>
