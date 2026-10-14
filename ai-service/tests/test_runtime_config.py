@@ -18,10 +18,11 @@ def test_production_preserves_explicit_process_path(tmp_path, monkeypatch):
     monkeypatch.delenv("PYTHON_DOTENV_DISABLED", raising=False)
     (tmp_path / ".env").write_text("EMBEDDING_MODEL_DIR=../.model-cache/l3\n")
     monkeypatch.setenv("NODE_ENV", "production")
-    monkeypatch.setenv("EMBEDDING_MODEL_DIR", "/operator/pinned-model")
+    pinned_model = (tmp_path / "operator" / "pinned-model").resolve()
+    monkeypatch.setenv("EMBEDDING_MODEL_DIR", str(pinned_model))
     load_runtime_config(tmp_path)
     import os
-    assert os.environ["EMBEDDING_MODEL_DIR"] == "/operator/pinned-model"
+    assert os.environ["EMBEDDING_MODEL_DIR"] == str(pinned_model)
 
 
 def test_expired_editorial_budget_does_not_start_another_model_call(monkeypatch):
