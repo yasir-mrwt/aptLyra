@@ -45,6 +45,7 @@ export interface Question {
 
 export interface Session {
     individualScoredAnswers?: number;
+    individualPractice?:{mean:number|null;scored:number;total:number};
     activationRequired?: boolean;
     activatedAt?: string;
     runtimeVersion?: string;

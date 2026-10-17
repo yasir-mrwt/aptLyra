@@ -1,3 +1,4 @@
+import {individualPractice} from "../utils/reportStatus";
 import AptlyraMark from "../components/AptlyraMark";
 import { useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
@@ -110,6 +111,7 @@ const SessionReview = () => {
                 </div>
             </div>
 
+            <section className="glass-card p-5 my-5" aria-label="Individual practice summary"><h2>Individual practice summary</h2><p>{individualPractice(activeSession.questions).mean??"Unavailable"}{individualPractice(activeSession.questions).mean!==null?"/100":""} · {individualPractice(activeSession.questions).scored}/{individualPractice(activeSession.questions).total} answers scored · {individualPractice(activeSession.questions).provisional} provisional · {individualPractice(activeSession.questions).missing} not evaluated</p><p>Uses only stored individual scores. This is not the reviewed aggregate or a verified skill rating.</p></section>
             <SessionReviewStats
                 reviewedSummary={activeSession.reviewedSummary}
                 overallScore={overallScore || 0}

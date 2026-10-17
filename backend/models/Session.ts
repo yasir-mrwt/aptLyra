@@ -64,6 +64,7 @@ export interface IQuestion {
 
 export interface ISession {
   individualScoredAnswers?: number;
+  individualPractice?:{mean:number|null;scored:number;total:number};
   activationRequired?: boolean;
   activatedAt?: string;
   runtimeVersion?: string;
@@ -242,7 +243,9 @@ export const sessionRepository = {
       [userId.toString(),limit,offset]);
     return rows.map(r=>{
       const session=rowToSession(r), questions=r.saved_questions||session.questions;
-      session.individualScoredAnswers=questions.filter((q:IQuestion)=>q.isEvaluated && typeof q.technicalScore==="number").length;
+      const scores:number[]=questions.flatMap((q:IQuestion)=>{const score=q.evaluation?(q.evaluation.status==="scored"?q.evaluation.technicalScore:null):(q.isEvaluated?q.technicalScore:null);return typeof score==="number"&&Number.isFinite(score)&&score>=0&&score<=100?[score]:[];});
+      session.individualScoredAnswers=scores.length;
+      session.individualPractice={mean:scores.length?Math.round(scores.reduce((a,b)=>a+b,0)/scores.length*10)/10:null,scored:scores.length,total:questions.length};
       if(session.scoringVersion==="rubric-v1"){
         session.reviewedSummary=r.saved_summary?.reviewedSummary;
         session.overallScore=session.status==="completed"?r.saved_summary?.reviewedSummary?.technicalScore??null:null;

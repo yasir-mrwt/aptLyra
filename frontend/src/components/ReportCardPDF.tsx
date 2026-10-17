@@ -1,4 +1,4 @@
-import {evaluationStatus,executionStatus,reviewedCoverageExplanation} from "../utils/reportStatus";
+import {evaluationStatus,executionStatus,reviewedCoverageExplanation,individualPractice} from "../utils/reportStatus";
 import { BRAND } from "../constants/brand";
 import { Document, Page, Text, View, Svg, Path, Circle, StyleSheet } from '@react-pdf/renderer';
 import type { Session, Question } from '../types/session';
@@ -49,7 +49,7 @@ const styles = StyleSheet.create({
     roleTitle: {
         fontSize: 20,
         fontFamily: 'Helvetica-Bold',
-        marginBottom: 2,
+        marginBottom: 8,
     },
     subTitle: {
         fontSize: 10,
@@ -233,8 +233,8 @@ const ReportCardPDF = ({ session }: ReportCardPDFProps) => {
                 </View>
                 {/* Header */}
                 <View style={styles.headerBar}>
-                    <Svg width={28} height={28} viewBox="0 0 48 48"><Path d="M24 3.8 44.2 39H3.8L24 3.8Z" stroke="#818CF8" strokeWidth={2.8} fill="none"/><Path d="m15.4 31.6 8.6-15 8.6 15M19.1 25.5h9.8" stroke="#67E8F9" strokeWidth={3} fill="none"/><Circle cx={24} cy={39} r={2.1} fill="#67E8F9"/></Svg>
-                    <Text style={styles.brand}>{BRAND.name.toUpperCase()}</Text>
+                    <View style={{flexDirection:"row",alignItems:"center",gap:8}}><Svg width={28} height={28} viewBox="0 0 48 48"><Path d="M24 3.8 44.2 39H3.8L24 3.8Z" stroke="#818CF8" strokeWidth={2.8} fill="none"/><Path d="m15.4 31.6 8.6-15 8.6 15M19.1 25.5h9.8" stroke="#67E8F9" strokeWidth={3} fill="none"/><Circle cx={24} cy={39} r={2.1} fill="#67E8F9"/></Svg>
+                    <Text style={styles.brand}>{BRAND.name.toUpperCase()}</Text></View>
                     <Text style={styles.reportLabel}>Interview Report Card</Text>
                 </View>
 
@@ -262,6 +262,7 @@ const ReportCardPDF = ({ session }: ReportCardPDFProps) => {
                     </View>
                 </View>
 
+                <Text style={styles.feedback}>Individual practice summary: {individualPractice(session.questions).mean??"Unavailable"}{individualPractice(session.questions).mean!==null?"/100":""} · {individualPractice(session.questions).scored}/{individualPractice(session.questions).total} answers scored · {individualPractice(session.questions).provisional} provisional · {individualPractice(session.questions).missing} not evaluated. Separate from the reviewed aggregate.</Text>
                 {session.scoringVersion==="rubric-v1"&&<Text style={styles.feedback}>{reviewedCoverageExplanation}</Text>}
                 {/* Speech analytics */}
                 {speechQuestions.length > 0 && (

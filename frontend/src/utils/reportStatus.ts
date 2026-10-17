@@ -14,3 +14,13 @@ export function executionStatus(question:Question):string {
   return question.executionTestId?"Execution not run":"Execution tests unavailable";
 }
 export const reviewedCoverageExplanation="Individual practice scores and the reviewed aggregate measure different things. Only eligible original questions with reviewed rubrics count toward that aggregate. Established starter feedback and provisional dynamic feedback remain visible individually; they do not imply reviewed evidence.";
+
+export function individualPractice(questions:Question[]){
+ const scores=questions.flatMap(q=>{
+  const score=q.evaluation?(q.evaluation.status==='scored'?q.evaluation.technicalScore:null):(q.isEvaluated?q.technicalScore:null);
+  return typeof score==='number'&&Number.isFinite(score)&&score>=0&&score<=100?[score]:[];
+ });
+ return {mean:scores.length?Math.round(scores.reduce((a,b)=>a+b,0)/scores.length*10)/10:null,scored:scores.length,total:questions.length,
+ provisional:questions.filter(q=>q.evaluation?.reasons.includes('practice_without_reviewed_scoring')).length,
+ missing:questions.filter(q=>!q.isEvaluated).length};
+}
