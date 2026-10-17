@@ -29,6 +29,7 @@ export function setupError(s:PlannerSetup):string|null {
   return null;
 }
 export const shortageLabel=(code:string):string=>({
+  recent_signal_provisional_selected:"Recently sourced, human-approved practice questions are included. Their scoring stays provisional until a matching evidence-backed guide is approved.",
   time_or_mode_coverage_shortage:"The available questions cannot cover every selected competency and mode within this duration. Change your topics, mode or duration.",
   count_reduced_for_time_or_evidence:"The question count was reduced to fit your time budget or available evidence. Every selected competency still has coverage.",
   difficulty_target_shortage:"Available questions cannot meet the 60% requested / 40% adjacent difficulty target. Review the actual distribution below.",
@@ -36,3 +37,15 @@ export const shortageLabel=(code:string):string=>({
   company_date_evidence_unavailable_constraints_preserved:"No permitted evidence meets your company/date preferences. These constraints were preserved. Explicitly change your preferences to try core practice.",
   plan_stale_preview_again:"This plan's evidence or corpus changed. Create a fresh preview before starting."
 }[code] || (code==="revision_fresh_fallback"?"No compatible earlier questions were selected; this revision plan uses fresh questions.":code.startsWith("only_new_shortage:")?`Only ${code.split(":")[1]} of ${code.split(":")[2]} requested new questions fit this setup. Broaden competencies/difficulty, choose Fresh first, or wait for more approved questions. Confirmation is disabled.`:code.startsWith("competency_evidence_shortage:")?`No reviewed questions are currently available for ${ROOT_LABELS[code.split(":")[1]]||"one selected competency"}. ${code.split(":")[1] in ROOT_LABELS?"A reviewer can add grounded questions through editorial review.":"Change your competency selection or try again later."}`:code.startsWith("retrieval_unavailable:")?"Semantic retrieval is temporarily unavailable. Structured selection from the trusted starter bank was used; dynamic questions were excluded.":code));
+
+/** Drafts may be incomplete (zero selected topics or an empty numeric field).
+ * Validate shape and enums without applying submission completeness rules. */
+export function isPlannerDraft(value:unknown):value is PlannerSetup {
+  if(!value||typeof value!=="object")return false;
+  const s=value as PlannerSetup;
+  return PLANNER_ROLES.includes(s.role)&&s.level==="junior"&&s.taxonomyVersion==="junior-se-v1"&&
+    Array.isArray(s.competencies)&&s.competencies.every(c=>typeof c==="string"&&Object.hasOwn(ROOT_LABELS,c))&&
+    ["oral","coding","mixed"].includes(s.mode)&&["easy","standard","stretch"].includes(s.difficulty)&&
+    Number.isFinite(s.count)&&Number.isFinite(s.minutes)&&s.language==="en"&&["javascript","python"].includes(s.codeLanguage)&&
+    !!s.modifiers&&typeof s.modifiers==="object"&&(!s.repeatPolicy||Object.hasOwn(REPEAT_LABELS,s.repeatPolicy));
+}

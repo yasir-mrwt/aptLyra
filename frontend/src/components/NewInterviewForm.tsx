@@ -1,5 +1,5 @@
 import { useCallback,useEffect,useRef,useState,type SyntheticEvent } from "react";
-import { ROOT_LABELS,REPEAT_LABELS,REPEAT_HELP,PLANNER_ROLES,setupError,type PlannerSetup } from "../planner/contracts";
+import { ROOT_LABELS,REPEAT_LABELS,REPEAT_HELP,PLANNER_ROLES,setupError,isPlannerDraft,type PlannerSetup } from "../planner/contracts";
 import { getPlannerCapabilities,plannerMessage,previewPlan } from "../services/plannerApi";
 import AIInterviewer from "./AIInterviewer";
 import type { NewInterviewFormProps } from "../types/forms";
@@ -13,7 +13,7 @@ export default function NewInterviewForm({preferredRole,onCreated,initialSetup}:
   const edited=useRef(!!initialSetup);
   const [setup,setSetup]=useState<PlannerSetup>(()=>{
     if(initialSetup && !setupError(initialSetup))return initialSetup;
-    try {const saved=JSON.parse(sessionStorage.getItem(storageKey)||"null");if(saved && !setupError(saved))return saved;}catch { /* A malformed draft must not block planning. */ }
+    try {const saved=JSON.parse(sessionStorage.getItem(storageKey)||"null");if(isPlannerDraft(saved))return saved;}catch { /* A malformed draft must not block planning. */ }
     return {role:PLANNER_ROLES.includes(preferredRole || "")?preferredRole!:PLANNER_ROLES[0],level:"junior",taxonomyVersion:"junior-se-v1",
     competencies:["dsa","programming"],difficulty:"standard",mode:"mixed",count:5,minutes:30,language:"en",codeLanguage:"javascript",modifiers:{},includeRecentTrends:false,repeatPolicy:"fresh-first"};});
   useEffect(()=>{if(initialSetup)try{sessionStorage.setItem(storageKey,JSON.stringify(initialSetup));}catch { /* Optional tab draft. */ }},[initialSetup,storageKey]);
@@ -25,7 +25,7 @@ export default function NewInterviewForm({preferredRole,onCreated,initialSetup}:
     if(!edited.current) {
       let local:PlannerSetup|undefined;try {local=JSON.parse(sessionStorage.getItem(storageKey)||"null") || undefined;}catch { /* Optional browser draft. */ }
       const saved=local || data.savedSetup;
-      try {if(saved && !setupError(saved))setSetup(saved);}catch { /* Ignore malformed or obsolete saved drafts. */ }
+      try {if(isPlannerDraft(saved))setSetup(saved);}catch { /* Ignore malformed or obsolete saved drafts. */ }
     }
   },[storageKey]);
   useEffect(()=>{let alive=true;getPlannerCapabilities().then(data=>{if(alive)applyCapabilities(data);}).catch(()=>{if(alive)setCapabilityError(true);});return()=>{alive=false;};},[applyCapabilities]);

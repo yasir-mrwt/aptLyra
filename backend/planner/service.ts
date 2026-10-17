@@ -15,16 +15,16 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 interface Retriever { retrieveQuestions(request: RetrievalRequest): Promise<RetrievalResponse> }
 
 async function generation(expected?: string) {
-  const g=(await query("SELECT * FROM embedding_generations WHERE status='active'")).rows[0];
+  const g=(await query(`SELECT g.*,EXISTS(SELECT 1 FROM retrieval_entities e WHERE e.purpose='question-selection' AND ${INTERVIEW_ELIGIBILITY_SQL} AND NOT EXISTS
+    (SELECT 1 FROM embedding_metadata m JOIN embedding_vectors v ON v.metadata_id=m.id
+      WHERE m.question_version_id=e.entity_id AND m.purpose=e.purpose AND m.content_hash=e.content_hash
+        AND m.status='active' AND m.corpus_generation=g.id)) AS missing
+    FROM embedding_generations g WHERE g.status='active'`)).rows[0];
   if(!g)throw new PlannerError("corpus_unavailable",503);
   if(expected && g.id!==expected)throw new PlannerError("stale_corpus",409);
   if(g.model_id!==MODEL.modelId || g.model_revision!==MODEL.modelRevision || g.dimension!==MODEL.dimension
     || g.normalization!==MODEL.normalization || g.embedding_version!==MODEL.embeddingVersion)throw new PlannerError("model_mismatch",503);
-  const missing=(await query(`SELECT EXISTS(SELECT 1 FROM retrieval_entities e WHERE e.purpose='question-selection' AND ${INTERVIEW_ELIGIBILITY_SQL} AND NOT EXISTS
-    (SELECT 1 FROM embedding_metadata m JOIN embedding_vectors v ON v.metadata_id=m.id
-      WHERE m.question_version_id=e.entity_id AND m.purpose=e.purpose AND m.content_hash=e.content_hash
-        AND m.status='active' AND m.corpus_generation=$1)) AS missing`,[g.id])).rows[0].missing;
-  if(missing)throw new PlannerError("corpus_unavailable",503);
+  if(g.missing)throw new PlannerError("corpus_unavailable",503);
   return g.id as string;
 }
 async function availableItems(planId: string, corpus: string) {
