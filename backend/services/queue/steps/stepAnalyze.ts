@@ -1,4 +1,6 @@
 import fetch from "node-fetch";
+import {performance} from "node:perf_hooks";
+import logger from "../../../utils/logger.js";
 import { getCachedResult, setCachedResult } from "../cacheService.js";
 import { getAIServiceUrl } from "./utils.js";
 
@@ -16,6 +18,7 @@ export const stepAnalyze = async (resume: any): Promise<any> => {
   if (cached) return cached;
 
   console.log(`[Worker] STEP 2/4: Sending resume ${resume._id} for modular analysis...`);
+  const started=performance.now();
   const response = await fetch(`${AI_SERVICE_URL}/resume/v2/analyze`, {
     method: "POST",
       signal: AbortSignal.timeout(120000),redirect:"error",size:2*1024*1024,
@@ -35,6 +38,7 @@ export const stepAnalyze = async (resume: any): Promise<any> => {
   }
 
   const data = (await response.json()) as any;
+  logger.info("resume_analysis_timing",{stage:"provider_analysis",milliseconds:Math.round(performance.now()-started)});
   await setCachedResult("analyze", fingerprint, data);
   return data;
 };

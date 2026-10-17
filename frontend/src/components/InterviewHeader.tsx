@@ -7,7 +7,7 @@ interface InterviewHeaderProps {
     questionsCount: number;
     currentQuestionIndex: number;
     submittedLocal: Record<number, boolean>;
-    questions: { isEvaluated: boolean; isSubmitted: boolean }[];
+    questions: { isEvaluated: boolean; isSubmitted: boolean; answerLocked?:boolean; operationId?:string }[];
     handleNavigation: (index: number) => void;
     handleFinishInterview: () => void;
     isLoading: boolean;
@@ -71,11 +71,12 @@ const InterviewHeader: React.FC<InterviewHeaderProps> = ({
                 </div>
                 <div className="flex flex-wrap gap-3 mt-4 sm:mt-5">
                     {questions.map((q, i) => (
-                        <div key={i}
+                        <button type="button" key={i} aria-current={i === currentQuestionIndex ? "step" : undefined}
                             onClick={() => handleNavigation(i)}
-                            className={`w-3.5 h-3.5 rounded-full cursor-pointer transition-all duration-300 shrink-0 ${i === currentQuestionIndex ? 'bg-primary-500 scale-125 shadow-[0_0_15px_rgba(139,92,246,0.6)]' : q.isEvaluated ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : (q.isSubmitted || submittedLocal[i]) ? 'bg-indigo-400 animate-pulse' : 'bg-surface-800'}`}
-                            title={`Question ${i + 1}`}
-                        />
+                            className={`min-w-10 min-h-10 px-3 text-sm rounded-xl cursor-pointer transition-all duration-300 shrink-0 ${i === currentQuestionIndex ? 'bg-primary-500 scale-125 shadow-[0_0_15px_rgba(139,92,246,0.6)]' : q.isEvaluated ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : (q.isSubmitted || submittedLocal[i]) ? 'bg-indigo-400 animate-pulse' : 'bg-surface-800'}`}
+                            title={`Question ${i + 1}: ${q.answerLocked || q.operationId || q.isEvaluated || q.isSubmitted || submittedLocal[i] ? "Submitted · read only" : "Unanswered · return anytime"}`}
+                            aria-label={`Question ${i + 1}: ${q.answerLocked || q.operationId || q.isEvaluated || q.isSubmitted || submittedLocal[i] ? "Submitted" : "Unanswered"}`}
+                        >{i + 1}{q.answerLocked || q.operationId || q.isEvaluated || q.isSubmitted || submittedLocal[i] ? " ✓" : " ·"}</button>
                     ))}
                 </div>
             </div>

@@ -38,8 +38,9 @@ async function availableItems(planId: string, corpus: string) {
 export class PlannerService {
   constructor(private retriever: Retriever=new RetrievalService()) {}
   async preview(userId: string, value: unknown) {
-    const setup=validateSetup(value), corpus=await generation(), started=performance.now();
-    const active=(await query("SELECT id FROM competencies WHERE taxonomy_version=$1 AND kind='root' AND status='active'",[setup.taxonomyVersion])).rows;
+    const setup=validateSetup(value), started=performance.now();
+    const [corpus,taxonomy]=await Promise.all([timed("planner_corpus",()=>generation()),query("SELECT id FROM competencies WHERE taxonomy_version=$1 AND kind='root' AND status='active'",[setup.taxonomyVersion])]);
+    const active=taxonomy.rows;
     if(setup.competencies.some(c=>!active.some(r=>r.id===c)))throw new PlannerError("taxonomy_unavailable",409);
     const session=await sessionRepository.create({user:userId,role:setup.role,level:"Junior",interviewType:setup.mode==="oral"?"oral-only":"coding-mix",company:setup.modifiers.company});
     try {
@@ -78,7 +79,7 @@ export class PlannerService {
             if(!metadata)throw new PlannerError("stale_retrieval",409);
             const provisional=metadata.inventoryClass==="DYNAMIC_PROVISIONAL";
             const trustedOrReviewed=metadata.inventoryClass==="TRUSTED_BASELINE"||metadata.inventoryClass==="DYNAMIC_REVIEWED";
-            const plannerEligible=trustedOrReviewed||provisional;
+            const plannerEligible=trustedOrReviewed||(provisional&&setup.includeRecentTrends);
             if(stage.practice && metadata.inventoryClass==="TRUSTED_BASELINE")continue;
             if(!plannerEligible || (stage.seed || semanticUnavailable) && metadata.inventoryClass!=="TRUSTED_BASELINE")continue;
             if(!candidates.some(c=>c.hit.questionVersionId===hit.questionVersionId))candidates.push({hit,root,group:metadata.group,
@@ -110,6 +111,7 @@ export class PlannerService {
         await query("UPDATE sessions SET interview_plan_id=$2,status=$3 WHERE id=$1 AND user_id=$4",[session._id,planId,allocation.canConfirm?"pending":"cancelled",userId]);
         return this.read(userId,planId,eligible);
       }));
+      recordTiming("planner_total",performance.now()-started);
       return preview;
     } catch(error) {
       await withDatabaseLock(`session:${session._id}`,async()=>{

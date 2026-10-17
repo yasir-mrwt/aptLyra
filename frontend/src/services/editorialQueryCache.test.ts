@@ -37,6 +37,27 @@ it("ignores reads started before a successful mutation instead of restoring stal
  const old=editorialQueryCache.load(key,()=>new Promise<string[]>(resolve=>{resolveOld=resolve;}));
  editorialQueryCache.invalidate([key]);
  await editorialQueryCache.load(key,async()=>["new saved revision"],{force:true});
- resolveOld(["old draft"]);await old;
+ resolveOld(["old draft"]);await expect(old).rejects.toThrow("Query superseded");
  expect(editorialQueryCache.get<string[]>(key).data).toEqual(["new saved revision"]);
+});
+
+it('refetches invalidated summaries immediately and isolates account switches',async()=>{
+ await editorialQueryCache.load('http:/analytics',async()=>['first account']);
+ editorialQueryCache.invalidatePrefix('http:');
+ expect(await editorialQueryCache.load('http:/analytics',async()=>['after completion'])).toEqual(['after completion']);
+ let release!:(value:string[])=>void;
+ const old=editorialQueryCache.load('http:/sessions',()=>new Promise<string[]>(resolve=>{release=resolve;}));
+ editorialQueryCache.setIdentity('second-account');
+ release(['private old result']);await expect(old).rejects.toThrow('Query superseded');
+ expect(editorialQueryCache.get('http:/sessions').data).toBeUndefined();
+ expect(editorialQueryCache.get('http:/analytics').data).toBeUndefined();
+ expect(await editorialQueryCache.load('http:/analytics',async()=>['second account'])).toEqual(['second account']);
+ editorialQueryCache.setIdentity(null);
+ expect(editorialQueryCache.get('http:/analytics').data).toBeUndefined();
+});
+
+it('does not disguise HTTP authentication failures as cached success',async()=>{
+ await editorialQueryCache.load('http:/analytics',async()=>['private']);
+ editorialQueryCache.invalidatePrefix('http:');
+ await expect(editorialQueryCache.load('http:/analytics',async()=>{throw new Error('401');},{allowStaleOnError:false})).rejects.toThrow('401');
 });

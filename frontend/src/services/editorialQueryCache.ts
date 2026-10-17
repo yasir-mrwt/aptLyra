@@ -29,36 +29,39 @@ export const editorialQueryCache = {
     pending.clear();
     emit();
   },
-  async load<T>(key: string, fetcher: () => Promise<T>, options: { force?: boolean } = {}): Promise<T | undefined> {
+  async load<T>(key: string, fetcher: () => Promise<T>, options: { force?: boolean; allowStaleOnError?: boolean } = {}): Promise<T | undefined> {
     const current = this.get<T>(key);
-    const fresh = current.data !== undefined && Date.now() - current.loadedAt < TTL_MS;
+    const fresh = !current.stale && current.data !== undefined && Date.now() - current.loadedAt < TTL_MS;
     if (!options.force && fresh) return current.data;
-    if (current.data !== undefined && !options.force) {
-      if (!pending.has(key)) void this.fetch(key, fetcher);
+    if (current.data !== undefined && current.loadedAt > 0 && !options.force && options.allowStaleOnError !== false) {
+      if (!pending.has(key)) void this.fetch(key, fetcher).catch(()=>{});
       return current.data;
     }
     const active = pending.get(key);
     if (active) return active as Promise<T>;
-    return this.fetch(key, fetcher) as Promise<T>;
+    return this.fetch(key, fetcher, options.allowStaleOnError !== false) as Promise<T>;
   },
-  async fetch<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
+  async fetch<T>(key: string, fetcher: () => Promise<T>, allowStaleOnError = true): Promise<T> {
     const startedGeneration = generation;
     const startedRevision = revisions.get(key) || 0;
     const previous = this.get<T>(key);
     entries.set(key, { ...previous, loading: true, error: null, stale: previous.data !== undefined });
     emit();
     const request = fetcher().then(data => {
+      if (generation !== startedGeneration || (revisions.get(key)||0) !== startedRevision) throw new Error("Query superseded");
       if (generation === startedGeneration && (revisions.get(key)||0) === startedRevision) { entries.set(key, { data, loadedAt: Date.now(), loading: false, error: null, stale: false }); emit(); }
       return data;
     }).catch(error => {
+      if (generation !== startedGeneration || (revisions.get(key)||0) !== startedRevision) throw error;
       const current = this.get<T>(key);
       if (generation === startedGeneration && (revisions.get(key)||0) === startedRevision) { entries.set(key, { ...current, loading: false, error: "This section could not be loaded.", stale: current.data !== undefined }); emit(); }
-      if (current.data !== undefined) return current.data;
+      if (allowStaleOnError && current.data !== undefined) return current.data;
       throw error;
     }).finally(() => { if (pending.get(key) === request) pending.delete(key); });
     pending.set(key, request);
     return request;
   },
+  invalidatePrefix(prefix: string) { this.invalidate([...entries.keys()].filter(key => key.startsWith(prefix))); },
   invalidate(keys: string[]) {
     for (const key of keys) {
       revisions.set(key,(revisions.get(key)||0)+1);

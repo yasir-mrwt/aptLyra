@@ -57,6 +57,7 @@ jobs:
     - run: npm run test:retrieval
     - run: npm run test:planner
     - run: npm run test:evaluation
+    - run: node --test tests/practice-leaderboard.test.mjs
     - run: npm run test:durable
     - run: npm run test:e2e
     - run: npm run test:persistence

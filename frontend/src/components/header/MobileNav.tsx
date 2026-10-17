@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { logout } from "../../features/auth/authSlice";
@@ -29,6 +30,16 @@ export const MobileNav = ({
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
   const restrictedLinks=roleNavigation(role);
+  useEffect(() => {
+    if (!isOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnDesktop = () => { if (window.innerWidth >= 1280) onClose(); };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("resize", closeOnDesktop);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => { document.body.style.overflow = previous; window.removeEventListener("resize", closeOnDesktop); document.removeEventListener("keydown", closeOnEscape); };
+  }, [isOpen, onClose]);
 
   const handleLogout = async () => {
     onClose();
@@ -62,10 +73,10 @@ export const MobileNav = ({
 
       {/* Mobile Navigation Dropdown */}
       <div id="mobile-navigation" inert={!isOpen}
-        className={`xl:hidden absolute top-full left-0 w-full overflow-hidden transition-all duration-500 ease-in-out ${isOpen ? "max-h-[80vh] overflow-y-auto border-b border-white/10 shadow-2xl" : "max-h-0"
+        className={`xl:hidden absolute top-full left-0 w-full overflow-hidden transition-all duration-500 ease-in-out ${isOpen ? "max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain border-b border-white/10 shadow-2xl" : "max-h-0"
           }`}
       >
-        <div className="bg-surface-900/95 backdrop-blur-2xl px-6 py-8 space-y-6">
+        <div className="bg-surface-900/95 backdrop-blur-2xl px-6 py-8 space-y-6 text-center">
           {user ? (
             <>
               <div
@@ -73,7 +84,7 @@ export const MobileNav = ({
                   onOpenModal();
                   onClose();
                 }}
-                className="flex items-center space-x-4 mb-4 p-4 bg-white/5 rounded-2xl border border-white/5 cursor-pointer hover:bg-white/10 transition-all"
+                className="flex items-center justify-center space-x-4 mb-4 p-4 bg-white/5 rounded-2xl border border-white/5 cursor-pointer hover:bg-white/10 transition-all"
               >
                 <div className="relative">
                   <ProfileAvatar user={user} size={38} />
@@ -113,12 +124,12 @@ export const MobileNav = ({
               >
                 Analytics
               </Link>
-              <p className="text-sm text-surface-400">Ranking unavailable · no verified global ranking</p>
+              <Link to="/share-interview-experience" onClick={onClose} className="block py-2 text-cyan-200">Share a question</Link>
               <Link to="/history" onClick={onClose} className="block py-2">History</Link>
               <Link to="/rank" onClick={onClose} className="block py-2">Rank</Link>
               <button
                 onClick={handleLogout}
-                className="block w-full text-left py-3 text-sm font-black uppercase tracking-[0.2em] text-rose-400 hover:text-rose-300 transition-colors cursor-pointer"
+                className="block w-full text-center py-3 text-sm font-black uppercase tracking-[0.2em] text-rose-400 hover:text-rose-300 transition-colors cursor-pointer"
               >
                 Logout
               </button>

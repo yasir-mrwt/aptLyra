@@ -32,7 +32,7 @@ export const uploadResume = asyncHandler(async (req: AuthenticatedRequest, res: 
     throw new AppError("INVALID_FILE", "Please upload a file", {}, 400);
   }
 
-  const { jdText } = req.body;
+  // New analyses are résumé-only; retained historical matching data is untouched.
   const { originalname, filename, mimetype, size, path } = req.file;
 
   if (!req.user) {
@@ -56,7 +56,7 @@ export const uploadResume = asyncHandler(async (req: AuthenticatedRequest, res: 
     fileSize: size,
     filePath: path,
     status: "pending",
-    jdText: jdText || null,
+    jdText: null,
   });
 
   logger.info("Resume document created", { resumeId: resume._id, userId: req.user._id, requestId: req.requestId });

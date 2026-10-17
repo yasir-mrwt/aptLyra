@@ -9,6 +9,7 @@ import { ROLE_LANGUAGE_MAP } from "../constants/interview";
 import { saveDrafts, getDrafts, deleteDrafts } from "../utils/idb";
 
 import api from "../services/api";
+import {editorialQueryCache} from "../services/editorialQueryCache";
 
 /**
  * Custom hook to manage the lifecycle of an interview session runner.
@@ -90,6 +91,7 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
         if(!sessionId || !durable || activeSession?._id!==sessionId)return;
         const refresh=()=>{void dispatch(getSessionById(sessionId));};
         if(activeSession.status==="completed"){
+            editorialQueryCache.invalidatePrefix("http:");
             localStorage.removeItem(`draft_code_${sessionId}`);void deleteDrafts(sessionId);navigate(`/review/${sessionId}`);return;
         }
         let inFlight=false;
@@ -106,7 +108,7 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
         const timer=window.setTimeout(()=>{restoredSession.current=sessionId;setCurrentQuestionIndex(pending?.questionIndex ?? Math.max(0,first));},0);
         return()=>window.clearTimeout(timer);
     },[sessionId,activeSession]);
-    const isReduxSubmitted = currentQuestion?.isSubmitted === true;
+    const isReduxSubmitted = currentQuestion?.isSubmitted === true || currentQuestion?.answerLocked === true || !!currentQuestion?.operationId;
     const isLocallySubmitted = submittedLocal[currentQuestionIndex] === true;
     const isEvaluationError = !!currentQuestion?.processingError || (sessionError && /failed|error/i.test(sessionMessage));
 

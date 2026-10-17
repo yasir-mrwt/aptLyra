@@ -180,7 +180,7 @@ const AnalyticsDashboard: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-[1200px] mx-auto pb-10">
+    <div className="product-workspace space-y-6 max-w-[1200px] mx-auto pb-10">
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8">
         <div>
@@ -194,6 +194,7 @@ const AnalyticsDashboard: React.FC = () => {
         </div>
       </div>
 
+      <section className="glass-card p-6 rounded-2xl space-y-3"><h2 className="text-2xl">Individual practice</h2><p>{data.practice?.completed ?? 0} completed interviews · {data.practice?.mean == null ? "No scored answers yet" : `${data.practice.mean}/100 across ${data.practice.scoredAnswers} scored answers`}</p><p>Only saved numeric scores count. Provisional, unanswered and abstained answers are never filled with zero. This is separate from reviewed aggregate eligibility.</p><ul>{data.practice?.topics.map(topic=><li key={topic.topic}>{topic.topic}: {topic.mean}/100 · {topic.scored} scored answers</li>)}</ul></section>
       <section className="glass-card p-6 rounded-2xl">
         <h2>Reviewed rubric evaluation</h2>
         <p>
@@ -209,7 +210,7 @@ const AnalyticsDashboard: React.FC = () => {
           feedback is separate from evaluator confidence.
         </p>
       </section>
-      <p className="glass-card p-5">{stats?.totalSessions||0} saved completed interviews. Scores below reflect their documented evaluation policy.</p>
+      <p className="glass-card p-5">{stats?.totalSessions||0} historical legacy interviews in the charts below. Current individual practice and reviewed coverage are shown above.</p>
       {/* Middle Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Skill Acquisition Velocity */}

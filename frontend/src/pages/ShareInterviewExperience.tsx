@@ -13,7 +13,7 @@ export default function ShareInterviewExperience(){
     await apiClient.post("/content-intelligence/submissions",{question,role:role||undefined,topic:topic||undefined,notes:notes||undefined,rightToShare:right,aiProcessingConsent:ai});
     setQuestion("");setNotes("");setRight(false);setAi(false);setMessage("Question submitted for review. You can track it below; it is not published until a reviewer approves it.");await refresh().catch(()=>setMessage("Question submitted for review. Refresh to reload your submission history; do not submit it again."));
   }catch{setMessage("Question could not be submitted. Check that it contains no private or confidential information and try again.");}finally{inFlight.current=false;setBusy(false);}}
-  return <section className="mx-auto max-w-3xl space-y-6 text-surface-100"><h1 className="text-3xl font-semibold">Submit question</h1>
+  return <section className="product-workspace mx-auto max-w-3xl space-y-6 text-surface-100"><h1 className="text-3xl font-semibold">Submit question</h1>
     <p>Share a question you have the right to share. A reviewer will check it before it enters Interview Bank.</p>
     <form onSubmit={event=>void submit(event)} className="grid gap-4 rounded-xl border border-white/10 p-6">
       <label>Question<textarea required minLength={8} maxLength={1000} value={question} onChange={e=>setQuestion(e.target.value)} rows={4} className="mt-1 w-full rounded bg-slate-800 p-3"/></label>

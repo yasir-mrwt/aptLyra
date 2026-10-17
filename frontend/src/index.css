@@ -533,3 +533,9 @@ select::-webkit-scrollbar {
  .home-hero .home-intro {order:4;}
  .home-hero .home-scope {order:5;}
 }
+
+/* Shared product headings; long-form answers and form copy retain the body font. */
+.product-workspace h1,.product-workspace h2,.product-workspace h3 {font-family:"Space Grotesk",var(--font-sans);font-weight:600;letter-spacing:-.025em;}
+.product-workspace {line-height:1.6;}
+.product-workspace h1 {line-height:1.15;}
+.product-workspace input,.product-workspace textarea,.product-workspace select {font-family:var(--font-sans);}

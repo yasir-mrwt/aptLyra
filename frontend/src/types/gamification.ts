@@ -24,10 +24,5 @@ export interface GamificationProfile {
   leaderboardOptIn: boolean;
 }
 
-export interface LeaderboardEntry {
-  userId?: string;
-  rank: number;
-  name: string;
-  level: number;
-  xp: number;
-}
+export interface LeaderboardEntry {rank:number;name:string;mean:number;self:boolean}
+export interface LeaderboardData {policy:string;reason:string|null;preference:{optedIn:boolean;displayName:string};groups:{id:string;label:string;participants:number;entries:LeaderboardEntry[]}[]}

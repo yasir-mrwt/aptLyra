@@ -1,6 +1,8 @@
 import type {Question} from "../types/session";
 
 export function evaluationStatus(question:Question):string {
+  if(question.intentionallyUnanswered)return "Intentionally left unanswered · no score";
+  if(question.answerLocked && !question.isEvaluated)return "Answer saved · evaluation unavailable";
   if(question.evaluation?.reasons.includes("practice_without_reviewed_scoring"))return "Provisional practice feedback — reviewed score withheld";
   if(question.evaluation)return question.evaluation.status==="abstained"?"Evaluation abstained":"Evaluation complete";
   if(question.isEvaluated)return "Evaluation complete · established starter feedback";

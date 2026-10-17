@@ -12,7 +12,6 @@ import { useResumeAnalysis } from "../features/resume/hooks/useResumeAnalysis";
 import { EntityExtractionTab } from "../features/resume/components/EntityExtractionTab";
 import { AtsScoreTab } from "../features/resume/components/AtsScoreTab";
 import { DeepInsightsTab } from "../features/resume/components/DeepInsightsTab";
-import { JobMatchTab } from "../features/resume/components/JobMatchTab";
 import { FeedbackTipsTab } from "../features/resume/components/FeedbackTipsTab";
 import { ActionPlanFAB } from "../features/resume/components/ActionPlanFAB";
 
@@ -58,7 +57,6 @@ const TABS: { key: ResultTab; label: string }[] = [
   { key: "ats", label: "ATS Score" },
   { key: "insights", label: "Deep Insights" },
   { key: "extraction", label: "Entity Extraction" },
-  { key: "jobmatch", label: "Job Match" },
   { key: "feedback", label: "Feedback & Tips" },
 ];
 
@@ -135,8 +133,6 @@ const ResumeAnalyzer = () => {
 
   const {
     file,
-    jdText,
-    setJdText,
     dragActive,
     fileInputRef,
     handleFileChange,
@@ -192,7 +188,7 @@ const ResumeAnalyzer = () => {
   // ═══════════════════════════════════════════════════════════════════════
 
   return (
-    <div className="resume-workspace max-w-5xl mx-auto px-4 py-8 relative">
+    <div className="product-workspace resume-workspace max-w-5xl mx-auto px-4 py-8 relative">
       {/* ════════════════════════ UPLOAD VIEW ════════════════════════ */}
       {recoveryError&&<p role="alert" className="glass-card p-4">{recoveryError} {activeId&&<button className="underline" onClick={()=>void fetchResumeDetails(activeId)}>Retry saved analysis</button>}</p>}
       {status==="failed"&&<p role="alert" className="glass-card p-4">Analysis failed. Your upload remains saved; you do not need to upload it again.</p>}
@@ -219,7 +215,7 @@ const ResumeAnalyzer = () => {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-500"></span>
                 </span>
-                AI-Powered · Free · Instant Results
+                AI-assisted · Saved analysis
               </motion.div>
 
               <motion.h1
@@ -237,8 +233,7 @@ const ResumeAnalyzer = () => {
                 transition={{ delay: 0.3 }}
                 className="text-surface-300 leading-relaxed text-base font-medium max-w-lg"
               >
-                Upload your resume for an instant ATS score, skill extraction, work
-                experience detection, and optional job description matching.
+                Upload your resume for ATS feedback, skill extraction, and work experience analysis. Processing is saved, so you can return while it finishes.
               </motion.p>
 
               {/* Stats strip */}
@@ -342,20 +337,6 @@ const ResumeAnalyzer = () => {
                       </>
                     )}
                   </div>
-                </div>
-
-                {/* JD Section */}
-                <div className="space-y-2 relative z-10">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-black tracking-widest text-surface-300 uppercase">Job Description</h3>
-                    <span className="text-[10px] text-primary-400/80 font-bold uppercase tracking-wider">Optional</span>
-                  </div>
-                  <textarea
-                    className="w-full h-24 bg-surface-900/40 border border-surface-700/60 rounded-xl p-4 text-sm text-surface-200 focus:outline-none focus:border-primary-400/50 focus:bg-surface-900/60 transition-all placeholder:text-surface-500 resize-none shadow-inner shadow-black/20"
-                    placeholder="Paste target job description to enable match scoring..."
-                    value={jdText}
-                    onChange={(e) => setJdText(e.target.value)}
-                  />
                 </div>
 
                 {/* Button */}
@@ -495,7 +476,6 @@ const ResumeAnalyzer = () => {
                           }
                         />
                       )}
-                      {activeTab === "jobmatch" && <JobMatchTab resumeData={resumeData!} />}
                       {activeTab === "feedback" && (
                         <FeedbackTipsTab
                           resumeData={resumeData!}

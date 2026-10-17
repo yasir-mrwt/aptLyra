@@ -2,12 +2,9 @@ import apiClient from "./apiClient";
 
 const resumeApi = apiClient;
 
-export const uploadResume = async (file: File, jdText?: string) => {
+export const uploadResume = async (file: File) => {
     const formData = new FormData();
     formData.append("resume", file);
-    if (jdText) {
-        formData.append("jdText", jdText);
-    }
 
     const response = await resumeApi.post("/resume/upload", formData, {
         headers: {

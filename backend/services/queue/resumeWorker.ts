@@ -10,8 +10,6 @@ import { emitResumeStatus } from "../socketService.js";
 import { Server } from "socket.io";
 import { stepProcess } from "./steps/stepProcess.js";
 import { stepAnalyze } from "./steps/stepAnalyze.js";
-import { stepMatch } from "./steps/stepMatch.js";
-
 
 // We'll pass the io instance from server.ts to this variable
 let ioInstance: Server | null = null;
@@ -122,31 +120,7 @@ const processJob = async (job: Job<ResumeJobData>): Promise<any> => {
       };
       Object.assign(allMetrics, analysisResult.metrics || {});
 
-      // ── STEP 3: JD Matching (optional) ──
-      if (resume.jdText) {
-        // ── STATE 4: analyzing → matching ──
-        await transitionState(resume, userId, "matching");
-
-        try {
-          // Collect all resume skills for semantic vector comparison
-          const resumeSkills = [
-            ...(analysisResult.skills?.technical || []),
-            ...(analysisResult.skills?.soft || []),
-          ];
-
-          const matchResult = await stepMatch(resume, resumeSkills);
-
-          resume.jdMatchReport = matchResult;
-          resume.scores.jdMatch = matchResult.match_score || 0;
-          Object.assign(allMetrics, matchResult.metrics || {});
-
-          console.log(`[Worker] JD Matching completed for resume: ${resumeId}`);
-        } catch (matchErr) {
-          const errorMessage = matchErr instanceof Error ? matchErr.message : String(matchErr);
-          console.error(`[Worker] JD Matching failed (non-fatal): ${errorMessage}`);
-          // JD matching failure is non-fatal — continue to completed state
-        }
-      }
+      // New processing is résumé-only. Previously saved JD reports remain retained.
 
       // ── STATE FINAL: → completed ──
       resume.metrics = allMetrics;

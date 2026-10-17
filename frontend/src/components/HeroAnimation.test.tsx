@@ -9,7 +9,7 @@ it("reduced motion shows the licensed static frame without fetching animation da
  fixture.reduced=true;const fetch=vi.fn();vi.stubGlobal("fetch",fetch);render(<HeroAnimation/>);
  expect(screen.getByRole("img").getAttribute("src")).toBe("/animations/video-explainer-poster.svg");
  expect(fetch).not.toHaveBeenCalled();expect(screen.queryByRole("button")).toBeNull();
- expect(screen.getByRole("link",{name:"Animation license"}).getAttribute("href")).toBe("/animations/LICENSE.txt");
+ expect(screen.queryByRole("link",{name:"Animation license"})).toBeNull();
 });
 it("loops onscreen, supports keyboard pause and pauses when hidden",async()=>{
  let visibility: (entries: {isIntersecting:boolean}[])=>void = ()=>{};

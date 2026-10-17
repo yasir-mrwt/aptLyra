@@ -1,6 +1,7 @@
+import {Link} from "react-router-dom";
 import { useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
-import { fetchGamificationProfile, fetchLeaderboard } from "../gamificationSlice";
+import { fetchGamificationProfile } from "../gamificationSlice";
 import { motion } from "framer-motion";
 import type { AppDispatch, RootState } from "../../../app/store";
 import { BadgeIcon } from "./BadgeIcon";
@@ -20,12 +21,10 @@ const LEVEL_THRESHOLDS = [
 
 export const GamificationWidget = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const { profile, leaderboard, isLoading, isError, message } = useSelector((state: RootState) => state.gamification);
-  const { user } = useSelector((state: RootState) => state.auth);
+  const { profile, isLoading, isError, message } = useSelector((state: RootState) => state.gamification);
 
   useEffect(() => {
     dispatch(fetchGamificationProfile());
-    dispatch(fetchLeaderboard(10));
   }, [dispatch]);
 
   if (isLoading) {
@@ -153,43 +152,7 @@ export const GamificationWidget = () => {
         </div>
       </motion.div>
 
-      {/* 4. Global Rank */}
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="glass-card rounded-3xl p-6 flex flex-col">
-        <div className="flex items-start gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-[#a78bfa]/20 flex items-center justify-center text-[#a78bfa] shrink-0">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-            </svg>
-          </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-white font-bold text-lg whitespace-nowrap">Global Rank</h3>
-            <p className="text-surface-400 text-xs truncate">Your Rank: {profile?.leaderboardOptIn ? leaderboard?.find(l => l.userId ? (l.userId === user?._id || l.userId === user?.id) : (l.name === user?.name))?.rank || '-' : 'Opted Out'}</p>
-          </div>
-        </div>
-
-        <div className="flex-1 flex flex-col gap-2 overflow-y-auto max-h-[140px] pr-2 custom-scrollbar">
-          {leaderboard?.slice(0, 10).map((entry, idx) => {
-            const isCurrentUser = entry.userId ? (entry.userId === user?._id || entry.userId === user?.id) : (entry.name === user?.name);
-            return (
-              <div key={idx} className={`p-2 flex items-center gap-3 rounded-xl ${isCurrentUser ? 'bg-[#a78bfa]/10 border border-[#a78bfa]/20' : ''}`}>
-                <span className={`${isCurrentUser ? 'text-[#a78bfa]' : 'text-surface-500'} font-bold text-xs w-4 text-center shrink-0`}>{idx + 1}.</span>
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${isCurrentUser ? 'bg-[#a78bfa] text-black' : 'bg-surface-700 text-surface-400'}`}>
-                  {isCurrentUser ? (idx + 1) : <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className={`${isCurrentUser ? 'text-white' : 'text-surface-300'} text-xs font-bold truncate`}>{isCurrentUser ? "You" : entry.name}</div>
-                  <div className={`text-[9px] truncate ${isCurrentUser ? 'text-[#a78bfa]' : 'text-surface-500'}`}>Level {entry.level} • {entry.xp} XP</div>
-                </div>
-                {isCurrentUser && (
-                  <svg className="w-4 h-4 text-[#f59e0b] shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.788l1.599.799L9 4.323V3a1 1 0 011-1zm-5 8.274l-.818 2.552c.25.112.526.174.818.174.292 0 .569-.062.818-.174L5 10.274zm10 0l-.818 2.552c.25.112.526.174.818.174.292 0 .569-.062.818-.174L15 10.274z" clipRule="evenodd" />
-                  </svg>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </motion.div>
+      <section className="glass-card rounded-3xl p-6"><h3>Reviewed practice comparisons</h3><p>Compare eligible results in matching question groups and control your public alias.</p><Link to="/rank" className="underline">Open Rank and privacy preferences</Link></section>
     </div>
   );
 };

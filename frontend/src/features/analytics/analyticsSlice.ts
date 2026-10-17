@@ -7,6 +7,7 @@ export interface BadgeRecord {
 }
 
 export interface AnalyticsData {
+    practice?:{completed:number;scoredAnswers:number;mean:number|null;topics:{topic:string;scored:number;mean:number}[]};
     evaluation?: {legacySessions:number;rubricSessions:number;reviewedScoredSessions:number;reviewedMean:number|null;provisional:number;abstained:number};
     stats: {
         totalSessions: number;
@@ -76,7 +77,8 @@ export const analyticsSlice = createSlice({
     extraReducers: (builder) => {
         builder
             .addCase(getAnalytics.pending, (state) => {
-                state.isLoading = true;
+                state.isLoading = !state.data;
+                state.isError = false;
             })
             .addCase(getAnalytics.fulfilled, (state, action) => {
                 state.isLoading = false;

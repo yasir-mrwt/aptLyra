@@ -69,7 +69,7 @@ const Login = () => {
     }
 
     return (
-        <div className="flex flex-col justify-center items-center min-h-[85vh] py-12 px-4">
+        <div className="product-workspace flex flex-col justify-center items-center min-h-[85vh] py-12 px-4">
             <div className="w-full max-w-md animate-in fade-in slide-in-from-bottom-8 duration-700">
                 <div className="glass-card rounded-[2.5rem] p-10 relative overflow-hidden">
                     {/* Decorative element */}

@@ -106,7 +106,7 @@ const SessionCard = ({ session, onClick, onDelete }: SessionCardProps) => {
                 </button>
             </div>
 
-            {session.status==='completed'&&session.individualPractice&&<p className="text-sm">Individual practice: {session.individualPractice.mean??"Unavailable"}{session.individualPractice.mean!==null?"/100":""} · {session.individualPractice.scored}/{session.individualPractice.total} answers scored</p>}
+            {session.status==='completed'&&session.individualPractice&&<p className="text-sm">Individual practice: {session.individualPractice.mean??"Unavailable"}{session.individualPractice.mean!==null?"/100":""} · {session.individualPractice.scored}/{session.individualPractice.total} answers scored · {session.individualPractice.provisional ?? 0} provisional · {session.individualPractice.unanswered ?? 0} unanswered</p>}
             {session.status==='completed'&&session.overallScore==null&&<p className="text-sm text-surface-300">{session.individualScoredAnswers||0} individually scored answers. A reviewed aggregate requires eligible reviewed originals; open the report for answer feedback.</p>}
             <div className="flex items-center justify-between mt-2 pt-5 border-t border-white/5 relative z-10">
                 <div className="space-y-1">

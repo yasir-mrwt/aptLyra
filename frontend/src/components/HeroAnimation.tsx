@@ -25,6 +25,5 @@ export default function HeroAnimation(){
  },[reduced]);
  return <figure className="hero-animation" tabIndex={reduced?undefined:0} aria-label="Illustrated video conversation. Press Space to pause or resume motion." onKeyDown={event=>{if(event.key===' '){event.preventDefault();paused.current=!paused.current;sync();}}}>
   <div className="hero-animation-stage"><img src="/animations/video-explainer-poster.svg" width="1024" height="1024" alt="A speaker explains an idea during a video conversation, with a laptop and plants." className={ready&&!reduced?'hero-poster hidden-poster':'hero-poster'} fetchPriority="high"/><div ref={container} aria-hidden="true" className={reduced?'hero-lottie hidden-player':'hero-lottie'}/></div>
-  <figcaption className="animation-credit"><a href="https://lottiefiles.com/free-animation/video-explainer-YUwaiFcnZ4" target="_blank" rel="noreferrer">Video Explainer · Sherjeel Javed</a><span aria-hidden="true"> · </span><a href="/animations/LICENSE.txt">Animation license</a></figcaption>
  </figure>;
 }

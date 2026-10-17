@@ -16,7 +16,6 @@ export const useResumeUpload = ({
 }: UseResumeUploadProps) => {
   const inFlight=useRef(false);
   const [file, setFile] = useState<File | null>(null);
-  const [jdText, setJdText] = useState("");
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -58,7 +57,7 @@ export const useResumeUpload = ({
     inFlight.current=true;onUploadStart();
     
     try {
-      const result=await uploadResume(file, jdText);
+      const result=await uploadResume(file);
       const id=result?.data?.resumeId;if(!id)throw Error("Upload did not return a saved job.");
       toast.info("Resume uploaded. AI is starting analysis...");
       onUploadSuccess(id);
@@ -73,13 +72,10 @@ export const useResumeUpload = ({
 
   const handleReset = () => {
     setFile(null);
-    setJdText("");
   };
 
   return {
     file,
-    jdText,
-    setJdText,
     dragActive,
     fileInputRef,
     handleFileChange,

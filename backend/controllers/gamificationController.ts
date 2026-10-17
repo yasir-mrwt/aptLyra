@@ -1,6 +1,7 @@
+import {practiceLeaderboard} from "../services/practiceLeaderboard.js";
 import {query} from "../config/db.js";
 import {practiceCalendar} from "../services/practiceCalendar.js";
-import { Request, Response } from "express";
+import { Response } from "express";
 import { gamificationService } from "../services/gamificationService.js";
 import { AuthenticatedRequest } from "../types/express.js";
 import { getTitleForLevel, getXPForLevel } from "../config/achievements.js";
@@ -16,24 +17,20 @@ export const getProfile = async (req: AuthenticatedRequest, res: Response) => {
   }
 };
 
-export const getLeaderboard = async (req: Request, res: Response) => {
-  try {
-    let limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
-    limit = Math.max(1, Math.min(limit, 100)); // Validate positive, max 100
-    const leaderboard = await gamificationService.getLeaderboard(limit);
-
-    const formatted = leaderboard.map((entry: any, index) => ({
-      userId: entry.user?._id?.toString() || entry._id?.toString(),
-      rank: index + 1,
-      name: entry.user?.name || "Anonymous User",
-      level: entry.level,
-      xp: entry.xp,
-    }));
-
-    res.json(formatted);
-  } catch (error: any) {
-    res.status(500).json({ message: error.message });
+export const getLeaderboard = async (req: AuthenticatedRequest, res: Response) => {
+  try { res.json(await practiceLeaderboard(req.user!._id)); }
+  catch { res.status(503).json({message:"Leaderboard temporarily unavailable."}); }
+};
+export const setLeaderboardPreference = async (req: AuthenticatedRequest, res: Response) => {
+  const {optedIn,displayName}=req.body || {};
+  if(typeof optedIn!=="boolean" || typeof displayName!=="string" || !/^[\p{L}\p{N} _-]{2,32}$/u.test(displayName.trim())) {
+    res.status(400).json({message:"Choose a public alias of 2–32 letters, numbers, spaces, underscores or hyphens."});return;
   }
+  try {
+    await query(`INSERT INTO practice_leaderboard_preferences(user_id,opted_in,display_name) VALUES($1,$2,$3)
+      ON CONFLICT(user_id) DO UPDATE SET opted_in=$2,display_name=$3,updated_at=now()`,[req.user!._id,optedIn,displayName.trim()]);
+    res.json({optedIn,displayName:displayName.trim()});
+  } catch { res.status(503).json({message:"Could not save leaderboard preferences."}); }
 };
 
 export const syncGamification = async (req: AuthenticatedRequest, res: Response) => {

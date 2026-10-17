@@ -52,7 +52,7 @@ export async function acceptAnswer(session:ISession,index:number,answer:string,c
     if(latest && latest.payload_hash===payloadHash)return publicOperation(latest);
     const question=session.questions[index];
     if(session.status!=="in-progress" || session.runtimeState!=="active")throw new SessionStateError("Interview is no longer accepting answers");
-    if(question.isEvaluated || question.isSubmitted || (latest && latest.status!=="terminal_failed"))throw new SessionStateError("This answer is already claimed. Retry its operation instead.");
+    if(question.answerLocked || question.isEvaluated || question.isSubmitted || latest)throw new SessionStateError("This answer is already claimed. Retry its operation instead.");
     if(await hasUnfinishedWork(session._id))throw new SessionStateError("Wait for the current operation, or retry/cancel it before another answer.");
     const parent=question.followUpOf===undefined?question:session.questions[question.followUpOf];
     if(!parent?.planItemId || !parent.questionVersionId)throw new SessionStateError("Pinned question unavailable");
@@ -63,6 +63,7 @@ export async function acceptAnswer(session:ISession,index:number,answer:string,c
     await query("UPDATE answer_attempts SET follow_up_index=$2,runtime_extracted=$3,extracted_text=$4 WHERE id=$1",[attempt,question.followUpOf===undefined?null:index,!staged,staged?null:answer]);
     if(staged)await query("INSERT INTO staged_interview_media(id,session_id,user_id,answer_attempt_id,filename,content_hash,size_bytes,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,now()+interval '24 hours')",[staged.id,session._id,session.user,attempt,staged.filename,staged.hash,staged.size]);
     if(question.questionType==="coding")question.language=language;
+    question.answerLocked=true;question.userAnswerText=answer;question.userSubmittedCode=code;
     question.isSubmitted=true;delete question.processingError;question.processingState="received";
     if(!session.endTime && session.questions.every(q=>q.isSubmitted||q.isEvaluated))
       session.endTime=(await query("SELECT clock_timestamp() AS accepted_at")).rows[0].accepted_at.toISOString();
@@ -83,6 +84,8 @@ export async function requestFinish(session:ISession) {
   if(await hasUnfinishedWork(session._id) || session.questions.some(q=>q.followUpPending || (q.isSubmitted && !q.isEvaluated)))
     throw new SessionStateError("Finish requires all accepted answers and probes to complete or be explicitly cancelled.");
   if(!session.endTime){session.endTime=(await query("SELECT clock_timestamp() AS accepted_at")).rows[0].accepted_at.toISOString();await sessionRepository.save(session);}
+  for(const question of session.questions) if(!question.answerLocked&&!question.isSubmitted&&!question.isEvaluated&&!question.operationId) question.intentionallyUnanswered=true;
+  await sessionRepository.save(session);
   await bumpRevision(session,"finishing");
   const evaluationIds=session.questions.map(q=>q.evaluation?.id || null);
   await insertOperation(session,"report","finish",{snapshotRevision:session.revision,evaluationIds},hash({revision:session.revision,evaluationIds}));

@@ -340,9 +340,12 @@ test('quarantine → extraction → human reviews → technical grounding/rubric
     assert.ok(!constrained.hits.some(hit=>hit.questionVersionId===manuallyPublished.body.questionVersionId),'structured lookup retains every source, taxonomy and exclusion constraint');
   }
   plannerService.retriever=unrelatedRetriever;
-  const practicePlan=await plannerService.preview(userId,{role:'Software Engineer',level:'junior',taxonomyVersion:'junior-se-v1',
-    competencies:['dbms-sql'],difficulty:'standard',mode:'oral',count:3,minutes:45,language:'en',codeLanguage:'python',modifiers:{}});
-  assert.ok(practicePlan.items.some(item=>item.questionVersionId===manuallyPublished.body.questionVersionId),'practice-only corpus plans without trends opt-in');
+  const practiceSetup={role:'Software Engineer',level:'junior',taxonomyVersion:'junior-se-v1',
+    competencies:['dbms-sql'],difficulty:'standard',mode:'oral',count:3,minutes:45,language:'en',codeLanguage:'python',modifiers:{}};
+  const scoredPlan=await plannerService.preview(userId,practiceSetup);
+  assert.ok(scoredPlan.items.every(item=>item.inventoryClass!=='DYNAMIC_PROVISIONAL'),'ordinary practice excludes unreviewed numeric scoring');
+  const practicePlan=await plannerService.preview(userId,{...practiceSetup,includeRecentTrends:true});
+  assert.ok(practicePlan.items.some(item=>item.questionVersionId===manuallyPublished.body.questionVersionId),'explicit provisional practice opt-in admits human-approved questions');
   const confirmedPractice=await plannerService.confirm(userId,{planId:practicePlan.id,revision:practicePlan.revision});
   plannerService.retriever=retrieval;
   const practiceSession=await sessionRepository.findByIdForUser(confirmedPractice.sessionId,userId);

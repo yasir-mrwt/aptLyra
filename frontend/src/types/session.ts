@@ -28,6 +28,8 @@ export interface Question {
     questionText: string;
     questionType: "coding" | "oral" | "system-design";
     isEvaluated: boolean;
+    answerLocked?: boolean;
+    intentionallyUnanswered?: boolean;
     isSubmitted: boolean;
     userAnswerText?: string;
     userSubmittedCode?: string;
@@ -45,7 +47,7 @@ export interface Question {
 
 export interface Session {
     individualScoredAnswers?: number;
-    individualPractice?:{mean:number|null;scored:number;total:number};
+    individualPractice?:{mean:number|null;scored:number;total:number;provisional?:number;unanswered?:number};
     activationRequired?: boolean;
     activatedAt?: string;
     runtimeVersion?: string;

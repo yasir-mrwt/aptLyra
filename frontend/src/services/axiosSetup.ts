@@ -1,3 +1,4 @@
+import {editorialQueryCache} from "./editorialQueryCache";
 import axios from "axios";
 import type { AxiosInstance } from "axios";
 
@@ -69,6 +70,7 @@ export const setupInterceptors = (apiInstance: AxiosInstance) => {
 
                     // Refresh failed (token expired/invalid) -> Logout
                     if(!axios.isAxiosError(refreshError)||refreshError.response?.status!==401)return Promise.reject(refreshError);
+                    editorialQueryCache.setIdentity(null);
                     localStorage.removeItem("user");
                     if (window.location.pathname !== "/login") {
                         window.location.href = "/login";

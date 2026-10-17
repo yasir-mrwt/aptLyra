@@ -80,7 +80,7 @@ export default function ContentEditorialConsole(){
     {id:"review" as const,label:`Review Queue · ${countLabel("/content-intelligence/review/candidates")}`},
     ...(appRole==="owner"||appRole==="admin"?[{id:"sources" as const,label:"Sources"}]:[]),
   ],[appRole,countLabel]);
-  return <section className="editorial-console mx-auto max-w-6xl space-y-6 text-surface-100">
+  return <section className="product-workspace editorial-console mx-auto max-w-6xl space-y-6 text-surface-100">
     <header><p className="text-sm uppercase tracking-wider text-cyan-300">Protected editorial tools</p><h1 className="mt-2 text-3xl font-semibold">Interview Bank</h1><p className="mt-2 text-surface-300">Practice from the trusted starter bank or review new questions in one place.</p></header>
     <nav aria-label="Editorial sections" className="editorial-section-nav snap-x snap-mandatory flex gap-2 overflow-x-auto pb-2">{tabs.map(item=><button key={item.id} onClick={()=>setTab(item.id)} aria-pressed={tab===item.id} className={`min-h-11 shrink-0 snap-start rounded-lg border px-3 py-2 text-sm ${tab===item.id?"border-cyan-300 bg-cyan-950/40 text-cyan-100":"border-white/15 text-surface-300"}`}>{item.label}</button>)}</nav>
     <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-surface-400" aria-live="polite">{refreshing?"Refreshing saved review data…":loading?roleLoading?"Checking reviewer access…":"Loading this section…":""}</p><button type="button" disabled={!apiRoleReady} onClick={()=>void load(true)} className="rounded border border-white/20 px-3 py-2 text-sm disabled:opacity-40">Refresh</button></div>

@@ -1,3 +1,4 @@
+import {editorialQueryCache} from "../../services/editorialQueryCache";
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axios from "axios";
 import authApi from "../../services/authApi";
@@ -38,6 +39,7 @@ export const restoreSession=createAsyncThunk<User|null,void,{state:{auth:AuthSta
         } catch(error) {
             // A service/network outage does not prove the refresh cookie expired.
             if(axios.isAxiosError(error) && error.response?.status!==401)return stored;
+            editorialQueryCache.setIdentity(null);
             localStorage.removeItem("user");
             return thunkAPI.rejectWithValue("Your saved session has expired. Please sign in again.");
         }
@@ -142,6 +144,7 @@ export const logout = createAsyncThunk<void, void, { rejectValue: string }>(
     "auth/logout",
     async (_, thunkAPI) => {
         try {
+            editorialQueryCache.setIdentity(null);
             localStorage.removeItem("user");
             try {
                 await authApi.post(`user/logout`);

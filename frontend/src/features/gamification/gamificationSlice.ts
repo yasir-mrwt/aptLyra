@@ -1,10 +1,10 @@
 import { createSlice, createAsyncThunk, type PayloadAction } from "@reduxjs/toolkit";
 import { getGamificationProfile, getLeaderboard } from "../../services/gamificationApi";
-import type { GamificationProfile, LeaderboardEntry } from "../../types/gamification";
+import type { GamificationProfile, LeaderboardData } from "../../types/gamification";
 
 interface GamificationState {
   profile: GamificationProfile | null;
-  leaderboard: LeaderboardEntry[];
+  leaderboard: LeaderboardData | null;
   isLoading: boolean;
   isError: boolean;
   message: string;
@@ -12,7 +12,7 @@ interface GamificationState {
 
 const initialState: GamificationState = {
   profile: null,
-  leaderboard: [],
+  leaderboard: null,
   isLoading: false,
   isError: false,
   message: "",

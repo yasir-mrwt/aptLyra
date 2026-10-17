@@ -47,6 +47,8 @@ export interface IQuestion {
   userSubmittedDiagram?: string;
   diagramImageUrl?: string;
   language?: string;
+  answerLocked?: boolean;
+  intentionallyUnanswered?: boolean;
   isSubmitted: boolean;
   isEvaluated: boolean;
   technicalScore?: number;
@@ -64,7 +66,7 @@ export interface IQuestion {
 
 export interface ISession {
   individualScoredAnswers?: number;
-  individualPractice?:{mean:number|null;scored:number;total:number};
+  individualPractice?:{mean:number|null;scored:number;total:number;provisional:number;unanswered:number};
   activationRequired?: boolean;
   activatedAt?: string;
   runtimeVersion?: string;
@@ -245,7 +247,7 @@ export const sessionRepository = {
       const session=rowToSession(r), questions=r.saved_questions||session.questions;
       const scores:number[]=questions.flatMap((q:IQuestion)=>{const score=q.evaluation?(q.evaluation.status==="scored"?q.evaluation.technicalScore:null):(q.isEvaluated?q.technicalScore:null);return typeof score==="number"&&Number.isFinite(score)&&score>=0&&score<=100?[score]:[];});
       session.individualScoredAnswers=scores.length;
-      session.individualPractice={mean:scores.length?Math.round(scores.reduce((a,b)=>a+b,0)/scores.length*10)/10:null,scored:scores.length,total:questions.length};
+      session.individualPractice={mean:scores.length?Math.round(scores.reduce((a,b)=>a+b,0)/scores.length*10)/10:null,scored:scores.length,total:questions.length,provisional:questions.filter((q:IQuestion)=>(q.evaluation?.rubricStatus==="provisional"||q.evaluation?.reasons.includes("practice_without_reviewed_scoring"))).length,unanswered:questions.filter((q:IQuestion)=>!q.answerLocked&&!q.operationId&&!q.isSubmitted&&!q.isEvaluated).length};
       if(session.scoringVersion==="rubric-v1"){
         session.reviewedSummary=r.saved_summary?.reviewedSummary;
         session.overallScore=session.status==="completed"?r.saved_summary?.reviewedSummary?.technicalScore??null:null;

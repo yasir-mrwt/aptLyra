@@ -52,7 +52,8 @@ test('permanent failure stops without automatic retry; cancellation releases acc
  assert.equal((await op(a.id)).status,'terminal_failed');assert.equal((await op(a.id)).attempts,1);
  assert.equal((await operations.ownedOperations(s._id,f.owner))[0].retryAvailable,false);
  await assert.rejects(()=>operations.retryOperation(s._id,f.owner,a.id),/manual retry/);
- const replacement=await submit(s,0,'A corrected new answer explains FIFO.');assert.notEqual(replacement.id,a.id);
+ await assert.rejects(()=>submit(s,0,'A corrected new answer explains FIFO.'),/already claimed/);
+ const replacement=await submit(s,1,'A separate answer explains FIFO.');assert.notEqual(replacement.id,a.id);
  await operations.cancelOperation(s._id,f.owner,replacement.id);await w.process(replacement.id);
  assert.equal((await op(replacement.id)).error_code,'cancelled_by_user');assert.equal((await rows('SELECT count(*)::int AS n FROM evaluations WHERE answer_attempt_id IN (SELECT id FROM answer_attempts WHERE session_id=$1)',[s._id]))[0].n,0);
 });
@@ -179,4 +180,17 @@ test('last accepted answer freezes server time and requires an explicit idempote
  await drain(session,runtime);const completed=await f.repo.findById(session._id);
  assert.equal(completed.status,'completed');assert.equal(completed.endTime,accepted.endTime);
  assert.equal((await rows("SELECT count(*)::int AS n FROM durable_operations WHERE session_id=$1 AND operation_type='report'",[session._id]))[0].n,1);
+});
+
+test('accepted answers remain immutable after cancellation and finish marks only unsent questions unanswered',async()=>{
+ const s=await f.active(),accepted=await submit(s,0,'Immutable saved explanation');
+ await operations.cancelOperation(s._id,f.owner,accepted.id);
+ await assert.rejects(()=>submit(s,0,'Edited after cancellation'),/already claimed/);
+ const saved=await f.repo.findByIdForUser(s._id,f.owner);
+ assert.equal(saved.questions[0].answerLocked,true);
+ assert.equal(saved.questions[0].userAnswerText,'Immutable saved explanation');
+ await f.service.endInterviewSession(s._id,f.owner,io);
+ const finished=await f.repo.findByIdForUser(s._id,f.owner);
+ assert.notEqual(finished.questions[0].intentionallyUnanswered,true);
+ assert.ok(finished.questions.slice(1).every(q=>q.intentionallyUnanswered===true));
 });

@@ -105,7 +105,13 @@ export const getOverallProgress = asyncHandler(async (req: AuthenticatedRequest,
     };
   }
 
+  const practiceAnswers=allCompletedSessions.flatMap(session=>session.questions.map(q=>({q,session}))).flatMap(({q,session})=>{
+    const score=q.evaluation?(q.evaluation.status==="scored"?q.evaluation.technicalScore:null):(q.isEvaluated?q.technicalScore:null);
+    return typeof score==="number"&&Number.isFinite(score)&&score>=0&&score<=100?[{score,topic:q.primaryCompetency?.split('.')[0]||"unmapped",sessionId:session._id}]:[];
+  });
+  const topics=[...new Set(practiceAnswers.map(a=>a.topic))].map(topic=>{const scores=practiceAnswers.filter(a=>a.topic===topic);return {topic,scored:scores.length,mean:round2(average(scores.map(a=>a.score)))};});
   res.json({
+    practice:{completed:allCompletedSessions.length,scoredAnswers:practiceAnswers.length,mean:practiceAnswers.length?round2(average(practiceAnswers.map(a=>a.score))):null,topics},
     evaluation: {legacySessions:completedSessions.length,rubricSessions:rubricSessions.length,reviewedScoredSessions:reviewed.length,reviewedMean:reviewed.length?round2(average(reviewed)):null,provisional:rubricSessions.reduce((s,r)=>s+(r.reviewedSummary?.provisional || 0),0),abstained:rubricSessions.reduce((s,r)=>s+(r.reviewedSummary?.abstained || 0),0)},
     stats: overallStats || {
       totalSessions: 0,

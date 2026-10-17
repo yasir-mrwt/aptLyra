@@ -127,6 +127,7 @@ const InterviewRunnerSession = () => {
         return <InterviewLoading sessionMessage={(isFinishing || activeSession?.runtimeState==="finishing") ? "Finishing… Your answers are saved. Preparing your report." : sessionMessage} />;
     }
 
+    const unanswered = activeSession.questions.filter(q => !q.answerLocked && !q.operationId && !q.isSubmitted && !q.isEvaluated).length;
     const currentDraft = drafts[currentQuestionIndex] || {};
     const isCodingQuestion = currentQuestion?.questionType === 'coding';
     if(currentQuestion?.evidenceUnavailable)return <div role="alert" className="p-6"><p>{currentQuestion.questionText}</p><Link to="/dashboard">Create a fresh plan</Link></div>;
@@ -184,7 +185,7 @@ const InterviewRunnerSession = () => {
                     <CodeEditorSection onReady={()=>setEditorReady(true)}
                         language={selectedLanguage}
                         plannedLanguage={!!activeSession.planId}
-                        code={currentDraft.code ?? currentQuestion?.userSubmittedCode ?? ""}
+                        code={currentQuestion?.answerLocked || currentQuestion?.isSubmitted || currentQuestion?.isEvaluated ? currentQuestion.userSubmittedCode ?? currentDraft.code ?? "" : currentDraft.code ?? ""}
                         isQuestionLocked={isQuestionLocked}
                         setLanguage={setSelectedLanguage}
                         updateCode={updateDraftCode}
@@ -192,7 +193,7 @@ const InterviewRunnerSession = () => {
                     <CodeOutputPanel
                         context={activeSession.scoringVersion === "rubric-v1" ? {sessionId:activeSession._id,questionIndex:currentQuestionIndex}:undefined}
                         language={selectedLanguage}
-                        code={currentDraft.code ?? currentQuestion?.userSubmittedCode ?? ""}
+                        code={currentQuestion?.answerLocked || currentQuestion?.isSubmitted || currentQuestion?.isEvaluated ? currentQuestion.userSubmittedCode ?? currentDraft.code ?? "" : currentDraft.code ?? ""}
                         executionTestId={currentQuestion?.executionTestId}
                     />
                     <div className="lg:col-span-2 glass-card p-5"><label htmlFor="coding-explanation" className="block font-semibold mb-2">Explain your approach</label><textarea id="coding-explanation" value={currentDraft.answerText ?? currentQuestion?.userAnswerText ?? ""} onChange={event=>updateDraftAnswer(event.target.value)} disabled={isQuestionLocked} maxLength={50000} rows={5} className="w-full rounded bg-surface-800 p-3" aria-describedby="coding-explanation-help"/><p id="coding-explanation-help" className="text-sm mt-2">Describe your approach, time and space complexity, and tradeoffs. Saved separately from your code and included with your submitted answer.</p></div>
@@ -214,7 +215,7 @@ const InterviewRunnerSession = () => {
                         <label htmlFor="typed-answer" className="block mb-2 font-semibold">Review your transcript or type an answer</label>
                         <textarea
                             id="typed-answer"
-                            value={currentDraft.answerText || ""}
+                            value={currentQuestion?.answerLocked || currentQuestion?.operationId || currentQuestion?.isSubmitted || currentQuestion?.isEvaluated ? currentQuestion.userAnswerText ?? currentDraft.answerText ?? "" : currentDraft.answerText ?? ""}
                             onChange={event => updateDraftAnswer(event.target.value)}
                             disabled={isQuestionLocked || isRecording || isStarting || isTranscribing || !!currentDraft.audio?.size}
                             maxLength={50000}
@@ -291,18 +292,18 @@ const InterviewRunnerSession = () => {
                     disabled={isStarting || isSubmitting || isTranscribing || isRecording || currentQuestionIndex === (activeSession?.questions?.length || 0) - 1}
                     className="text-surface-500 font-black text-[10px] uppercase tracking-widest hover:text-white disabled:opacity-20 cursor-pointer transition-colors"
                 >
-                    Next →
+                    {currentQuestion?.answerLocked || currentQuestion?.operationId || currentQuestion?.isSubmitted || currentQuestion?.isEvaluated ? "Next →" : "Skip for now →"}
                 </button>
             </div>
 
             <ConfirmModal
                 isOpen={isFinishModalOpen}
                 title="Finish Interview?"
-                message="Are you sure you want to end this interview session? You won't be able to change your answers after this."
-                confirmText="Finish"
-                cancelText="Keep Going"
+                message={unanswered ? `${unanswered} of ${activeSession.questions.length} questions remain unanswered. Unsent drafts will not be evaluated. You can review them before finishing.` : "All answers have been submitted. Finish to prepare your report."}
+                confirmText={unanswered ? "Finish without answering" : "Finish"}
+                cancelText={unanswered ? "Review unanswered" : "Keep going"}
                 onConfirm={handleConfirmFinish}
-                onCancel={() => setIsFinishModalOpen(false)}
+                onCancel={() => { setIsFinishModalOpen(false); if (unanswered) void handleNavigation(activeSession.questions.findIndex(q => !q.answerLocked && !q.operationId && !q.isSubmitted && !q.isEvaluated)); }}
                 isDanger={false}
             />
         </div>

@@ -1,3 +1,4 @@
+import {editorialQueryCache} from "../../../services/editorialQueryCache";
 /** Restore the owned durable résumé job and poll bounded status requests across navigation. */
 import { useState, useEffect, useRef, useCallback } from "react";
 import { getResume, getResumeStatus } from "../../../services/resumeApi";
@@ -35,14 +36,14 @@ export const useResumeAnalysis = ({userId}:{userId?:string}) => {
       if(inFlight||document.hidden)return;inFlight=true;
       try{const data=await getResumeStatus(activeId);if(disposed)return;
         setStatus(data.status);setRecoveryError("");setIsUploading(pending.has(data.status));
-        if(data.status==="completed")await fetchResumeDetails(activeId);
+        if(data.status==="completed"){editorialQueryCache.invalidatePrefix("http:/resume");await fetchResumeDetails(activeId);}
       }catch{if(!disposed)setRecoveryError("Connection interrupted. Reconnecting to your saved analysis…");}
       finally{inFlight=false;}
     };
     const timer=setInterval(()=>void refresh(),4000);window.addEventListener("online",refresh);window.addEventListener("focus",refresh);
     return()=>{disposed=true;clearInterval(timer);window.removeEventListener("online",refresh);window.removeEventListener("focus",refresh);};
   },[activeId,userId,status,fetchResumeDetails]);
-  const getStatusMessage=()=>({pending:"Job queued…",processing:"Extracting résumé text…",parsed:"Text extracted; preparing analysis…",analyzing:"Analyzing your résumé…",matching:"Comparing the job description…",failed:"Analysis needs attention",invalid_document:"Invalid document"}[status||""]||"Restoring saved analysis…");
+  const getStatusMessage=()=>({pending:"Job queued…",processing:"Extracting résumé text…",parsed:"Text extracted; preparing analysis…",analyzing:"Analyzing your résumé… Your job is saved; you can leave and return.",matching:"Comparing the job description…",failed:"Analysis needs attention",invalid_document:"Invalid document"}[status||""]||"Restoring saved analysis…");
   const handleResetAnalysis=()=>{generation.current++;if(userId)localStorage.removeItem(`aptlyra-resume:${userId}`);setActiveId(null);setResumeData(null);setStatus(null);setIsUploading(false);setActiveTab("extraction");setStreamingFeedbackText("");setRecoveryError("");};
   return {isUploading,setIsUploading,status,setStatus,resumeData,setResumeData,activeTab,setActiveTab,getStatusMessage,handleResetAnalysis,streamingFeedbackText,setStreamingFeedbackText,fetchResumeDetails,recoveryError,activeId};
 };
