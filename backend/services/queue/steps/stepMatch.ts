@@ -17,6 +17,7 @@ export const stepMatch = async (resume: any, resumeSkills: string[]): Promise<an
   console.log(`[Worker] STEP 3/4: Sending resume ${resume._id} for Gemini-based semantic JD matching...`);
   const response = await fetch(`${AI_SERVICE_URL}/resume/v2/match`, {
     method: "POST",
+      signal: AbortSignal.timeout(120000),redirect:"error",size:2*1024*1024,
     headers: { 
       "Content-Type": "application/json",
       "X-API-Key": process.env.INTERNAL_API_KEY || ""
@@ -29,8 +30,7 @@ export const stepMatch = async (resume: any, resumeSkills: string[]): Promise<an
   });
 
   if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Matching service failed (${response.status}): ${errText}`);
+    throw new Error(`Matching service failed (${response.status})`);
   }
 
   const data = (await response.json()) as any;

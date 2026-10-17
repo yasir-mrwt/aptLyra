@@ -130,6 +130,11 @@ export const resumeRepository = {
     return saved;
   },
 
+  // Queue bookkeeping must not overwrite a newer worker result/status.
+  async setJobId(id: string, jobId: string): Promise<void> {
+    await query("UPDATE resumes SET job_id=$2 WHERE id=$1", [id, jobId]);
+  },
+
   async delete(resume: IResume): Promise<void> {
     await query("DELETE FROM resumes WHERE id = $1", [resume._id]);
   },

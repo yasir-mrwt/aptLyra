@@ -8,6 +8,7 @@ from fastapi import (
     Form,
 )
 from fastapi.responses import StreamingResponse
+from starlette.concurrency import run_in_threadpool
 import logging
 import os
 from app.services.fetch_security import validate_callback_url
@@ -41,7 +42,7 @@ async def process_resume_v2(file: UploadFile = File(...)):
         contents = await file.read(10 * 1024 * 1024 + 1)
         if not contents or len(contents) > 10 * 1024 * 1024:
             raise HTTPException(413, "Resume must be nonempty and at most 10 MiB")
-        return ResumeOrchestratorService.process_resume(contents, file.filename)
+        return await run_in_threadpool(ResumeOrchestratorService.process_resume, contents, file.filename)
     except HTTPException:
         raise
     except ValueError as ve:
@@ -122,7 +123,7 @@ async def analyze_resume_v2(payload: dict = Body(...)):
         raise HTTPException(status_code=400, detail="raw_text is required")
 
     try:
-        return ResumeOrchestratorService.analyze_resume(raw_text, parsed_profile, jd_text)
+        return await run_in_threadpool(ResumeOrchestratorService.analyze_resume, raw_text, parsed_profile, jd_text)
     except Exception as e:
         logger.error(f"[v2/analyze] Error: {str(e)}")
         raise HTTPException(

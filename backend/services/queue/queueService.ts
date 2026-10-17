@@ -34,6 +34,7 @@ const resumeQueue = new Queue<ResumeJobData>("resume-processing", {
  */
 export const addResumeJob = async (resumeId: string): Promise<Job<ResumeJobData>> => {
   const job = await resumeQueue.add("parse-resume" as any, { resumeId }, {
+    jobId: `parse-${resumeId}`,
     attempts: 3,
     backoff: {
       type: "exponential",
@@ -45,6 +46,7 @@ export const addResumeJob = async (resumeId: string): Promise<Job<ResumeJobData>
 
 export const addResumeAnalyzeJob = async (resumeId: string): Promise<Job<ResumeJobData>> => {
   const job = await resumeQueue.add("analyze-resume" as any, { resumeId }, {
+    jobId: `analyze-${resumeId}`,
     attempts: 3,
     backoff: {
       type: "exponential",
@@ -67,3 +69,15 @@ export const getQueueMetrics = async () => {
     delayed: counts.delayed || 0,
   };
 };
+
+/** Retry the existing durable job; never create duplicate active work. */
+export async function recoverResumeJob(resumeId:string,jobId?:string|null,parsed=false){
+  const existing=jobId?await resumeQueue.getJob(jobId):null;
+  if(existing){const state=await existing.getState();if(["active","waiting","delayed","waiting-children"].includes(state))return existing;
+    if(state==="failed"){await existing.retry();return existing;}
+    await existing.remove();
+  }
+  const stable=await resumeQueue.getJob(`${parsed?"analyze":"parse"}-${resumeId}`);
+  if(stable){if(await stable.getState()==="failed")await stable.retry();return stable;}
+  return parsed?addResumeAnalyzeJob(resumeId):addResumeJob(resumeId);
+}

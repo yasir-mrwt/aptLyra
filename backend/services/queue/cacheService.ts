@@ -18,6 +18,11 @@ import { connection } from "./queueService.js";
 const CACHE_TTL = parseInt(process.env.CACHE_TTL_SECONDS || "86400", 10);
 
 const PREFIX = "resume-cache";
+async function boundedCache<T>(work:Promise<T>):Promise<T>{
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  try{return await Promise.race([work,new Promise<T>((_,reject)=>{timer=setTimeout(()=>reject(Error("cache_timeout")),2000);})]);}
+  finally{if(timer)clearTimeout(timer);}
+}
 
 // ============================================================================
 // Helpers
@@ -51,16 +56,16 @@ export const getCachedResult = async (
 ): Promise<any | null> => {
   try {
     const key = buildKey(step, inputFingerprint);
-    const raw = await connection.get(key);
+    const raw = await boundedCache(connection.get(key));
     if (raw) {
       console.log(`[Cache] HIT  — ${step} (key=${key.slice(0, 50)}…)`);
       return JSON.parse(raw);
     }
     console.log(`[Cache] MISS — ${step}`);
     return null;
-  } catch (err) {
+  } catch {
     // Cache failures must never break the pipeline — just log and continue.
-    console.warn("[Cache] GET error (non-fatal):", err);
+    console.warn("[Cache] GET unavailable; continuing without cache");
     return null;
   }
 };
@@ -75,10 +80,10 @@ export const setCachedResult = async (
 ): Promise<void> => {
   try {
     const key = buildKey(step, inputFingerprint);
-    await connection.set(key, JSON.stringify(data), "EX", CACHE_TTL);
+    await boundedCache(connection.set(key, JSON.stringify(data), "EX", CACHE_TTL));
     console.log(`[Cache] SET  — ${step} (ttl=${CACHE_TTL}s)`);
-  } catch (err) {
-    console.warn("[Cache] SET error (non-fatal):", err);
+  } catch {
+    console.warn("[Cache] SET unavailable; continuing without cache");
   }
 };
 
@@ -93,7 +98,7 @@ export const invalidateCache = async (
     const key = buildKey(step, inputFingerprint);
     await connection.del(key);
     console.log(`[Cache] DEL  — ${step}`);
-  } catch (err) {
-    console.warn("[Cache] DEL error (non-fatal):", err);
+  } catch {
+    console.warn("[Cache] DEL unavailable");
   }
 };

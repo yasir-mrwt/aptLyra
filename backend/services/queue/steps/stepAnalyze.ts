@@ -18,6 +18,7 @@ export const stepAnalyze = async (resume: any): Promise<any> => {
   console.log(`[Worker] STEP 2/4: Sending resume ${resume._id} for modular analysis...`);
   const response = await fetch(`${AI_SERVICE_URL}/resume/v2/analyze`, {
     method: "POST",
+      signal: AbortSignal.timeout(120000),redirect:"error",size:2*1024*1024,
     headers: {
       "Content-Type": "application/json",
       "X-API-Key": process.env.INTERNAL_API_KEY || ""
@@ -30,8 +31,7 @@ export const stepAnalyze = async (resume: any): Promise<any> => {
   });
 
   if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Analysis service failed (${response.status}): ${errText}`);
+    throw new Error(`Analysis service failed (${response.status})`);
   }
 
   const data = (await response.json()) as any;

@@ -4,14 +4,14 @@
  */
 
 import { Worker, Job } from "bullmq";
-import { connection, ResumeJobData } from "./queueService.js";
+import { connection, ResumeJobData, addResumeAnalyzeJob } from "./queueService.js";
 import { resumeRepository, IResume } from "../../models/Resume.js";
 import { emitResumeStatus } from "../socketService.js";
 import { Server } from "socket.io";
 import { stepProcess } from "./steps/stepProcess.js";
 import { stepAnalyze } from "./steps/stepAnalyze.js";
 import { stepMatch } from "./steps/stepMatch.js";
-import { stepStreamFeedback } from "./steps/stepStreamFeedback.js";
+
 
 // We'll pass the io instance from server.ts to this variable
 let ioInstance: Server | null = null;
@@ -65,27 +65,25 @@ const processJob = async (job: Job<ResumeJobData>): Promise<any> => {
     if (!resume) throw new Error("Resume not found in database");
 
     const userId = resume.user.toString();
+    if(resume.status==="completed"||resume.status==="invalid_document")return {success:true,status:resume.status};
 
     if (job.name === "parse-resume") {
       // ── STATE 1: pending → processing ──
       await transitionState(resume, userId, "processing");
 
-      // ── STEP 1: File Processing + Parsing (Async Webhook) ──
-      await stepProcess(resume);
-
-      console.log(`[Worker] Process dispatched to AI Service. Waiting for webhook...`);
-      return { success: true, status: "async_dispatched" };
+      // ── STEP 1: File Processing + Parsing (bounded durable job) ──
+      const result=await stepProcess(resume);
+      if(result.is_resume===false){await transitionState(resume,userId,"invalid_document");return {success:false,status:"invalid_document"};}
+      resume.parsedData={rawText:result.raw_text,method:result.method_used,parsedProfile:result.parsed_profile||{}};
+      resume.metrics={...(resume.metrics||{}),...(result.metrics||{})};
+      await transitionState(resume,userId,"parsed");
+      const next=await addResumeAnalyzeJob(resumeId);
+      await resumeRepository.setJobId(resumeId,next.id!);
+      return {success:true,status:"parsed"};
     }
 
     if (job.name === "analyze-resume") {
       const allMetrics: Record<string, any> = resume.metrics || {};
-
-      // Kick off streaming feedback asynchronously so the UI gets live data while analyzing
-      if (ioInstance) {
-        stepStreamFeedback(resume, userId, ioInstance).catch(err => {
-          console.error(`[Worker] Background streaming failed:`, err);
-        });
-      }
 
       // ── STATE 3: parsed → analyzing ──
       await transitionState(resume, userId, "analyzing");

@@ -1,3 +1,5 @@
+import {toast} from "react-toastify";
+import apiClient from "../services/apiClient";
 import { motion, AnimatePresence, animate } from "framer-motion";
 import { useSelector } from "react-redux";
 import { useEffect, useRef } from "react";
@@ -116,7 +118,7 @@ const ResumeAnalyzer = () => {
     getStatusMessage,
     handleResetAnalysis,
     streamingFeedbackText,
-    fetchResumeDetails,
+    fetchResumeDetails, recoveryError, activeId,
   } = useResumeAnalysis({ userId });
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -148,9 +150,7 @@ const ResumeAnalyzer = () => {
       setStatus("pending");
       setResumeData(null);
     },
-    onUploadSuccess: () => {
-      // The socket logic handles hiding the loading spinner when complete
-    },
+    onUploadSuccess: id => {setSearchParams({id});void fetchResumeDetails(id);},
     onUploadError: () => {
       setIsUploading(false);
       setStatus(null);
@@ -181,19 +181,22 @@ const ResumeAnalyzer = () => {
   const issues = resumeData?.analysisReport?._v2?.analysis?.weaknesses ||
     resumeData?.analysisReport?.evaluation?.weaknesses ||
     resumeData?.analysisReport?.evaluation?.improvement_suggestions ||
-    ["Add your LinkedIn URL - many ATS systems require it for screening.", "Add your GitHub or portfolio URL - essential for technical roles."];
+    [];
 
   const strengths = resumeData?.analysisReport?._v2?.analysis?.strengths ||
     resumeData?.analysisReport?.evaluation?.strengths ||
-    ["No excessive all-caps text.", "Bullet point lengths look good.", "All sections have content.", "Good resume length (400 words).", "Mostly active voice - good.", "Email address present.", "Phone number present.", "Line density looks ATS-friendly.", "Good section structure (5 headers found)."];
+    [];
 
   // ═══════════════════════════════════════════════════════════════════════
   // Render
   // ═══════════════════════════════════════════════════════════════════════
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8 relative">
+    <div className="resume-workspace max-w-5xl mx-auto px-4 py-8 relative">
       {/* ════════════════════════ UPLOAD VIEW ════════════════════════ */}
+      {recoveryError&&<p role="alert" className="glass-card p-4">{recoveryError} {activeId&&<button className="underline" onClick={()=>void fetchResumeDetails(activeId)}>Retry saved analysis</button>}</p>}
+      {status==="failed"&&<p role="alert" className="glass-card p-4">Analysis failed. Your upload remains saved; you do not need to upload it again.</p>}
+      {activeId&&status!=="completed"&&<button disabled={status==="invalid_document"} className="home-secondary" onClick={()=>void apiClient.post(`/resume/${activeId}/retry`).then(()=>{setStatus("pending");setIsUploading(true);}).catch(()=>toast.error("Could not recover this saved analysis. Please retry shortly."))}>Retry saved processing</button>}
       {!resumeData && !isUploading && (
         <motion.div
           initial={{ opacity: 0 }}

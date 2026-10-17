@@ -15,6 +15,7 @@ import {
   generateCoverLetter,
   generateInsights,
   deleteResume,
+  retryResume,
 } from "../controllers/resumeController.js";
 
 import { requireInternalKey } from "../middleware/internalAuth.js";
@@ -29,6 +30,8 @@ router.route("/upload").post(protect, uploadSingleResume, uploadResume);
 router.route("/webhook/process-resume/:id").post(requireInternalKey, processResumeWebhook);
 
 router.route("/:id").get(protect, getResume).delete(protect, deleteResume);
+
+router.post("/:id/retry",protect,retryResume);
 
 router.route("/:id/status").get(protect, getResumeStatus);
 

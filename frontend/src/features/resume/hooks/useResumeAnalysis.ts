@@ -1,134 +1,48 @@
-/**
- * @file hooks/useResumeAnalysis.ts
- * @description 
- * ARCHITECTURE OVERVIEW:
- * This custom hook acts as the central state manager for the Resume Analysis flow.
- * Instead of long-polling the backend for ML status updates, it establishes a lightweight 
- * WebSocket (`Socket.IO`) connection to listen for real-time progress events from the BullMQ workers.
- * It perfectly synchronizes the UI with the async AI backend pipeline.
- */
+/** Restore the owned durable résumé job and poll bounded status requests across navigation. */
 import { useState, useEffect, useRef, useCallback } from "react";
-import { io, Socket } from "socket.io-client";
-import { toast } from "react-toastify";
-import { getResume } from "../../../services/resumeApi";
+import { getResume, getResumeStatus } from "../../../services/resumeApi";
 import type { ResumeData, ResultTab } from "../types";
-
-interface UseResumeAnalysisProps {
-  userId?: string;
-}
-
-export const useResumeAnalysis = ({ userId }: UseResumeAnalysisProps) => {
-  const [isUploading, setIsUploading] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
-  const [resumeData, setResumeData] = useState<ResumeData | null>(null);
-  const [activeTab, setActiveTab] = useState<ResultTab>("extraction");
-  const [streamingFeedbackText, setStreamingFeedbackText] = useState("");
-  const socketRef = useRef<Socket | null>(null);
-
-  const fetchResumeDetails = useCallback(async (id: string) => {
-    try {
-      const data = await getResume(id);
-      setResumeData(data);
-      setIsUploading(false);
-      setStatus(null);
-    } catch (error) {
-      console.error("Fetch error:", error);
-      toast.error("Failed to fetch analysis results");
-      setIsUploading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!userId) return;
-
-    const BACKEND_URL = (import.meta.env.VITE_API_URL || "http://localhost:5000/api").replace("/api", "");
-    const socket: Socket = io(BACKEND_URL, {
-      query: { userId },
-      withCredentials: true,
-    });
-    socketRef.current = socket;
-
-    socket.on("connect", () => {
-      socket.emit("joinRoom", { userId });
-    });
-
-    socket.on("resume:status", (data: { status?: string; type?: string; chunk?: string; resumeId: string; error?: string }) => {
-      if (data.type === "feedback_stream" && data.chunk) {
-        setStreamingFeedbackText(prev => prev + data.chunk!);
-      } else if (data.status) {
-        setStatus(data.status);
-        if (data.status === "completed") {
-          fetchResumeDetails(data.resumeId);
-        } else if (data.status === "failed") {
-          toast.error(`Analysis failed: ${data.error || "Unknown error"}`);
-          setIsUploading(false);
-          setStatus(null);
-        } else if (data.status === "invalid_document") {
-          // Keep isUploading true to stay in the result view area where we will show the error UI
-          setStatus("invalid_document");
-        }
-      }
-    });
-
-    socket.on("disconnect", (reason) => {
-      console.log("Disconnected from resume processing socket:", reason);
-    });
-
-    const handleTokenRefresh = () => {
-      if (socket.disconnected) {
-        console.log("Token refreshed, attempting to reconnect resume socket...");
-        socket.connect();
-      }
+const pending=new Set(["pending","processing","parsed","analyzing","matching"]);
+export const useResumeAnalysis = ({userId}:{userId?:string}) => {
+  const [isUploading,setIsUploading]=useState(false),[status,setStatus]=useState<string|null>(null);
+  const [resumeData,setResumeData]=useState<ResumeData|null>(null),[activeTab,setActiveTab]=useState<ResultTab>("extraction");
+  const [streamingFeedbackText,setStreamingFeedbackText]=useState("");
+  const [activeId,setActiveId]=useState<string|null>(null),[recoveryError,setRecoveryError]=useState("");
+  const generation=useRef(0);
+  const fetchResumeDetails=useCallback(async(id:string)=>{
+    if(!userId)return;
+    const token=++generation.current;
+    setActiveId(id);localStorage.setItem(`aptlyra-resume:${userId}`,id);
+    try{
+      const data=await getResume(id);if(token!==generation.current)return;
+      setStatus(data.status);setIsUploading(pending.has(data.status));
+      setResumeData(data.status==="completed"?data:null);setRecoveryError("");
+    }catch{if(token===generation.current){setRecoveryError("Could not load saved analysis. Retry; your uploaded job remains saved.");setIsUploading(false);}}
+  },[userId]);
+  useEffect(()=>{
+    const id=userId?localStorage.getItem(`aptlyra-resume:${userId}`):null;
+    const initialGeneration=generation.current;
+    const timer=setTimeout(()=>{if(generation.current!==initialGeneration)return;setResumeData(null);setActiveId(null);setIsUploading(false);setStatus(null);if(id)void fetchResumeDetails(id);},0);
+    return()=>{clearTimeout(timer);
+      // This counter invalidates async requests; it is not a DOM ref.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      generation.current++;};
+  },[userId,fetchResumeDetails]);
+  useEffect(()=>{
+    if(!activeId||!userId||status==="completed"||status==="failed"||status==="invalid_document")return;
+    let disposed=false,inFlight=false;
+    const refresh=async()=>{
+      if(inFlight||document.hidden)return;inFlight=true;
+      try{const data=await getResumeStatus(activeId);if(disposed)return;
+        setStatus(data.status);setRecoveryError("");setIsUploading(pending.has(data.status));
+        if(data.status==="completed")await fetchResumeDetails(activeId);
+      }catch{if(!disposed)setRecoveryError("Connection interrupted. Reconnecting to your saved analysis…");}
+      finally{inFlight=false;}
     };
-    window.addEventListener("auth_token_refreshed", handleTokenRefresh);
-
-    return () => {
-      window.removeEventListener("auth_token_refreshed", handleTokenRefresh);
-      socket.disconnect();
-      socketRef.current = null;
-    };
-  }, [userId, fetchResumeDetails]);
-
-    const getStatusMessage = () => {
-    switch (status) {
-      case "pending":
-        return "Job enqueued…";
-      case "processing":
-        return "Extracting text from document…";
-      case "parsed":
-        return "Raw text extracted. Analyzing skills…";
-      case "analyzing":
-        return "AI is evaluating your profile…";
-      case "matching":
-        return "Matching against job description…";
-      case "invalid_document":
-        return "Invalid Document Detected";
-      default:
-        return "Processing…";
-    }
-  };
-
-  const handleResetAnalysis = () => {
-    setResumeData(null);
-    setStatus(null);
-    setIsUploading(false);
-    setActiveTab("extraction");
-    setStreamingFeedbackText("");
-  };
-
-  return {
-    isUploading,
-    setIsUploading,
-    status,
-    setStatus,
-    resumeData,
-    setResumeData,
-    activeTab,
-    setActiveTab,
-    getStatusMessage,
-    handleResetAnalysis,
-    streamingFeedbackText,
-    setStreamingFeedbackText,
-    fetchResumeDetails,
-  };
+    const timer=setInterval(()=>void refresh(),4000);window.addEventListener("online",refresh);window.addEventListener("focus",refresh);
+    return()=>{disposed=true;clearInterval(timer);window.removeEventListener("online",refresh);window.removeEventListener("focus",refresh);};
+  },[activeId,userId,status,fetchResumeDetails]);
+  const getStatusMessage=()=>({pending:"Job queued…",processing:"Extracting résumé text…",parsed:"Text extracted; preparing analysis…",analyzing:"Analyzing your résumé…",matching:"Comparing the job description…",failed:"Analysis needs attention",invalid_document:"Invalid document"}[status||""]||"Restoring saved analysis…");
+  const handleResetAnalysis=()=>{generation.current++;if(userId)localStorage.removeItem(`aptlyra-resume:${userId}`);setActiveId(null);setResumeData(null);setStatus(null);setIsUploading(false);setActiveTab("extraction");setStreamingFeedbackText("");setRecoveryError("");};
+  return {isUploading,setIsUploading,status,setStatus,resumeData,setResumeData,activeTab,setActiveTab,getStatusMessage,handleResetAnalysis,streamingFeedbackText,setStreamingFeedbackText,fetchResumeDetails,recoveryError,activeId};
 };

@@ -21,6 +21,7 @@ export const stepStreamFeedback = async (
   try {
     const response = await fetch(`${AI_SERVICE_URL}/resume/v2/stream-feedback`, {
       method: "POST",
+      signal: AbortSignal.timeout(120000),redirect:"error",size:2*1024*1024,
       headers: { 
         "Content-Type": "application/json",
         "X-API-Key": process.env.INTERNAL_API_KEY || ""

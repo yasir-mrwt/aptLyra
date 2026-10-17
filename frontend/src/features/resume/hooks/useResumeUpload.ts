@@ -5,7 +5,7 @@ import { uploadResume } from "../../../services/resumeApi";
 
 interface UseResumeUploadProps {
   onUploadStart: () => void;
-  onUploadSuccess: () => void;
+  onUploadSuccess: (id:string) => void;
   onUploadError: () => void;
 }
 
@@ -14,6 +14,7 @@ export const useResumeUpload = ({
   onUploadSuccess,
   onUploadError,
 }: UseResumeUploadProps) => {
+  const inFlight=useRef(false);
   const [file, setFile] = useState<File | null>(null);
   const [jdText, setJdText] = useState("");
   const [dragActive, setDragActive] = useState(false);
@@ -51,21 +52,23 @@ export const useResumeUpload = ({
   };
 
   const handleUpload = async () => {
+    if(inFlight.current)return;
     if (!file) return toast.error("Please select a file first");
     
-    onUploadStart();
+    inFlight.current=true;onUploadStart();
     
     try {
-      await uploadResume(file, jdText);
+      const result=await uploadResume(file, jdText);
+      const id=result?.data?.resumeId;if(!id)throw Error("Upload did not return a saved job.");
       toast.info("Resume uploaded. AI is starting analysis...");
-      onUploadSuccess();
+      onUploadSuccess(id);
     } catch (error: unknown) {
       const message = axios.isAxiosError(error)
         ? error.response?.data?.message || error.message
         : "Upload failed";
       toast.error(message);
       onUploadError();
-    }
+    }finally{inFlight.current=false;}
   };
 
   const handleReset = () => {

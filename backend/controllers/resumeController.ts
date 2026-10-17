@@ -1,3 +1,4 @@
+import {recoverResumeJob} from "../services/queue/queueService.js";
 /**
  * @file controllers/resumeController.ts
  * @description Resume upload and retrieval controllers with TypeScript support.
@@ -66,8 +67,7 @@ export const uploadResume = asyncHandler(async (req: AuthenticatedRequest, res: 
   logger.info("Resume job enqueued", { resumeId: resume._id, jobId: job.id, requestId: req.requestId });
 
   // 3. Save jobId to Document
-  resume.jobId = job.id;
-  await resumeRepository.save(resume);
+  await resumeRepository.setJobId(resume._id,job.id!);
 
   // 4. Emit Socket.IO Event
   const io = req.app.get("io");
@@ -381,4 +381,18 @@ export const generateCoverLetter = asyncHandler(async (req: AuthenticatedRequest
   res.setHeader("Content-Type", "text/plain");
   res.setHeader("Transfer-Encoding", "chunked");
   response.body.pipe(res);
+});
+
+/** Recover an owned saved upload without requiring another copy of private data. */
+export const retryResume = asyncHandler(async(req:AuthenticatedRequest,res:Response)=>{
+  const id=String(req.params.id),userId=String(req.user?._id||req.user?.id);
+  const resume=await resumeRepository.findById(id);
+  if(!resume||resume.user!==userId)throw new AppError("NOT_FOUND","Resume not found",{},404);
+  if(!["completed","invalid_document"].includes(resume.status)){
+    // Stable queue IDs deduplicate concurrent retries. Never save stale worker state.
+    const job=await recoverResumeJob(id,resume.jobId,!!resume.parsedData?.rawText);
+    await resumeRepository.setJobId(id,job.id!);
+  }
+  const latest=await resumeRepository.findById(id);
+  res.json({success:true,data:{resumeId:id,status:latest?.status||resume.status}});
 });

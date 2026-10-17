@@ -28,13 +28,13 @@ export const getUserResumes = async (page = 1, limit = 20) => {
 };
 
 export const getResume = async (id: string) => {
-    const response = await resumeApi.get(`/resume/${id}`);
+    const response = await resumeApi.get(`/resume/${id}`,{timeout:15000});
     // Backend wraps in { success, data: resumeDoc } — unwrap it
     return response.data?.data ?? response.data;
 };
 
 export const getResumeStatus = async (id: string) => {
-    const response = await resumeApi.get(`/resume/${id}/status`);
+    const response = await resumeApi.get(`/resume/${id}/status`,{timeout:15000});
     return response.data?.data ?? response.data;
 };
 
