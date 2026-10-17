@@ -132,11 +132,11 @@ export const aiService = {
   /**
    * Transcribe an audio blob using the AI service.
    */
-  transcribeAudio: async (audioBuffer: Buffer): Promise<string> => {
+  transcribeAudio: async (audioBuffer: Buffer, mimeType = "audio/webm"): Promise<string> => {
     const formData = new FormData();
     formData.append("file", audioBuffer, {
-      filename: "audio.webm",
-      contentType: "audio/webm",
+      filename: mimeType.includes("mp4") ? "audio.mp4" : mimeType.includes("ogg") ? "audio.ogg" : mimeType.includes("wav") ? "audio.wav" : "audio.webm",
+      contentType: mimeType,
     });
 
     const response = await fetchWithRetry(`${API_SERVICE_URL}/transcribe`, {

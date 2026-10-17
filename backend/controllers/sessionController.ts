@@ -4,7 +4,7 @@
  */
 import { Response } from "express";
 import asyncHandler from "express-async-handler";
-import path from "path";
+import {sessionRepository} from "../models/Session.js";
 import fs from "node:fs/promises";
 import { SessionStateError } from "../services/sessionService.js";
 import { sessionService } from "../services/sessionService.js";
@@ -100,7 +100,8 @@ export const submitAnswer = asyncHandler(async (req: AuthenticatedRequest, res: 
   }
 
   try {
-    const audioFilePath = req.file ? path.join(process.cwd(), req.file.path) : null;
+    if(req.file)throw new SessionStateError("Review the transcript and confirm its text before submitting.",400);
+    const audioFilePath = null;
 
     const operation=await sessionService.submitSessionAnswer(
       sessionId,
@@ -114,7 +115,6 @@ export const submitAnswer = asyncHandler(async (req: AuthenticatedRequest, res: 
       answerText
     );
 
-    if(operation && req.file)await fs.unlink(req.file.path).catch(()=>undefined);
     res.status(200).json({ message: "Answer received",...(operation?{operation}: {}) });
   } catch (error: any) {
     if (req.file) await fs.unlink(req.file.path).catch(() => undefined);
@@ -202,4 +202,18 @@ export const endSession = asyncHandler(async (req: AuthenticatedRequest, res: Re
       res.status(error.message === "Session not found" ? 404 : 500).json({ message: error.message === "Session not found" ? error.message : "Unable to finish interview. Please retry." });
     }
   }
+});
+
+/** Transcription is a private draft, never an answer attempt or evaluation. */
+export const transcribeAnswer = asyncHandler(async (req:AuthenticatedRequest,res:Response)=>{
+  try {
+    const session=await sessionRepository.findByIdForUser(String(req.params.sessionId),String(req.user?.id||req.user?._id));
+    const index=Number(req.body.questionIndex);
+    if(!session){res.status(404).json({message:"Session not found"});return;}
+    if(!req.file || req.body.questionIndex===undefined || String(req.body.questionIndex).trim()==="" || !Number.isInteger(index) || !session.questions[index]){res.status(400).json({message:"Select a question and record an answer."});return;}
+    if(session.activationRequired || session.status!=="in-progress" || session.runtimeState==="finishing" || session.questions[index].isSubmitted){res.status(409).json({message:"This question is no longer accepting a draft."});return;}
+    const text=await aiService.transcribeAudio(await fs.readFile(req.file.path),req.file.mimetype);
+    res.setHeader("Cache-Control","no-store");res.json({text,requiresConfirmation:true});
+  }catch{res.status(503).json({message:"Transcription could not complete. Your recording is still a draft; retry or type your answer."});}
+  finally{if(req.file)await fs.unlink(req.file.path).catch(()=>undefined);}
 });

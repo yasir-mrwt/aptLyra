@@ -16,7 +16,7 @@ import apiClient from "../services/apiClient";
 vi.mock("../services/api", () => ({ default: { get: vi.fn(), post: vi.fn() } }));
 vi.mock("../services/apiClient", () => ({ default: { post: vi.fn() } }));
 vi.mock("../utils/idb", () => ({ getDrafts: vi.fn().mockResolvedValue({}), saveDrafts: vi.fn(), deleteDrafts: vi.fn() }));
-vi.mock("react-toastify", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+vi.mock("react-toastify", () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() } }));
 
 beforeEach(() => { localStorage.clear(); vi.clearAllMocks(); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
@@ -283,30 +283,29 @@ describe("answer controls", () => {
         await act(() => result.current.handleNavigation(1));
         expect(result.current.currentQuestionIndex).toBe(1);
     });
-    it("uploads final recorded audio once, unlocks failed processing for retry, and locks completed sessions", async () => {
+    it("reviews and edits a transcript before submitting exactly once, without uploading audio for evaluation", async () => {
         const { session, store, wrapper } = interviewFixture();
-        let finishUpload: (value: { data: { message: string } }) => void = () => {};
-        vi.mocked(api.post).mockImplementation(() => new Promise(resolve => { finishUpload = resolve; }));
-        const stop = vi.fn().mockResolvedValue(new Blob(["final answer"], { type: "audio/webm" }));
-        const { result } = renderHook(() => useInterviewSession(stop, vi.fn()), { wrapper });
-        await waitFor(() => expect(api.get).toHaveBeenCalled());
-        let submission: Promise<void>;
-        act(() => { submission = result.current.handleSubmitAnswer(); void result.current.handleSubmitAnswer(); });
-        await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
-        const form = vi.mocked(api.post).mock.calls[0][1] as FormData;
-        expect((form.get("audio") as Blob).size).toBe(12);
-        await act(async () => { finishUpload({ data: { message: "accepted" } }); await submission; });
-        act(() => store.dispatch(setActiveSession({ ...session, questions: [{ ...session.questions[0], processingError: "STT failed. Retry." }] })));
-        await waitFor(() => expect(result.current.isQuestionLocked).toBe(false));
-        let retry: Promise<void>;
-        act(() => { retry = result.current.handleSubmitAnswer(); void result.current.handleSubmitAnswer(); });
-        await waitFor(() => expect(api.post).toHaveBeenCalledTimes(2));
-        expect(result.current.isQuestionLocked).toBe(true);
-        await act(async () => { finishUpload({ data: { message: "accepted" } }); await retry; });
-        act(() => store.dispatch(setActiveSession({ ...session, status: "completed" })));
-        expect(result.current.isQuestionLocked).toBe(true);
-        await act(() => result.current.handleSubmitAnswer());
+        const stop=vi.fn().mockResolvedValueOnce(new Blob(["recording"],{type:"audio/webm"})).mockResolvedValue(null);
+        vi.mocked(api.post).mockResolvedValue({data:{text:"Draft transcription"}});
+        const {result}=renderHook(()=>useInterviewSession(stop,vi.fn()),{wrapper});
+        await waitFor(()=>expect(api.get).toHaveBeenCalled());
+        await act(async()=>{await result.current.transcribeDraft();});
+        expect(api.post).toHaveBeenCalledTimes(1);
+        expect(vi.mocked(api.post).mock.calls[0][0]).toContain('/transcribe');
+        expect(result.current.drafts[0].answerText).toBe("Draft transcription");
+        expect(result.current.isQuestionLocked).toBe(false);
+        act(()=>result.current.updateDraftAnswer("Final corrected answer"));
+        await act(async()=>{await Promise.all([result.current.handleSubmitAnswer(),result.current.handleSubmitAnswer()]);});
         expect(api.post).toHaveBeenCalledTimes(2);
+        const form=vi.mocked(api.post).mock.calls[1][1] as FormData;
+        expect(form.get('answerText')).toBe('Final corrected answer');expect(form.get('audio')).toBeNull();
+        act(()=>store.dispatch(setActiveSession({...session,status:'completed'})));
+        await act(()=>result.current.handleSubmitAnswer());expect(api.post).toHaveBeenCalledTimes(2);
+    });
+    it("never evaluates an unreviewed recording",async()=>{
+        const {wrapper}=interviewFixture();const stop=vi.fn().mockResolvedValue(new Blob(['audio']));
+        const {result}=renderHook(()=>useInterviewSession(stop,vi.fn()),{wrapper});
+        await act(()=>result.current.handleSubmitAnswer());expect(api.post).not.toHaveBeenCalled();
     });
     it("propagates finish failures so the runner can leave its loading state", async () => {
         const { wrapper } = interviewFixture();

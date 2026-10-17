@@ -33,6 +33,9 @@ export const pool = new Pool({
   max: 10,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 30_000,
+  // Bound stalled SQL/lock waits so durable workers can retry without a restart.
+  statement_timeout: 30_000,
+  lock_timeout: 5_000,
 });
 
 pool.on("error", (err) => {

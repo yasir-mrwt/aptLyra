@@ -73,7 +73,9 @@ try{
  f.state.mode='normal';for(const index of [1,2]){assert.equal((await request(`/sessions/${id}/submit-answer`,{method:'POST',body:{questionIndex:String(index),answerText:'FIFO explains another ordered mechanism.'}})).status,200);await until(async()=>(await request(`/sessions/${id}`)).data.questions[index].isEvaluated,'advance to next original');}
  // Stop queue consumers, commit the final answer, then restart with a durable finishing/report intent.
  await stop(c2);const final=await request(`/sessions/${id}/submit-answer`,{method:'POST',body:{questionIndex:'3',answerText:'FIFO now supplies a concrete example.'}});assert.equal(final.status,200);
- manual=new InterviewRuntime();await manual.process(final.data.operation.id);saved=(await request(`/sessions/${id}`)).data;assert.equal(saved.runtimeState,'finishing');assert.equal(saved.status,'in-progress');
+ manual=new InterviewRuntime();await manual.process(final.data.operation.id);saved=(await request(`/sessions/${id}`)).data;assert.equal(saved.runtimeState,'active');assert.ok(saved.endTime);
+ assert.equal((await request(`/sessions/${id}/end`,{method:'POST',body:{}})).status,200);
+ saved=(await request(`/sessions/${id}`)).data;assert.equal(saved.runtimeState,'finishing');assert.equal(saved.status,'in-progress');
  const c3=await child();await until(async()=>(await request(`/sessions/${id}`)).data.status==='completed','report recovered after restart');
  saved=(await request(`/sessions/${id}`)).data;assert.ok(saved.report);assert.equal(saved.reviewedSummary.eligible,2);assert.equal(saved.reviewedSummary.planned,3);assert.equal(saved.overallScore,null);assert.equal(saved.questions[1].evaluation,undefined);assert.equal(saved.questions[1].technicalScore,84);assert.equal(saved.questions[3].evaluation.rubricStatus,'provisional');
  const xp=(await f.query('SELECT xp FROM users WHERE id=$1',[f.owner])).rows[0].xp;

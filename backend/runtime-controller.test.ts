@@ -1,3 +1,4 @@
+jest.mock("./models/Session.js",()=>({sessionRepository:{findByIdForUser:jest.fn()}}));
 import { jest, beforeEach, test, expect } from "@jest/globals";
 import express from "express";
 import request from "supertest";
@@ -43,4 +44,21 @@ test("invalid index, ownership, withdrawn and inactive guards never call TTS", a
 test("typed answer is forwarded through the existing owned submission service", async () => {
   expect((await request(app).post("/owned/submit-answer").send({ questionIndex: "1", answerText: "Candidate answer" })).status).toBe(200);
   expect(sessionService.submitSessionAnswer).toHaveBeenCalledWith("owned", "owner", "1", null, null, null, null, undefined, "Candidate answer");
+});
+
+test('transcription returns a reviewable draft without accepting an answer and deletes temporary audio',async()=>{
+ const {transcribeAnswer}=await import('./controllers/sessionController.js');
+ const {sessionRepository}=await import('./models/Session.js');
+ const fs=await import('node:fs/promises');const os=await import('node:os');const path=await import('node:path');
+ const file=path.join(os.tmpdir(),`aptlyra-transcript-${Date.now()}.webm`);await fs.writeFile(file,'fixture');
+ (sessionRepository.findByIdForUser as any).mockResolvedValue({status:'in-progress',questions:[{isSubmitted:false}]});
+ (aiService as any).transcribeAudio=jest.fn<(...args:any[])=>Promise<string>>().mockResolvedValue('Editable transcript');
+ const local=express();local.use(express.json());local.use((req:any,_res,next)=>{req.user={id:'owner'};req.file={path:file,mimetype:'audio/webm'};next();});local.post('/:sessionId/transcribe',transcribeAnswer);
+ const response=await request(local).post('/owned/transcribe').send({questionIndex:0});
+ expect(response.status).toBe(200);expect(response.body).toEqual({text:'Editable transcript',requiresConfirmation:true});
+ expect(sessionRepository.findByIdForUser).toHaveBeenCalledWith('owned','owner');expect(sessionService.submitSessionAnswer).not.toHaveBeenCalled();
+ await expect(fs.stat(file)).rejects.toThrow();
+ (sessionRepository.findByIdForUser as any).mockResolvedValue(null);
+ expect((await request(local).post('/other/transcribe').send({questionIndex:0})).status).toBe(404);
+ expect((aiService as any).transcribeAudio).toHaveBeenCalledTimes(1);
 });

@@ -267,7 +267,7 @@ def evaluate_answer(req: EvaluationRequest):
 
     try:
         text_output = call_groq(
-            system_prompt, user_prompt, as_json=True, image_base64=image_base64
+            system_prompt, user_prompt, as_json=True, image_base64=image_base64, max_completion_tokens=2048
         )
         parsed = parse_response(text_output)
 

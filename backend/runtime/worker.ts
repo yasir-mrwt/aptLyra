@@ -9,7 +9,7 @@ import {evaluationService,type Prepared} from "../evaluation/service.js";
 import {hash} from "../evaluation/rubrics.js";
 import {aiService,AIServiceError} from "../services/aiService.js";
 import {gamificationService} from "../services/gamificationService.js";
-import {bumpRevision,insertOperation,requestFinish} from "./operations.js";
+import {bumpRevision,insertOperation} from "./operations.js";
 import {RUNTIME,RuntimeFailure} from "./contracts.js";
 import {CONTENT_RUNTIME,contentOperations,type ContentOperationType} from "./contentOperations.js";
 import {readStagedAudio,removeStagedAudio,cleanOrphanMedia} from "./media.js";
@@ -25,13 +25,14 @@ export interface RuntimeOptions {
   beforeCommit?:(op:Operation)=>Promise<void>;
   buildReport?:(session:ISession)=>Promise<void>;
   publish?:(id:string)=>Promise<void>;
+  scheduleSources?:()=>Promise<unknown>;
   contentHandlers?:Partial<Record<ContentOperationType,(operation:Operation)=>Promise<unknown>>>;
 }
 function safeFailure(error:unknown) {
   if(error instanceof RuntimeFailure)return error;
   if(error instanceof AIServiceError)return new RuntimeFailure(error.code,["provider_rate_limited","provider_timeout","provider_unavailable"].includes(error.code));
   const code=(error as {code?:string})?.code;
-  if(code && ["40001","40P01","08006","ECONNRESET","ECONNREFUSED","ETIMEDOUT"].includes(code))return new RuntimeFailure("database_unavailable",true);
+  if(code && ["40001","40P01","08006","57014","55P03","ECONNRESET","ECONNREFUSED","ETIMEDOUT"].includes(code))return new RuntimeFailure("database_unavailable",true);
   if(error instanceof Error && /withdrawn|retired|erased|Stale answer|no longer active/i.test(error.message))return new RuntimeFailure("evidence_or_answer_unavailable");
   if(error instanceof Error && /No speech detected/i.test(error.message))return new RuntimeFailure("no_speech_detected");
   return new RuntimeFailure("invalid_provider_response");
@@ -55,6 +56,7 @@ export class InterviewRuntime {
   private stopping=false;
   private lastCleanup=0;
   private lastContentSchedule=0;
+  private scheduling=false;
   private publishing=new Set<string>();
   private leaseMs:number;
   private retryMs:number;
@@ -68,8 +70,8 @@ export class InterviewRuntime {
     this.worker=new Worker(QUEUE,job=>this.process(job.data.operationId),{connection:redisClient as any,
       concurrency:Math.max(1,Math.min(this.options.concurrency || 2,4))});
     this.worker.on("error",()=>{/* Recovery publisher retries from SQL. */});
-    await this.tick();
-    this.timer=setInterval(()=>{void this.tick().catch(()=>{});},this.options.pollMs || 1000);
+    this.timer=setInterval(()=>{void this.tick().catch(()=>console.warn(JSON.stringify({event:"runtime_recovery",status:"retry_next_tick"})));},this.options.pollMs || 1000);
+    void this.tick().catch(()=>console.warn(JSON.stringify({event:"runtime_recovery",status:"startup_retry"})));
     this.timer.unref();
   }
   async stop(force=false) {
@@ -81,7 +83,13 @@ export class InterviewRuntime {
   async tick() {
     if(this.ticking || this.stopping)return;this.ticking=true;
     try {
-      if(Date.now()-this.lastContentSchedule>=60000){this.lastContentSchedule=Date.now();await scheduleDueSources().catch(()=>{});}
+      // Source collection/retention must never hold the interview outbox publisher.
+      if(!this.scheduling && Date.now()-this.lastContentSchedule>=60000){
+        this.lastContentSchedule=Date.now();this.scheduling=true;
+        void (this.options.scheduleSources||scheduleDueSources)()
+          .catch(()=>console.warn(JSON.stringify({event:"source_schedule",status:"retry_next_interval"})))
+          .finally(()=>{this.scheduling=false;});
+      }
       const expired=(await query("SELECT *,deadline<=now() AS deadline_due FROM durable_operations WHERE runtime_version=$1 AND status IN ('queued','running','retryable_failed') AND ((status='running' AND lease_expires_at<=now()) OR (deadline<=now() AND (status<>'retryable_failed' OR next_retry_at IS NOT NULL)))",[RUNTIME])).rows;
       for(const op of expired)await this.expire(op);
       const contentExpired=(await query(`SELECT *,deadline<=now() AS deadline_due FROM durable_operations WHERE runtime_version=$1 AND status IN ('queued','running','retryable_failed')
@@ -304,7 +312,7 @@ export class InterviewRuntime {
       await gamificationService.rewardDurable(fresh._id,fresh.user,`answer:${op.question_index}`);
       await sessionRepository.save(fresh);await bumpRevision(fresh);
       await this.succeed(op,fresh,{answerAttemptId:answer.id,evaluationPath:"trusted-baseline"});
-      if(fresh.questions.every(item=>item.isEvaluated)&&!fresh.questions.some(item=>item.followUpPending))await requestFinish(fresh);
+      // Completion remains an explicit candidate action; accepted-answer time is already frozen.
       return fresh;
     }));this.notify({...op,error_code:null},saved,"succeeded");
   }
@@ -339,7 +347,7 @@ export class InterviewRuntime {
           session.questions[op.question_index].followUpPending=true;session.questions[op.question_index].probeOperationId=probe.id;await sessionRepository.save(session);
         }
       }
-      if(session.questions.every(q=>q.isEvaluated) && !session.questions.some(q=>q.followUpPending))await requestFinish(session);
+      // Do not auto-finish after the final evaluation.
       return session;
     }));this.notify({...op,error_code:null},saved,"succeeded");
   }
@@ -374,7 +382,7 @@ export class InterviewRuntime {
       const summary=sessionRepository.calculateScoreSummary(fresh),reportId=randomUUID();
       await query("INSERT INTO interview_reports(id,session_id,user_id,snapshot_revision,scoring_version,summary,questions) VALUES($1,$2,$3,$4,$5,$6,$7)",[reportId,fresh._id,fresh.user,op.payload.snapshotRevision,fresh.scoringVersion,JSON.stringify({metrics:summary,reviewedSummary:fresh.reviewedSummary || null,evaluationIds:op.payload.evaluationIds}),JSON.stringify(fresh.questions)]);
       fresh.overallScore=summary.overallScore;fresh.metrics={avgTechnical:summary.avgTechnical,avgConfidence:summary.avgConfidence};
-      fresh.status="completed";fresh.endTime=new Date().toISOString();await sessionRepository.save(fresh);await bumpRevision(fresh,"completed");
+      fresh.status="completed";fresh.endTime ||= new Date().toISOString();await sessionRepository.save(fresh);await bumpRevision(fresh,"completed");
       await gamificationService.rewardDurable(fresh._id,fresh.user,"completion",true);
       await this.succeed(op,fresh,{reportId,snapshotRevision:op.payload.snapshotRevision});return fresh;
     }));this.notify(op,saved,"completed");

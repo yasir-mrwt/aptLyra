@@ -1,3 +1,4 @@
+jest.mock("./models/Session.js",()=>({sessionRepository:{findByIdForUser:jest.fn()}}));
 import { jest, test, expect, beforeEach } from "@jest/globals";
 import express from "express";
 import request from "supertest";

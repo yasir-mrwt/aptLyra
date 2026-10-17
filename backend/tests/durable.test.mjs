@@ -77,7 +77,7 @@ test('probe reservations recover provider interruption, stay capped, and derived
 });
 test('report failure retries independently; finishing/restored completion and reward replay are idempotent',async()=>{
  const s=await f.active({count:1}),w=worker({buildReport:async()=>{throw new Error('Fictional unexpected report storage failure');}});
- const a=await submit(s);await w.process(a.id);assert.equal((await f.repo.findById(s._id)).runtimeState,'finishing');
+ const a=await submit(s);await w.process(a.id);await f.service.endInterviewSession(s._id,f.owner,io);assert.equal((await f.repo.findById(s._id)).runtimeState,'finishing');
  const report=(await rows("SELECT * FROM durable_operations WHERE session_id=$1 AND operation_type='report'",[s._id]))[0];
  for(let i=0;i<3;i++){await w.process(report.id);if(i<2)await f.query("UPDATE durable_operations SET next_retry_at=now()-interval '1 second' WHERE id=$1",[report.id]);}
  assert.equal((await op(report.id)).status,'retryable_failed');assert.equal((await op(report.id)).error_code,'report_unavailable');assert.equal((await rows('SELECT reward_key FROM reward_ledger WHERE session_id=$1',[s._id])).length,1);
@@ -150,7 +150,7 @@ test('probe generation failure keeps its reservation and resumes exactly once',a
 test('genuine missing grounding commits an abstention that survives report recovery without provider substitution',async()=>{
  const s=await f.active({count:1}),a=await submit(s),w=worker(),before=f.state.calls;
  await f.query("UPDATE sources SET state='suspended' WHERE id=$1",[f.source]);
- try{await w.process(a.id);assert.equal(f.state.calls,before);const saved=await f.repo.findById(s._id);assert.equal(saved.questions[0].evaluation.status,'abstained');assert.equal(saved.overallScore,null);assert.equal(saved.runtimeState,'finishing');}
+ try{await w.process(a.id);assert.equal(f.state.calls,before);const saved=await f.repo.findById(s._id);assert.equal(saved.questions[0].evaluation.status,'abstained');assert.equal(saved.overallScore,null);assert.equal(saved.runtimeState,'active');await f.service.endInterviewSession(s._id,f.owner,io);}
  finally{await f.query("UPDATE sources SET state='enabled' WHERE id=$1",[f.source]);}
  const restored=worker();await drain(s,restored);const view=await f.service.getSessionDetails(s._id,f.owner);assert.equal(view.status,'completed');assert.equal(view.questions[0].evaluation.technicalScore,null);assert.equal(view.overallScore,null);assert.equal(view.reviewedSummary.abstained,1);
 });
@@ -160,4 +160,23 @@ test('cancellation/deletion clean private staged audio; no owned cascade changes
  const media=(await rows('SELECT filename FROM staged_interview_media WHERE session_id=$1',[s._id]))[0].filename;
  await f.service.deleteInterviewSession(s._id,f.owner);assert.equal((await readdir(process.env.INTERVIEW_MEDIA_DIR)).includes(media),false);assert.equal(await op(a.id),undefined);
  assert.equal((await rows('SELECT count(*)::int AS n FROM question_versions'))[0].n,count);
+});
+
+test('blocked source scheduling cannot starve interview outbox publication',async()=>{
+ const session=await f.active();const operation=await submit(session);
+ let release;const gate=new Promise(resolve=>{release=resolve;});pendingReleases.push(release);
+ const published=[];const runtime=worker({scheduleSources:()=>gate,publish:async id=>{published.push(id);}});
+ await Promise.race([runtime.tick(),new Promise((_,reject)=>setTimeout(()=>reject(Error('publisher blocked on source scheduling')),3000))]);
+ assert.ok(published.includes(operation.id));release();
+});
+
+test('last accepted answer freezes server time and requires an explicit idempotent Finish',async()=>{
+ const session=await f.active({count:1});const operation=await submit(session);
+ const accepted=await f.repo.findById(session._id);assert.ok(accepted.endTime);assert.equal(accepted.status,'in-progress');
+ const runtime=worker();await runtime.process(operation.id);await drain(session,runtime);
+ const evaluated=await f.repo.findById(session._id);assert.equal(evaluated.endTime,accepted.endTime);assert.equal(evaluated.status,'in-progress');
+ await f.service.endInterviewSession(session._id,f.owner,io);await f.service.endInterviewSession(session._id,f.owner,io);
+ await drain(session,runtime);const completed=await f.repo.findById(session._id);
+ assert.equal(completed.status,'completed');assert.equal(completed.endTime,accepted.endTime);
+ assert.equal((await rows("SELECT count(*)::int AS n FROM durable_operations WHERE session_id=$1 AND operation_type='report'",[session._id]))[0].n,1);
 });

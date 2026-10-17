@@ -45,7 +45,7 @@ const InterviewRunnerSession = () => {
     const {
         activeSession,
         isLoading,
-        isSubmitting,
+        isSubmitting, isTranscribing, transcribeDraft,
         sessionMessage,
         sessionError,
         currentQuestionIndex,
@@ -138,15 +138,16 @@ const InterviewRunnerSession = () => {
             <OperationStatusPanel session={activeSession} onAction={handleOperation} connection={socketConnection} />
             {activeSession.runtimeState==="finishing"&&<p role="status" aria-live="polite" className="mb-4">Finishing… Your answers are saved. Preparing your report; you can safely reload.</p>}
             <InterviewHeader
+                endTime={activeSession.endTime?new Date(activeSession.endTime).toISOString():undefined}
                 role={activeSession.role}
                 startTime={activeSession.activationRequired?undefined:activeSession.activatedAt || (activeSession.startTime?String(activeSession.startTime):undefined)}
                 questions={activeSession.questions}
                 currentQuestionIndex={currentQuestionIndex}
                 submittedLocal={submittedLocal}
-                handleNavigation={(index) => { if (!isStarting) void handleNavigation(index); }}
+                handleNavigation={(index) => { if (!isStarting && !isTranscribing && !isRecording) void handleNavigation(index); }}
                 handleFinishInterview={() => setIsFinishModalOpen(true)}
                 isLoading={isLoading || isSubmitting}
-                finishDisabled={!!activeSession.activationRequired || activeSession.status !== "in-progress" || activeSession.runtimeState==="finishing" || !!unfinished || isStarting || isRecording || isSubmitting || activeSession.questions.some(q => (q.isSubmitted && !q.isEvaluated) || q.followUpPending)}
+                finishDisabled={!!activeSession.activationRequired || activeSession.status !== "in-progress" || activeSession.runtimeState==="finishing" || !!unfinished || isStarting || isRecording || isTranscribing || isSubmitting || activeSession.questions.some(q => (q.isSubmitted && !q.isEvaluated) || q.followUpPending)}
                 questionsCount={activeSession.questions.length}
                 company={activeSession.company}
             />
@@ -202,24 +203,27 @@ const InterviewRunnerSession = () => {
                         isRecording={isRecording}
                         recordingTime={recordingTime}
                         hasAudio={!!currentDraft.audio}
-                        isQuestionLocked={isQuestionLocked || isStarting || !!currentDraft.answerText?.trim()}
-                        startRecording={() => startRecording(updateDraftAudio)}
-                        stopRecording={stopRecording}
+                        isQuestionLocked={isQuestionLocked || isStarting || isTranscribing}
+                        startRecording={() => {updateDraftAnswer("");deleteDraftAudio();void startRecording(updateDraftAudio);}}
+                        stopRecording={()=>void transcribeDraft()}
                         deleteDraftAudio={deleteDraftAudio}
                     />
                     <div className="glass-card p-6 rounded-2xl">
-                        <label htmlFor="typed-answer" className="block mb-2 font-semibold">Type an answer instead</label>
+                        {isTranscribing&&<p role="status">Transcribing your draft… Nothing has been submitted.</p>}
+                        {!!currentDraft.audio?.size&&!isRecording&&<button disabled={isQuestionLocked||isTranscribing} onClick={()=>void transcribeDraft()} className="btn-primary">Transcribe recording</button>}
+                        <label htmlFor="typed-answer" className="block mb-2 font-semibold">Review your transcript or type an answer</label>
                         <textarea
                             id="typed-answer"
                             value={currentDraft.answerText || ""}
                             onChange={event => updateDraftAnswer(event.target.value)}
-                            disabled={isQuestionLocked || isRecording || isStarting || !!currentDraft.audio?.size}
+                            disabled={isQuestionLocked || isRecording || isStarting || isTranscribing || !!currentDraft.audio?.size}
                             maxLength={50000}
                             rows={5}
                             className="w-full p-3 rounded-xl bg-surface-800 text-white disabled:opacity-50"
                             aria-describedby="typed-answer-help"
                         />
-                        <p id="typed-answer-help" className="mt-2 text-sm text-surface-300">Use a recording or a typed answer. Clear your text to record, or remove the recording to type.</p>
+                        <p id="typed-answer-help" className="mt-2 text-sm text-surface-300">Edit this text before confirming. Only the text you confirm is evaluated. Record again to replace this draft.</p>
+                        <button type="button" disabled={isQuestionLocked||isTranscribing||isRecording} onClick={()=>{updateDraftAnswer("");deleteDraftAudio();}} className="mt-3 underline">Cancel draft</button>
                     </div>
                     {currentQuestion?.questionType === 'system-design' && <details className="glass-card p-4"><summary>Optional code workspace · execution does not verify the design</summary><div className="grid gap-4 mt-4 lg:grid-cols-2"><CodeEditorSection language={selectedLanguage} plannedLanguage code={currentDraft.code??currentQuestion.userSubmittedCode??""} isQuestionLocked={isQuestionLocked} setLanguage={setSelectedLanguage} updateCode={updateDraftCode}/><CodeOutputPanel context={{sessionId:activeSession._id,questionIndex:currentQuestionIndex}} language={selectedLanguage} code={currentDraft.code??currentQuestion.userSubmittedCode??""}/></div></details>}
                     {currentQuestion?.questionType === 'system-design' && (
@@ -260,7 +264,7 @@ const InterviewRunnerSession = () => {
             <div className="fixed bottom-0 left-0 right-0 glass-card border-x-0 border-b-0 p-5 px-6 md:px-12 flex justify-between items-center z-50">
                 <button
                     onClick={() => handleNavigation(currentQuestionIndex - 1)}
-                    disabled={isStarting || isSubmitting || currentQuestionIndex === 0}
+                    disabled={isStarting || isSubmitting || isTranscribing || isRecording || currentQuestionIndex === 0}
                     className="text-surface-500 font-black text-[10px] uppercase tracking-widest hover:text-white disabled:opacity-20 cursor-pointer transition-colors"
                 >
                     ← Back
@@ -275,16 +279,16 @@ const InterviewRunnerSession = () => {
 
                     <button
                         onClick={handleSubmitAnswer}
-                        disabled={isQuestionLocked || isStarting}
+                        disabled={isQuestionLocked || isStarting || isRecording || isTranscribing || !!currentDraft.audio?.size}
                         className={`px-10 py-3 rounded-2xl font-black text-[11px] uppercase tracking-widest text-white shadow-xl transition-all active:scale-[0.98] ${isProcessing ? 'bg-surface-800 cursor-wait' : currentQuestion?.isEvaluated ? 'bg-emerald-600 shadow-emerald-900/20' : isQuestionLocked ? 'bg-surface-800' : 'bg-primary-600 hover:bg-primary-500 shadow-primary-900/20 cursor-pointer'}`}
                     >
-                        {isProcessing ? 'Analyzing...' : currentQuestion?.isEvaluated ? 'Submitted' : isQuestionLocked ? 'Locked' : currentQuestion?.processingError ? 'Retry Answer' : 'Commit Answer'}
+                        {isProcessing ? 'Analyzing...' : currentQuestion?.isEvaluated ? 'Submitted' : isQuestionLocked ? 'Locked' : currentQuestion?.processingError ? 'Retry Answer' : 'Confirm and submit'}
                     </button>
                 </div>
 
                 <button
                     onClick={() => handleNavigation(currentQuestionIndex + 1)}
-                    disabled={isStarting || isSubmitting || currentQuestionIndex === (activeSession?.questions?.length || 0) - 1}
+                    disabled={isStarting || isSubmitting || isTranscribing || isRecording || currentQuestionIndex === (activeSession?.questions?.length || 0) - 1}
                     className="text-surface-500 font-black text-[10px] uppercase tracking-widest hover:text-white disabled:opacity-20 cursor-pointer transition-colors"
                 >
                     Next →

@@ -212,6 +212,7 @@ def call_groq(
     temperature: float = 0.6,
     max_retries: int = 5,
     json_schema: dict = None,
+    max_completion_tokens: int = 8192,
 ) -> str:
     """Shared helper to call the Groq chat completions API. Supports text and images.
 
@@ -230,7 +231,7 @@ def call_groq(
     body = {
         "model": model_name,
         "messages": _build_messages(system_prompt, user_prompt, as_json, image_base64),
-        "max_completion_tokens": 8192,
+        "max_completion_tokens": max(256, min(max_completion_tokens, 8192)),
         "temperature": temperature,
         **({"response_format": response_format} if response_format else {}),
     }

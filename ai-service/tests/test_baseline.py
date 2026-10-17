@@ -181,6 +181,7 @@ def test_coding_prompt_preserves_empty_map_explanation(monkeypatch):
     seen = []
     def provider(system, prompt, **kwargs):
         seen.append((system, prompt))
+        assert kwargs["max_completion_tokens"] == 2048
         return '{"technical_score":90,"confidence_score":80,"ai_feedback":"Correct grouping; explanation explicitly covers empty input.","ideal_answer":"Use length buckets."}'
     monkeypatch.setattr(interview, "call_groq", provider)
     explanation = "For [] the function returns an empty Map. Order within each bucket is preserved."

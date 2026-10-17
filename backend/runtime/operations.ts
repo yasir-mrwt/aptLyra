@@ -64,6 +64,8 @@ export async function acceptAnswer(session:ISession,index:number,answer:string,c
     if(staged)await query("INSERT INTO staged_interview_media(id,session_id,user_id,answer_attempt_id,filename,content_hash,size_bytes,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,now()+interval '24 hours')",[staged.id,session._id,session.user,attempt,staged.filename,staged.hash,staged.size]);
     if(question.questionType==="coding")question.language=language;
     question.isSubmitted=true;delete question.processingError;question.processingState="received";
+    if(!session.endTime && session.questions.every(q=>q.isSubmitted||q.isEvaluated))
+      session.endTime=(await query("SELECT clock_timestamp() AS accepted_at")).rows[0].accepted_at.toISOString();
     await sessionRepository.save(session);await bumpRevision(session);
     const op=await insertOperation(session,"evaluate",`answer:${index}:${attempt}`,{index},payloadHash,attempt,parent.planItemId,index);
     session.questions[index].operationId=op.id;await sessionRepository.save(session);
@@ -80,6 +82,7 @@ export async function requestFinish(session:ISession) {
   if(session.status!=="in-progress")throw new SessionStateError("Only an active interview can be finished");
   if(await hasUnfinishedWork(session._id) || session.questions.some(q=>q.followUpPending || (q.isSubmitted && !q.isEvaluated)))
     throw new SessionStateError("Finish requires all accepted answers and probes to complete or be explicitly cancelled.");
+  if(!session.endTime){session.endTime=(await query("SELECT clock_timestamp() AS accepted_at")).rows[0].accepted_at.toISOString();await sessionRepository.save(session);}
   await bumpRevision(session,"finishing");
   const evaluationIds=session.questions.map(q=>q.evaluation?.id || null);
   await insertOperation(session,"report","finish",{snapshotRevision:session.revision,evaluationIds},hash({revision:session.revision,evaluationIds}));

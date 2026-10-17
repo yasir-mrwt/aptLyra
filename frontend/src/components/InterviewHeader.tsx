@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 interface InterviewHeaderProps {
     role: string;
     startTime?: string;
+    endTime?: string;
     questionsCount: number;
     currentQuestionIndex: number;
     submittedLocal: Record<number, boolean>;
@@ -16,7 +17,7 @@ interface InterviewHeaderProps {
 
 const InterviewHeader: React.FC<InterviewHeaderProps> = ({
     role,
-    startTime,
+    startTime, endTime,
     questions,
     currentQuestionIndex,
     submittedLocal,
@@ -31,7 +32,7 @@ const InterviewHeader: React.FC<InterviewHeaderProps> = ({
         if (!startTime) return;
         const start = new Date(startTime).getTime();
         const updateTimer = () => {
-            const now = new Date().getTime();
+            const now = endTime ? new Date(endTime).getTime() : Date.now();
             const diff = Math.max(0, now - start);
             const hours = Math.floor(diff / 3600000);
             const mins = Math.floor((diff % 3600000) / 60000);
@@ -41,9 +42,10 @@ const InterviewHeader: React.FC<InterviewHeaderProps> = ({
             setElapsedTime(`${hoursStr}${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`);
         };
         updateTimer();
+        if(endTime)return;
         const interval = setInterval(updateTimer, 1000);
         return () => clearInterval(interval);
-    }, [startTime]);
+    }, [startTime,endTime]);
 
     return (
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 sm:gap-4 glass-card p-6 sm:px-8 rounded-3xl mb-10 mt-6 border-white/5 relative z-40">

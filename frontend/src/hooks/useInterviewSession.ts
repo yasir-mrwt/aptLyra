@@ -28,6 +28,8 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
 
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     const submittingRef = useRef(false);
+    const transcribingRef=useRef(false);
+    const [isTranscribing,setIsTranscribing]=useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submittedLocal, setSubmittedLocal] = useState<Record<number, boolean>>({});
     const restoredSession=useRef<string|null>(null);
@@ -126,7 +128,7 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
         (isSubmitting || isReduxSubmitted || (isLocallySubmitted && !isEvaluationError)));
 
     const handleNavigation = async (index: number) => {
-        if (submittingRef.current) return;
+        if (submittingRef.current || transcribingRef.current) return;
         if (activeSession?.questions && index >= 0 && index < activeSession.questions.length) {
             await stopRecording();
             setCurrentQuestionIndex(index);
@@ -173,8 +175,24 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
         }));
     };
 
+    const transcribeDraft = async () => {
+        if(transcribingRef.current||isQuestionLocked||!sessionId)return;
+        transcribingRef.current=true;setIsTranscribing(true);
+        const index=currentQuestionIndex;
+        try{
+            const audio=await stopRecording() || drafts[index]?.audio;
+            if(!audio?.size){toast.error("Record an answer first.");return;}
+            const data=new FormData();data.append("audio",audio,audio.type.includes("mp4")?"answer.m4a":"answer.webm");data.append("questionIndex",String(index));
+            const response=await api.post(`/sessions/${sessionId}/transcribe`,data,{timeout:65000});
+            if(typeof response.data.text!=="string"||!response.data.text.trim())throw Error("empty transcript");
+            setDrafts(previous=>({...previous,[index]:{...previous[index],audio:undefined,answerText:response.data.text}}));
+            toast.info("Review and edit your transcript, then confirm to submit.");
+        }catch{toast.error("Transcription failed. Retry your recording or type an answer; nothing was submitted.");}
+        finally{transcribingRef.current=false;setIsTranscribing(false);}
+    };
+
     const handleSubmitAnswer = async () => {
-        if (isQuestionLocked || !sessionId || submittingRef.current) return;
+        if (isQuestionLocked || !sessionId || submittingRef.current || transcribingRef.current) return;
         submittingRef.current = true;
         setIsSubmitting(true);
         const index = currentQuestionIndex;
@@ -191,8 +209,8 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
                 toast.error("Please provide an answer before submitting.");
                 return;
             }
-            if (answerText && audio?.size) {
-                toast.error("Choose a recorded or typed answer before submitting.");
+            if (audio?.size) {
+                toast.error("Transcribe and review your recording before confirming the answer.");
                 return;
             }
             let diagramImageUrl = "";
@@ -208,7 +226,7 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
             if (code) formData.append("code", code);
             if (answerText) formData.append("answerText", answerText);
             if (selectedLanguage) formData.append("language", selectedLanguage);
-            if (audio) formData.append("audio", audio, audio.type.includes("mp4") ? "audio.m4a" : "audio.webm");
+
             if (diagramImageUrl) formData.append("diagramImageUrl", diagramImageUrl);
             setSubmittedLocal(prev => ({ ...prev, [index]: true }));
             await dispatch(submitAnswer({ sessionId, formData })).unwrap();
@@ -249,7 +267,7 @@ export const useInterviewSession = (stopRecording: () => Promise<Blob | null>, s
         sessionId,
         activeSession,
         isLoading,
-        isSubmitting,
+        isSubmitting, isTranscribing, transcribeDraft,
         sessionMessage,
         sessionError,
         currentQuestionIndex,

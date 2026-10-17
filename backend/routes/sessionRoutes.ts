@@ -18,6 +18,7 @@ import {
   submitAnswer,
   endSession,
   speakQuestion,
+  transcribeAnswer,
 } from "../controllers/sessionController.js";
 import { uploadSingleAudio } from "../middleware/uploadMiddleware.js";
 import {getOperations,retryInterviewOperation,cancelInterviewOperation} from "../controllers/operationController.js";
@@ -42,6 +43,7 @@ router.post("/:sessionId/activate",asyncHandler(async(req:AuthenticatedRequest,r
   try{res.json(await activateInterview(req.params.sessionId as string,String(req.user?.id||req.user?._id)));}
   catch(error){res.status(error instanceof SessionStateError?error.status:503).json({message:error instanceof SessionStateError?error.message:"Activation is temporarily unavailable. Your confirmed plan is saved; retry activation."});}
 }));
+router.post("/:sessionId/transcribe",rateLimit({windowMs:60000,limit:10}),uploadSingleAudio,transcribeAnswer);
 router.route("/:sessionId/submit-answer").post(uploadSingleAudio, submitAnswer);
 router.route("/:sessionId/speak").post(speakQuestion);
 router.route("/:sessionId/end").post(endSession);
