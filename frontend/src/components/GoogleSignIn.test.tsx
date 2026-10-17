@@ -3,6 +3,7 @@ import {afterEach,it,expect,vi} from 'vitest';
 import GoogleSignIn from './GoogleSignIn';
 const {get,google}=vi.hoisted(()=>({get:vi.fn(),google:vi.fn()}));
 vi.mock('../services/apiClient',()=>({default:{get}}));
+vi.mock('./GoogleIdentityButton',()=>({default:(props:unknown)=>{google(props);return <button>Google identity</button>;}}));
 vi.mock('@react-oauth/google',()=>({GoogleOAuthProvider:({children,clientId}:{children:React.ReactNode;clientId:string})=><div data-testid="audience" data-client-id={clientId}>{children}</div>,GoogleLogin:(props:unknown)=>{google(props);return <button>Google identity</button>;}}));
 afterEach(()=>{cleanup();vi.clearAllMocks();});
 it('uses the verifier client ID and browser challenge nonce',async()=>{

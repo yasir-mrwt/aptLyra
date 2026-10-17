@@ -29,8 +29,12 @@ export const restoreSession=createAsyncThunk<User|null,void,{state:{auth:AuthSta
         const stored=thunkAPI.getState().auth.user;
         if(!stored)return null;
         try {
-            await authApi.post("user/refresh",{});
-            return stored;
+            // A read-only check survives interrupted reloads without consuming a refresh token.
+            // The shared interceptor rotates only when access has actually expired.
+            const {data}=await authApi.get<Partial<User>>("/user/profile",{timeout:15000});
+            const current={...stored,...data,id:data._id||data.id||stored.id};
+            localStorage.setItem("user",JSON.stringify(current));
+            return current;
         } catch(error) {
             // A service/network outage does not prove the refresh cookie expired.
             if(axios.isAxiosError(error) && error.response?.status!==401)return stored;

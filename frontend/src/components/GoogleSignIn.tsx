@@ -2,6 +2,7 @@ import type {AxiosResponse} from "axios";
 import {useEffect,useState} from "react";
 import {GoogleLogin,GoogleOAuthProvider} from "@react-oauth/google";
 import type {ComponentProps} from "react";
+import GoogleIdentityButton from "./GoogleIdentityButton";
 import api from "../services/apiClient";
 import {isValidGoogleClientId} from "../services/googleLoginConfig";
 let pending:Promise<AxiosResponse<{clientId:string;nonce:string}>>|null=null;
@@ -19,5 +20,5 @@ export default function GoogleSignIn(props:ComponentProps<typeof GoogleLogin>) {
   },[attempt]);
   if(error)return <p role="status" className="text-sm text-center">Google sign-in is temporarily unavailable. Email sign-in still works. <button type="button" onClick={()=>setAttempt(n=>n+1)} className="underline">Retry Google</button></p>;
   if(!challenge)return <p role="status" className="text-sm">Preparing Google sign-in…</p>;
-  return <GoogleOAuthProvider clientId={challenge.clientId}><GoogleLogin {...props} nonce={challenge.nonce}/></GoogleOAuthProvider>;
+  return <GoogleOAuthProvider clientId={challenge.clientId}><GoogleIdentityButton {...props} nonce={challenge.nonce}/></GoogleOAuthProvider>;
 }

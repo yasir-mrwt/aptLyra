@@ -12,6 +12,7 @@ test("Google challenge shares verifier audience and binds a secure, expiring coo
  const agent=request.agent(app());const challenge=await agent.get("/api/user/google/challenge");
  expect(challenge.status).toBe(200);expect(challenge.body.clientId).toBe(process.env.GOOGLE_CLIENT_ID);
  expect(challenge.headers["set-cookie"][0]).toContain("HttpOnly");expect(challenge.headers["set-cookie"][0]).toContain("SameSite=Lax");
+ expect((await agent.get("/api/user/google/challenge")).body.nonce).toBe(challenge.body.nonce);
  expect((await agent.post("/api/user/google").send({nonce:challenge.body.nonce})).status).toBe(200);
  expect((await agent.post("/api/user/google").send({nonce:"wrong"})).status).toBe(401);
  expect((await request(app()).post("/api/user/google").send({nonce:challenge.body.nonce})).status).toBe(401);
