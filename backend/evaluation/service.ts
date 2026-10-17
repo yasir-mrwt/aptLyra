@@ -9,7 +9,7 @@ import {abstain,finalize,POLICY,type EvaluationView,type EvaluationInput,type Ob
 import {rubricEditor,hash} from "./rubrics.js";
 import type {Json,JsonObject} from "../types/knowledge.js";
 export const unavailableObjective=():Objective=>({status:"unavailable",kind:"runtime",summary:"No matching execution evidence or reviewed tests available."});
-export interface Prepared {attempt:string;input:EvaluationInput|null;objective:Objective;practiceAnswer?:string}
+export interface Prepared {attempt:string;input:EvaluationInput|null;objective:Objective;practiceAnswer?:string;practiceContext?:{question:string;answer:string;checkpoints:string[]}}
 export const evaluationService={
   async prepare(sessionId:string,userId:string,index:number,answer:string,code:string,diagram?:string|null,existingAttempt?:string):Promise<Prepared> {
     const session=await sessionRepository.findByIdForUser(sessionId,userId);const q=session?.questions[index];
@@ -27,6 +27,8 @@ export const evaluationService={
     const readiness=(await query("SELECT inventory_class FROM content_question_readiness WHERE question_version_id=$1",[parent.questionVersionId])).rows[0];
     const practice=readiness?.inventory_class==="DYNAMIC_PROVISIONAL"&&(!rubric||rubric.kind==="known");
     if(practice)rubric=null;
+    const approvedPractice=practice?(await query("SELECT extraction_metadata->'review' AS review FROM ingestion_candidates WHERE question_version_id=$1 AND state='published'",[parent.questionVersionId])).rows[0]?.review:null;
+    const practiceContext=practice?{question:q.questionText,answer:approvedPractice?.approvedRevision===approvedPractice?.revision?approvedPractice?.answer||"":"",checkpoints:approvedPractice?.approvedRevision===approvedPractice?.revision?(approvedPractice?.criteria||[]).map((c:any)=>c.checkpoint):[]}:undefined;
     if(!practice && !pinned && !rubric && !item.rubric_version_id && q.followUpOf===undefined){
       const references=await new RetrievalService().retrieveTechnicalEvidence({query:q.questionText,limit:5,filters:{competencies:[item.primary_competency]},ownership:{sessionId,userId}});
       if(references.hits.length){const refs=references.hits.map(h=>({id:h.chunkId!,text:h.text.slice(0,6000)}));
@@ -38,7 +40,7 @@ export const evaluationService={
     }
     const input:EvaluationInput|null=rubric?{question:q.questionText,questionVersionId:parent.questionVersionId,rubric,answer,code,objective,derived:q.followUpOf!==undefined,artifactUnavailable:!!diagram && !answer.trim()}:null;
     // Durable callers claim before STT and seal preparation in their lease-fenced transaction.
-    if(existingAttempt)return {attempt:existingAttempt,input,objective,...(practice?{practiceAnswer:code||answer}:{})};
+    if(existingAttempt)return {attempt:existingAttempt,input,objective,...(practice?{practiceAnswer:[answer,code].filter(Boolean).join("\n"),practiceContext}:{})};
     const attempt=await withDatabaseLock(`session:${sessionId}`,async()=>{
       const fresh=await sessionRepository.findByIdForUser(sessionId,userId);const current=fresh?.questions[index];
       if(!fresh || fresh.status!=="in-progress" || !current?.isSubmitted || current.isEvaluated)throw new Error("Stale answer");
@@ -46,7 +48,7 @@ export const evaluationService={
       const id=await knowledgeRepository.createAnswerAttempt(userId,{planItemId:item.id,attempt:next,inputKind:code?(answer?"mixed":"code"):diagram?"mixed":"text",text:answer,code,contentHash:hash({answer,code,diagram:diagram || null}),artifactRefs:diagram?[{kind:"diagram",url:diagram}]:[]});
       await query("UPDATE answer_attempts SET status='evaluating',selected_rubric_id=$2,grounding_snapshot=$3,follow_up_index=$4 WHERE id=$1",[id,rubric?.id || null,JSON.stringify(input?{rubricHash:rubric!.hash,sourceIds:rubric!.references.map(r=>r.id)}:{}),q.followUpOf===undefined?null:index]);
       return id;
-    });return {attempt,input,objective,...(practice?{practiceAnswer:code||answer}:{})};
+    });return {attempt,input,objective,...(practice?{practiceAnswer:[answer,code].filter(Boolean).join("\n"),practiceContext}:{})};
   },
   async compute(prepared:Prepared) {
     if(prepared.practiceAnswer!==undefined){
@@ -54,6 +56,13 @@ export const evaluationService={
       view.feedback=prepared.practiceAnswer.trim()
         ?"Provisional practice feedback: your answer has been saved. Check that it explains your approach, gives a concrete example, and covers edge cases or trade-offs. Technical correctness has not been assessed because this question has no reviewed scoring guide."
         :"Provisional practice feedback: no answer text or code was available to assess. Try explaining an approach and a concrete example. No technical score was assigned.";
+      if(prepared.practiceContext){
+        const context=prepared.practiceContext;
+        view.feedback+=`\nQuestion: ${context.question}`;
+        if(context.checkpoints.length)view.feedback+=`\nReview your answer against these human-approved practice checkpoints:\n${context.checkpoints.map(c=>`• ${c}`).join("\n")}`;
+        if(context.answer)view.feedback+=`\nReviewer’s expected practice answer: ${context.answer}`;
+        view.feedback+="\nThese are practice suggestions, not verified judgments about your answer; no numerical reviewed score is assigned.";
+      }
       return {view,provider:null};
     }
     if(!prepared.input)return {view:abstain("rubric_or_grounding_unavailable",prepared.objective),provider:null};

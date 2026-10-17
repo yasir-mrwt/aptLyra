@@ -23,9 +23,9 @@ before(async()=>{
  await f.query("UPDATE users SET app_role='reviewer' WHERE id=$1",[owner]);
  const permissionHash=createHash('sha256').update('fictional planner fixture permission').digest('hex');
  await f.query(`INSERT INTO sources(id,stable_key,source_type,title,license_id,terms_revision,policy_revision,permission_status,permission_evidence,
-   attribution,review_status,state,reviewed_by,reviewed_at,adapter_name,permission_basis,permission_evidence_hash)
+   attribution,review_status,state,reviewed_by,reviewed_at,adapter_name,permission_basis,permission_evidence_hash,model_processing_allowed)
    VALUES($1,'fixture:planner-reference','licensed-reference','Fictional planner reference','fixture-license','fixture-terms-v1','fixture-policy-v1',
-   'permitted','Fictional disposable permission; no external source','Disposable test fixture','approved','enabled',$2,now(),'operator-import','fixture-only',$3)`,
+   'permitted','Fictional disposable permission; no external source','Disposable test fixture','approved','enabled',$2,now(),'operator-import','fixture-only',$3,true)`,
  [sourceId,reviewerId,permissionHash]);
  await f.query("INSERT INTO ingestion_adapters(source_id,adapter_id,adapter_version,contract) VALUES($1,'operator-import','1','{\"fixture\":false}')",[sourceId]);
  await f.query('INSERT INTO source_documents(id,source_id,external_key) VALUES($1,$2,$3)',[documentId,sourceId,'planner-reference-v1']);

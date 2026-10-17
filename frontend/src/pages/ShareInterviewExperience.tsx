@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import apiClient from "../services/apiClient";
 
 type Submission={id:string;state:string;created_at:string};
@@ -6,12 +6,13 @@ export default function ShareInterviewExperience(){
   const [question,setQuestion]=useState(""),[role,setRole]=useState(""),[topic,setTopic]=useState(""),[notes,setNotes]=useState("");
   const [right,setRight]=useState(false),[ai,setAi]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState("");
   const [items,setItems]=useState<Submission[]>([]);
+  const inFlight=useRef(false);
   const refresh=async()=>setItems((await apiClient.get("/content-intelligence/submissions")).data);
   useEffect(()=>{void refresh().catch(()=>setMessage("Your submissions could not be loaded."));},[]);
-  async function submit(event:FormEvent){event.preventDefault();setBusy(true);try{
+  async function submit(event:FormEvent){event.preventDefault();if(inFlight.current||!right)return;inFlight.current=true;setBusy(true);try{
     await apiClient.post("/content-intelligence/submissions",{question,role:role||undefined,topic:topic||undefined,notes:notes||undefined,rightToShare:right,aiProcessingConsent:ai});
-    setQuestion("");setNotes("");setRight(false);setAi(false);setMessage("Question submitted for review.");await refresh();
-  }catch{setMessage("Question could not be submitted. Check that it contains no private or confidential information and try again.");}finally{setBusy(false);}}
+    setQuestion("");setNotes("");setRight(false);setAi(false);setMessage("Question submitted for review. You can track it below; it is not published until a reviewer approves it.");await refresh().catch(()=>setMessage("Question submitted for review. Refresh to reload your submission history; do not submit it again."));
+  }catch{setMessage("Question could not be submitted. Check that it contains no private or confidential information and try again.");}finally{inFlight.current=false;setBusy(false);}}
   return <section className="mx-auto max-w-3xl space-y-6 text-surface-100"><h1 className="text-3xl font-semibold">Submit question</h1>
     <p>Share a question you have the right to share. A reviewer will check it before it enters Interview Bank.</p>
     <form onSubmit={event=>void submit(event)} className="grid gap-4 rounded-xl border border-white/10 p-6">

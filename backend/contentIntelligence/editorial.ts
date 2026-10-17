@@ -164,8 +164,11 @@ export const contentEditorial={
       const children=new Set((await knowledgeRepository.listCompetencies("junior-se-v1")).filter(c=>c.kind==="child"&&c.status==="active").map(c=>c.id));
       const specification=validateQuestion({...row.specification,text:value.question,primary:value.topic,difficulty:value.difficulty,
         category:value.mode==="coding"?"coding":value.mode==="mixed"?"scenario":"conceptual-oral"},children,row.normalized_text+"\n"+String(value.question));
-      const answer=value.answer.trim(),revision=sha256(JSON.stringify({specification,answer,mode:value.mode}));
-      const review={answer,mode:value.mode,revision};
+      const criteria=value.criteria??[];
+      if(!Array.isArray(criteria)||criteria.length>12||criteria.some((c:any)=>!c||typeof c.checkpoint!=="string"||!c.checkpoint.trim()||c.checkpoint.length>1000||screen(c.checkpoint).length||!Number.isInteger(c.weight)||c.weight<=0||c.weight>100)||
+        (criteria.length&&criteria.reduce((sum:number,c:any)=>sum+c.weight,0)!==100))fail("invalid-review-criteria");
+      const answer=value.answer.trim(),revision=sha256(JSON.stringify({specification,answer,mode:value.mode,criteria}));
+      const review={answer,mode:value.mode,criteria,revision};
       await query(`UPDATE ingestion_candidates SET specification=$2,content_hash=$3,derivation_type='topic-derived',
         extraction_metadata=extraction_metadata||jsonb_build_object('review',$4::jsonb) WHERE id=$1`,[id,JSON.stringify(specification),sha256(specification.text),JSON.stringify(review)]);
       await query(`INSERT INTO ingestion_review_events(id,source_id,record_id,candidate_id,reviewer_id,action,content_hash,reason_code,event_metadata)
@@ -555,7 +558,6 @@ export const contentEditorial={
       FROM question_versions q JOIN content_question_readiness ready ON ready.question_version_id=q.id
       LEFT JOIN ingestion_candidates candidate ON candidate.question_version_id=q.id AND candidate.state='published'
       WHERE q.status='published' AND ready.inventory_class IS DISTINCT FROM 'TRUSTED_BASELINE'
-        AND ready.inventory_class IS DISTINCT FROM 'DYNAMIC_REVIEWED'
       ORDER BY ready.publication_class,q.created_at DESC LIMIT 200`)).rows;
   },
   async interviewBank(userId:string){
@@ -644,7 +646,7 @@ export const contentEditorial={
       WHERE tr.question_version_id=$1 AND tr.state='approved' AND c.status='active' AND v.status='published'
         AND v.content_hash=tr.source_version_hash AND v.quality='technical-reference' AND v.permission_status='permitted'
         AND v.review_status='approved' AND v.pii_status='clear' AND v.confidentiality_status='clear'
-        AND s.state='enabled' AND s.permission_status='permitted' AND s.review_status='approved'
+        AND s.model_processing_allowed=true AND s.state='enabled' AND s.permission_status='permitted' AND s.review_status='approved'
         AND s.permission_evidence_hash=tr.permission_hash AND s.withdrawn_at IS NULL ORDER BY tr.chunk_id LIMIT 10`,[questionVersionId])).rows;
     if(!refs.length)fail("approved_reference_required");
     let result:any;

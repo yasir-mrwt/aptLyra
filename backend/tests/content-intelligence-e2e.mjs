@@ -183,9 +183,9 @@ test('quarantine → extraction → human reviews → technical grounding/rubric
   const [sourceId,documentId,versionId,chunkId,recordId]=[randomUUID(),randomUUID(),randomUUID(),randomUUID(),randomUUID()];
   const permissionHash=hash('fictional disposable technical-reference permission');
   await query(`INSERT INTO sources(id,stable_key,source_type,title,license_id,terms_revision,policy_revision,permission_status,permission_evidence,
-    attribution,review_status,state,reviewed_by,reviewed_at,adapter_name,permission_basis,permission_evidence_hash)
+    attribution,review_status,state,reviewed_by,reviewed_at,adapter_name,permission_basis,permission_evidence_hash,model_processing_allowed)
     VALUES($1,'fixture:sql-index-reference','licensed-reference','Fictional SQL reference','fixture-license','fixture-terms-v1','fixture-policy-v1',
-    'permitted','Fictional disposable permission; not an external source','Disposable test fixture','approved','enabled',$2,now(),'operator-import','fixture-only',$3)`,
+    'permitted','Fictional disposable permission; not an external source','Disposable test fixture','approved','enabled',$2,now(),'operator-import','fixture-only',$3,true)`,
   [sourceId,reviewerId,permissionHash]);
   await query("INSERT INTO ingestion_adapters(source_id,adapter_id,adapter_version,contract) VALUES($1,'operator-import','1','{\"fixture\":false}')",[sourceId]);
   await query('INSERT INTO source_documents(id,source_id,external_key) VALUES($1,$2,$3)',[documentId,sourceId,'fixture-reference-v1']);
@@ -389,6 +389,7 @@ test('quarantine → extraction → human reviews → technical grounding/rubric
   const manualRubric=await request(app).post(`/api/content-intelligence/scoring/drafts/${manualDraft.body.id}/approve`)
     .set('Cookie',reviewerCookie).send({expectedHash:manualDraft.body.hash}).expect(200);
   assert.equal(manualRubric.body.publicationClass,'reviewed/scoring-ready');
+  assert.ok((await editorial.scoringQueue(userId)).some(q=>q.question_version_id===manuallyPublished.body.questionVersionId && q.rubric_version_id),'approved guide stays discoverable for its exact question version');
   const finalBank=await request(app).get('/api/content-intelligence/interview-bank').set('Cookie',reviewerCookie).expect(200);
   assert.ok(finalBank.body.approvedNewQuestions>=2);
   assert.ok(finalBank.body.totalAvailable>=2);
@@ -397,7 +398,7 @@ test('quarantine → extraction → human reviews → technical grounding/rubric
   assert.ok(!manualQueueAfter.body.some(item=>item.candidate_id===manuallyCreated.body.candidateId),
     'a reviewed dynamic question leaves Review Queue and appears in Interview Bank');
   const completedScoring=await request(app).get('/api/content-intelligence/scoring-queue').set('Cookie',reviewerCookie).expect(200);
-  assert.ok(!completedScoring.body.some(item=>item.question_version_id===manuallyPublished.body.questionVersionId));
+  assert.ok(completedScoring.body.some(item=>item.question_version_id===manuallyPublished.body.questionVersionId && item.rubric_version_id));
 
 });
 
@@ -409,6 +410,8 @@ test('simple submission saves human guidance and retries indexing without repeat
   await assert.rejects(editorial.enableCandidateAi(userId,item.candidate_id,item.content_hash));
   const review={question:'Compare cookies and sessionStorage in web applications.',answer:'Cookies may be sent with HTTP requests and expire. sessionStorage is scoped to a tab and origin and is not automatically sent.',topic:'backend-web.auth-validation',difficulty:'easy',mode:'oral'};
   await assert.rejects(editorial.saveReview(normal,item.candidate_id,item.content_hash,undefined,review));
+  await assert.rejects(editorial.saveReview(userId,item.candidate_id,item.content_hash,undefined,{...review,criteria:[{checkpoint:'Scope',weight:90}]}),/invalid-review-criteria/);
+  review.criteria=[{checkpoint:'Cookie transport and expiry',weight:50},{checkpoint:'Per-tab sessionStorage scope',weight:50}];
   let saved=await editorial.saveReview(userId,item.candidate_id,item.content_hash,undefined,review);
   await assert.rejects(editorial.saveReview(userId,item.candidate_id,saved.contentHash,undefined,review),/review-hash-mismatch/);
   assert.equal((await query('SELECT state FROM ingestion_candidates WHERE id=$1',[item.candidate_id])).rows[0].state,'review_required');

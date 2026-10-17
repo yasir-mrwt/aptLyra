@@ -98,7 +98,7 @@ describe("simplified editorial workflow", () => {
     expect(screen.getAllByText("What does an index change about a database query?").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Analyze with AI" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Review manually" }));
-    expect(screen.getByRole("button", { name: "Approve & add to Interview Bank" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Approve for practice" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Save draft" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Reject" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Publish source record/ })).toBeNull();
@@ -131,7 +131,7 @@ it('edits answer and classification, then saves and approves the exact revision'
   fireEvent.change(card.getByLabelText('Suggested / expected answer'),{target:{value:'Cookies may be sent with requests; sessionStorage stays in the current tab.'}});
   fireEvent.change(card.getByLabelText('Difficulty'),{target:{value:'stretch'}});
   fireEvent.change(card.getByLabelText('Mode'),{target:{value:'mixed'}});
-  fireEvent.click(card.getByRole('button',{name:'Approve & add to Interview Bank'}));
+  fireEvent.click(card.getByRole('button',{name:'Approve for practice'}));
   await waitFor(()=>expect(post).toHaveBeenCalledWith('/content-intelligence/review/candidates/selected/approve-bank',{expectedHash:'edited-hash',revision:'edited-revision',duplicateDecision:'distinct'}));
   expect(post).toHaveBeenCalledWith('/content-intelligence/review/candidates/selected/save',expect.objectContaining({review:expect.objectContaining({difficulty:'stretch',mode:'mixed',answer:expect.stringContaining('Cookies')})}));
   expect(post.mock.calls.some(([path])=>String(path).includes('ai-review'))).toBe(false);
@@ -142,7 +142,7 @@ it('retries only indexing for an already approved question',async()=>{
   get.mockImplementation((path:string)=>Promise.resolve({data:path.endsWith('/review/candidates')?[candidate]:path.endsWith('/interview-bank')?bankData:[]}));post.mockResolvedValue({data:{embeddingReady:true}});
   renderConsole();fireEvent.click(sectionNav().getByRole('button',{name:/Review Queue/}));fireEvent.click(await screen.findByRole('button',{name:'Retry indexing'}));
   await waitFor(()=>expect(post).toHaveBeenCalledTimes(1));expect(post).toHaveBeenCalledWith('/content-intelligence/review/candidates/failed-index/retry-indexing',{expectedHash:questionHash});
-  expect(screen.queryByRole('button',{name:'Approve & add to Interview Bank'})).toBeNull();
+  expect(screen.queryByRole('button',{name:'Approve for practice'})).toBeNull();
 });
 
 it('shows immediate saving feedback, blocks duplicate writes and confirms rejection',async()=>{
