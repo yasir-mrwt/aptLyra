@@ -4,7 +4,7 @@ The public footer reads `© 2026 Aptlyra. All rights reserved.` This website-foo
 
 ## Code provenance
 
-The workspace's initial Phase 0 source manifest records the inherited `PrepTalk-main/LICENSE`, including Shubham Malik's copyright notice. Git history and current implementation retain inherited code; this work is not a clean-room replacement. No rights/provenance review or authorization establishes that the upstream notice no longer applies. Therefore `LICENSE` retains the full MIT text and upstream notice, plus `Copyright (c) 2026 Muhammad Yasir (original Aptlyra contributions)`. Personal creator text is absent from the public homepage footer. Applicable notices in inherited code must remain. This repository guidance records the decision; it makes no claim to edit an agent's memory.
+The inherited PrepTalk code's MIT notice is preserved in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md). The maintainer edited the root LICENSE; that edit is committed unchanged. The homepage footer does not replace the retained notices.
 
 ## Display typeface
 
@@ -12,14 +12,14 @@ Space Grotesk is self-hosted at `frontend/public/fonts/SpaceGrotesk-variable.ttf
 
 ## Hero animation
 
-[Video Explainer by Sherjeel Javed](https://lottiefiles.com/free-animation/video-explainer-YUwaiFcnZ4) is distributed under the [Lottie Simple License](https://lottiefiles.com/page/license). The maintainer supplied the exact JSON after the download site blocked automated access. `frontend/public/animations/video-explainer.json` preserves the original bytes. `video-explainer-aptlyra.json` is the generated derivative, and `video-explainer-poster.svg` is its static frame 45. All three retain the same asset license in `animations/LICENSE.txt`; visible creator/license links accompany the illustration. The website footer does not restrict these asset rights.
+[Video Explainer by Sherjeel Javed](https://lottiefiles.com/free-animation/video-explainer-YUwaiFcnZ4) is distributed under the [Lottie Simple License](https://lottiefiles.com/page/license). The maintainer supplied the exact JSON after the download site blocked automated access. `frontend/public/animations/video-explainer.json` preserves the original bytes. `video-explainer-aptlyra.json` is the generated derivative, and `video-explainer-poster.svg` is its static frame 45. All three retain the same asset license in `animations/LICENSE.txt`; an accessible Animation credits & license link in the footer opens those notices. The website footer does not restrict these asset rights.
 
 Run `node scripts/recolor-hero.mjs` to reproduce the derivative. It changes 125 static paint properties: green shirt/pot accents become logo cyan (`#67E8F9`), green shadows and red call-control accents become logo indigo (`#818CF8`), plant/table outlines use logo pale cyan (`#A5F3FC`), and background details use existing surface tokens. Skin tones, facial/hair details, device neutrals, paths, keyframes and timing are preserved. This is layer-paint editing, not a CSS filter. The supplied file contains no external image resources or expressions; all selected paint properties are editable.
 
 Original SHA-256: `451103da544fbf596e11cbed07119117a6562f683e6e7730a076a2846075e59c`.
 Adapted SHA-256: `e40ea28982254ec9818dde99dc46f5f2babff8ecb7b5b22a7634012428181932`.
 
-The only added dependency is `lottie-web@5.13.0` (MIT). Its expression-free light renderer loads asynchronously. Playback runs once (~4.34 seconds), supports Pause/Play/Replay, pauses outside the viewport or in a hidden tab, and is destroyed on navigation. Reduced-motion preference uses the static SVG without fetching the player or animation JSON. A failed player/data request retains that same accessible static illustration. Fixed aspect ratio reserves layout space.
+The only added dependency is `lottie-web@5.13.0` (MIT). Its expression-free light renderer loads asynchronously. Playback loops while visible, supports Space to pause/resume, pauses outside the viewport or in a hidden tab, and is destroyed on navigation. Reduced-motion preference uses the static SVG without fetching the player or animation JSON. A failed player/data request retains that same accessible static illustration. Fixed aspect ratio reserves layout space.
 
 ## Controls and accessibility
 

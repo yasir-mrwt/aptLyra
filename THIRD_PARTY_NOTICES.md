@@ -2,7 +2,31 @@
 
 ## Upstream application
 
-TechVera extends the upstream PrepTalk application. The original MIT license remains in [LICENSE](LICENSE), unchanged, including `Copyright (c) 2026 Shubham Malik` and the full permission/warranty notice. Preserve that notice when distributing copies or substantial portions. The backend package's existing author metadata, Arnab Dey, is also retained; this document does not replace or determine contributor ownership.
+Aptlyra extends the upstream PrepTalk application. The maintainer's current root [LICENSE](LICENSE) is preserved as supplied. The inherited MIT notice is retained below for the upstream code. Existing backend author metadata, Arnab Dey, is also retained.
+
+```text
+MIT License
+
+Copyright (c) 2026 Shubham Malik
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
 
 ## Embedding model
 
