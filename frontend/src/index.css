@@ -517,3 +517,19 @@ select::-webkit-scrollbar {
 .hero-animation figcaption button:hover { background: #ffffff08; }
 .animation-credit { color: #a1a1aa; font-size: .65rem; margin-top: .7rem; line-height: 1.7; }
 .animation-credit a:hover { color: #a5f3fc; text-decoration: underline; }
+
+/* Demo acceptance: mobile reading order and equally sized actions. */
+.hero-animation:focus-visible {outline:2px solid #67E8F9;outline-offset:6px;border-radius:16px;}
+.hero-animation figcaption.animation-credit {min-height:0;border:0;padding-top:8px;display:block;}
+.resume-workspace h1,.resume-workspace h2,.resume-workspace h3 {font-family:"Space Grotesk",sans-serif;}
+@media(max-width:767px){
+ .home-hero {display:flex;flex-direction:column;gap:20px;}
+ .home-hero-copy {display:contents;}
+ .home-hero .home-eyebrow {order:0;}
+ .home-hero h1 {order:1;}
+ .home-hero .hero-animation {order:2;width:100%;}
+ .home-hero-ctas {order:3;display:grid;grid-template-columns:1fr 1fr;width:100%;margin-top:0;gap:10px;}
+ .home-hero-ctas > * {display:flex;justify-content:center;align-items:center;text-align:center;min-height:64px;padding:12px;font-size:13px;}
+ .home-hero .home-intro {order:4;}
+ .home-hero .home-scope {order:5;}
+}

@@ -12,11 +12,11 @@ export default function Landing(){
  const canReview=!!user && roleState?.userId===(user.id||user._id) && roleState.status==="ready" && roleState.canReview;
  const focusPlan=()=>{const node=document.getElementById("interview-setup");node?.scrollIntoView({behavior:reduced?"instant":"smooth",block:"start"});node?.focus({preventScroll:true});};
  return <div className="signature-home">
-  <section className="home-hero" aria-labelledby="home-title"><motion.div initial={reduced?false:{opacity:0,y:12}} animate={{opacity:1,y:0}} transition={{duration:.45}}>
+  <section className="home-hero" aria-labelledby="home-title"><motion.div className="home-hero-copy" initial={reduced?false:{opacity:0,y:12}} animate={{opacity:1,y:0}} transition={{duration:.45}}>
    <p className="home-eyebrow">APTLYRA / TECHNICAL INTERVIEW PRACTICE</p>
    <h1 id="home-title">Your next interview.<br/><span>Already rehearsed.</span></h1>
    <p className="home-intro">Find the words. Work through the code. Practise with Lyra before the real conversation, then use specific feedback to choose your next step.</p>
-   <div className="flex flex-wrap gap-3 mt-8"><button onClick={focusPlan} className="btn-primary">Plan a technical interview <span aria-hidden="true">↗</span></button><a href="#how-it-works" className="home-secondary">See how it works <span aria-hidden="true">↓</span></a></div>
+   <div className="home-hero-ctas flex flex-wrap gap-3 mt-8"><button onClick={focusPlan} className="btn-primary">Plan a technical interview <span aria-hidden="true">↗</span></button><a href="#how-it-works" className="home-secondary">See how it works <span aria-hidden="true">↓</span></a></div>
    <p className="home-scope">Built for your first software role.<br/>Oral, coding & mixed practice · Junior, 0–2 years</p>
   </motion.div><HeroAnimation/></section>
   {user&&<nav className="home-actions" aria-label="Practice actions">

@@ -1,7 +1,7 @@
 import React from "react";
 
 /**
- * Animated AI interviewer. The character appearance remains unchanged for Phase 9.
+ * Animated AI interviewer. A consistent female character using Aptlyra’s cyan and indigo accents.
  *
  * A flat-vector professional woman whose mouth opens with the REAL amplitude
  * of the TTS audio (WebAudio analyser), with idle blinking, breathing sway
@@ -21,8 +21,8 @@ const SKIN = "#e8b48c";
 const SKIN_SHADOW = "#d9a075";
 const HAIR = "#2b2020";
 const HAIR_SHINE = "#453230";
-const BLAZER = "#7c3aed";
-const BLAZER_DARK = "#0b7c72";
+const BLAZER = "#67E8F9";
+const BLAZER_DARK = "#818CF8";
 const SHIRT = "#f4f4f5";
 const LIP = "#b4574e";
 const MOUTH_DARK = "#5e2825";
@@ -42,7 +42,7 @@ const InterviewerAvatar: React.FC<InterviewerAvatarProps> = ({
         <div
             className="relative select-none"
             style={{ width: size, height: size }}
-            aria-label="AI interviewer avatar"
+            aria-label="Lyra, your AI interviewer"
             role="img"
         >
             {/* Speaking glow ring */}
@@ -50,7 +50,7 @@ const InterviewerAvatar: React.FC<InterviewerAvatarProps> = ({
                 className={`absolute inset-0 rounded-full transition-opacity duration-500 ${speaking ? "opacity-100 animate-pulse" : "opacity-0"}`}
                 style={{
                     background:
-                        "radial-gradient(circle, rgba(139,92,246,0.28) 0%, transparent 70%)",
+                        "radial-gradient(circle, rgba(103,232,249,0.2) 0%, transparent 70%)",
                 }}
             />
 
