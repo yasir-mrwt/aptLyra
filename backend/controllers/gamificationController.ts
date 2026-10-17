@@ -1,14 +1,16 @@
+import {query} from "../config/db.js";
+import {practiceCalendar} from "../services/practiceCalendar.js";
 import { Request, Response } from "express";
 import { gamificationService } from "../services/gamificationService.js";
 import { AuthenticatedRequest } from "../types/express.js";
-import { getTitleForLevel } from "../config/achievements.js";
+import { getTitleForLevel, getXPForLevel } from "../config/achievements.js";
 
 export const getProfile = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!._id;
     const profile = await gamificationService.getProfile(userId);
     const title = getTitleForLevel(profile.level);
-    res.json({ ...profile, title });
+    res.json({ ...profile, title, currentLevelXp:getXPForLevel(profile.level),nextLevelXp:getXPForLevel(profile.level+1) });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
@@ -43,4 +45,11 @@ export const syncGamification = async (req: AuthenticatedRequest, res: Response)
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
+};
+
+export const getPracticeCalendar=async(req:AuthenticatedRequest,res:Response)=>{
+  try{
+    const rows=(await query("SELECT DISTINCT to_char(coalesce(end_time,start_time,created_at) AT TIME ZONE 'UTC','YYYY-MM-DD') AS day FROM sessions WHERE user_id=$1 AND status='completed'",[req.user!._id])).rows;
+    res.json(practiceCalendar(rows.map(row=>row.day)));
+  }catch{res.status(503).json({message:"Practice calendar is temporarily unavailable. Retry shortly."});}
 };

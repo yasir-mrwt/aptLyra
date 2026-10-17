@@ -115,7 +115,7 @@ export const MobileNav = ({
               </Link>
               <p className="text-sm text-surface-400">Ranking unavailable · no verified global ranking</p>
               <Link to="/history" onClick={onClose} className="block py-2">History</Link>
-              <Link to="/analytics#ranking" onClick={onClose} className="block py-2">Rank</Link>
+              <Link to="/rank" onClick={onClose} className="block py-2">Rank</Link>
               <button
                 onClick={handleLogout}
                 className="block w-full text-left py-3 text-sm font-black uppercase tracking-[0.2em] text-rose-400 hover:text-rose-300 transition-colors cursor-pointer"

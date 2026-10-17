@@ -15,7 +15,7 @@ const NAV_LINKS = [
   { to: "/resume-analyzer", label: "Resume Analyzer" },
   { to: "/analytics", label: "Analytics" },
   { to: "/history", label: "History" },
-  { to: "/analytics#ranking", label: "Rank" },
+  { to: "/rank", label: "Rank" },
 ];
 
 export const DesktopNav = ({ user, isActive, onOpenModal,role,roleLoading }: DesktopNavProps) => {

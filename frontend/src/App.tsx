@@ -26,6 +26,7 @@ import NotFound from "./pages/NotFound";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useLocation } from "react-router-dom";
 const ResumeAnalyzer=lazy(()=>import("./pages/ResumeAnalyzer"));
+const Rank=lazy(()=>import("./pages/Rank"));
 const AnalyticsDashboard=lazy(()=>import("./pages/AnalyticsDashboard"));
 import ShareInterviewExperience from "./pages/ShareInterviewExperience";
 const ContentEditorialConsole=lazy(()=>import("./pages/ContentEditorialConsole"));
@@ -93,6 +94,7 @@ function App() {
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/plans/:planId" element={<InterviewPlan />} />
                   <Route path="/resume-analyzer" element={<ResumeAnalyzer />} />
+                  <Route path="/rank" element={<Rank />} />
                   <Route path="/analytics" element={<AnalyticsDashboard />} />
                   <Route path="/share-interview-experience" element={<ShareInterviewExperience />} />
                   <Route path="/content-editorial" element={<EditorialErrorBoundary><ContentEditorialConsole /></EditorialErrorBoundary>} />

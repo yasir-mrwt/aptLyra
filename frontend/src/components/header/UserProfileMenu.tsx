@@ -147,7 +147,7 @@ export const UserProfileMenu = ({ user, onOpenModal }: UserProfileMenuProps) => 
           <div className="h-px bg-white/5 mx-4"></div>
 
           <p className="px-5 py-3 text-xs text-surface-400">Ranking unavailable · no verified global ranking</p>
-          <div className="flex gap-4 px-5 py-2 text-sm"><Link to="/analytics" onClick={()=>setIsOpen(false)}>Analytics</Link><Link to="/history" onClick={()=>setIsOpen(false)}>History</Link></div>
+          <div className="flex gap-4 px-5 py-2 text-sm"><Link to="/analytics" onClick={()=>setIsOpen(false)}>Analytics</Link><Link to="/history" onClick={()=>setIsOpen(false)}>History</Link><Link to="/rank" onClick={()=>setIsOpen(false)}>Rank</Link></div>
           {/* Actions */}
           <div className="p-2 space-y-1">
             <button
