@@ -1,3 +1,4 @@
+import {useScrollLock} from '../hooks/useScrollLock';
 import React, { useEffect, useRef, useId } from 'react';
 import type { ConfirmModalProps } from '../types/components';
 
@@ -11,13 +12,12 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
     cancelText = "Cancel",
     isDanger = false
 }) => {
+    useScrollLock(isOpen);
     const panel = useRef<HTMLDivElement>(null);
     const titleId = useId();
     useEffect(() => {
         if (!isOpen) return;
         const previous = document.activeElement as HTMLElement | null;
-        const overflow = document.body.style.overflow;
-        document.body.style.overflow = 'hidden';
         panel.current?.querySelector<HTMLButtonElement>('button')?.focus();
         const keyboard = (event: KeyboardEvent) => {
             if (event.key === 'Escape') onCancel();
@@ -29,7 +29,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
             if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
         };
         document.addEventListener('keydown', keyboard);
-        return () => { document.body.style.overflow = overflow; document.removeEventListener('keydown', keyboard); previous?.focus(); };
+        return () => { document.removeEventListener('keydown', keyboard); previous?.focus(); };
     }, [isOpen, onCancel]);
     if (!isOpen) return null;
 

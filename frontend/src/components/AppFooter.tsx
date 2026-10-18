@@ -1,0 +1,3 @@
+import {Link} from 'react-router-dom';
+import AptlyraMark from './AptlyraMark';
+export default function AppFooter(){return <footer className="home-footer max-w-7xl mx-auto px-6 py-8 print:hidden"><Link to="/" className="flex items-center gap-2 font-semibold text-white"><AptlyraMark className="w-7 h-7"/>Aptlyra</Link><p>© {new Date().getFullYear()} Aptlyra</p><nav aria-label="Footer" className="flex flex-wrap gap-5"><Link to="/share-interview-experience">Share a Question</Link><a href="/legal-notices.txt">Legal notices</a><a href="/animations/LICENSE.txt">Animation credits & license</a></nav></footer>;}

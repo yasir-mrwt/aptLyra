@@ -1,3 +1,4 @@
+import AppFooter from './components/AppFooter';
 import { useEffect, lazy, Suspense } from "react";
 import { Routes, Route } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
@@ -108,6 +109,7 @@ function App() {
             </motion.div>
           </AnimatePresence>
         </main>
+        {!location.pathname.startsWith("/interview/")&&<AppFooter/>}
       </div>
     </>
   )

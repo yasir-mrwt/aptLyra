@@ -246,24 +246,14 @@ const ReportCardPDF = ({ session }: ReportCardPDFProps) => {
                     Completed {dateStr}  ·  {questions.length} questions
                 </Text>
 
-                {/* Score summary */}
                 <View style={styles.scoreRow} wrap={false}>
-                    <View style={styles.scoreBoxAccent}>
-                        <Text style={styles.scoreValueLight}>{session.scoringVersion === "rubric-v1" ? session.reviewedSummary?.technicalScore ?? "Withheld" : session.overallScore ?? 0}</Text>
-                        <Text style={styles.scoreLabelLight}>{session.scoringVersion === "rubric-v1"?"Reviewed aggregate":"Legacy Overall Score"}</Text>
-                    </View>
-                    <View style={styles.scoreBox}>
-                        <Text style={styles.scoreValue}>{session.scoringVersion === "rubric-v1" ? `${session.reviewedSummary?.eligible || 0}/${session.reviewedSummary?.planned || 0}` : session.metrics?.avgTechnical ?? 0}</Text>
-                        <Text style={styles.scoreLabel}>{session.scoringVersion === "rubric-v1"?"Eligible originals":"Technical"}</Text>
-                    </View>
-                    <View style={styles.scoreBox}>
-                        <Text style={styles.scoreValue}>{session.scoringVersion === "rubric-v1" ? session.reviewedSummary?.abstained || 0 : session.metrics?.avgConfidence ?? 0}</Text>
-                        <Text style={styles.scoreLabel}>{session.scoringVersion === "rubric-v1"?"Abstained":"Legacy delivery"}</Text>
-                    </View>
+                    <View style={styles.scoreBoxAccent}><Text style={styles.scoreValueLight}>{individualPractice(session.questions).mean??"Not available"}</Text><Text style={styles.scoreLabelLight}>Individual practice /100</Text></View>
+                    <View style={styles.scoreBox}><Text style={styles.scoreValue}>{individualPractice(session.questions).scored}/{questions.length}</Text><Text style={styles.scoreLabel}>Answers scored</Text></View>
+                    <View style={styles.scoreBox}><Text style={styles.scoreValue}>{individualPractice(session.questions).unanswered}</Text><Text style={styles.scoreLabel}>Unanswered</Text></View>
                 </View>
-
-                <Text style={styles.feedback}>Individual practice summary: {individualPractice(session.questions).mean??"Unavailable"}{individualPractice(session.questions).mean!==null?"/100":""} · {individualPractice(session.questions).scored}/{individualPractice(session.questions).total} answers scored · {individualPractice(session.questions).provisional} provisional · {individualPractice(session.questions).missing} not evaluated. Separate from the reviewed aggregate.</Text>
-                {session.scoringVersion==="rubric-v1"&&<Text style={styles.feedback}>{reviewedCoverageExplanation}</Text>}
+                <Text style={styles.sectionTitle}>Scoring methodology</Text>
+                <Text style={styles.feedback}>Reviewed aggregate: {session.scoringVersion==="rubric-v1"?session.reviewedSummary?.technicalScore??"Not available":session.overallScore??"Not available"}. {session.reviewedSummary?`Eligible originals: ${session.reviewedSummary.eligible}/${session.reviewedSummary.planned}. Provisional: ${session.reviewedSummary.provisional}. Abstained: ${session.reviewedSummary.abstained}.`:"Historical scoring methodology."}</Text>
+                <Text style={styles.feedback}>{reviewedCoverageExplanation}</Text>
                 {/* Speech analytics */}
                 {speechQuestions.length > 0 && (
                     <>

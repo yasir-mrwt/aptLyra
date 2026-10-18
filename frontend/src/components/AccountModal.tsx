@@ -1,3 +1,4 @@
+import {useScrollLock} from '../hooks/useScrollLock';
 import { useState, useEffect, useRef } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { logout, updateProfile, uploadAvatar, reset } from "../features/auth/authSlice";
@@ -57,13 +58,23 @@ const AccountModal = ({ onClose }: { onClose: () => void }) => {
         preferredRole: user?.preferredRole || "",
     });
 
-    // Lock background scroll while modal is open
-    useEffect(() => {
-        document.body.style.overflow = "hidden";
-        return () => {
-            document.body.style.overflow = "";
-        };
-    }, []);
+    useScrollLock(true);
+    const panel=useRef<HTMLDivElement>(null);
+    useEffect(()=>{
+      const previous=document.activeElement as HTMLElement|null;
+      panel.current?.querySelector<HTMLButtonElement>('button')?.focus();
+      const keyboard=(event:KeyboardEvent)=>{
+        if(event.key==='Escape')onClose();
+        if(event.key!=='Tab')return;
+        const items=panel.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([type="file"]), select');
+        if(!items?.length)return;
+        const first=items[0],last=items[items.length-1];
+        if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+        if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+      };
+      document.addEventListener('keydown',keyboard);
+      return()=>{document.removeEventListener('keydown',keyboard);previous?.focus();};
+    },[onClose]);
 
     const onLogout = () => {
         dispatch(logout());
@@ -111,14 +122,15 @@ const AccountModal = ({ onClose }: { onClose: () => void }) => {
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="relative w-full max-w-md glass-card rounded-[2rem] overflow-visible shadow-2xl border border-white/5"
+                ref={panel} role="dialog" aria-modal="true" aria-label="Account settings"
+                className="relative max-h-[90dvh] overflow-y-auto w-full max-w-md bg-surface-900 glass-card rounded-[2rem] shadow-2xl border border-white/5"
             >
                 {/* ── Identity header ── */}
                 <div className="relative px-7 pt-7 pb-6 border-b border-white/5 overflow-hidden rounded-t-[2rem]">
                     <div className="absolute -top-20 -right-12 w-56 h-56 bg-primary-500/10 blur-3xl pointer-events-none" />
                     <div className="absolute -bottom-24 -left-16 w-48 h-48 bg-primary-500/5 blur-3xl pointer-events-none" />
 
-                    <button
+                    <button aria-label="Close account settings"
                         onClick={onClose}
                         className="absolute top-5 right-5 p-2 text-surface-500 hover:text-white transition-colors rounded-xl hover:bg-white/5 cursor-pointer z-20"
                     >
@@ -180,13 +192,13 @@ const AccountModal = ({ onClose }: { onClose: () => void }) => {
                 <div className="p-7 space-y-6">
                     {/* Name Input */}
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-surface-400 uppercase tracking-widest ml-1">Full Name</label>
+                        <label htmlFor="account-full-name" className="text-[10px] font-black text-surface-400 uppercase tracking-widest ml-1">Full Name</label>
                         <div className="relative group">
                             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-surface-600 group-focus-within:text-primary-400 transition-colors">
                                 <User size={16} />
                             </div>
                             <input
-                                type="text"
+                                type="text" id="account-full-name"
                                 value={formData.name}
                                 onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))}
                                 className="glass-input h-12 pl-12 text-sm font-bold w-full"

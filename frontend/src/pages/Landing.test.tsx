@@ -10,6 +10,9 @@ afterEach(()=>{cleanup();state.auth.user=null;state.role.userId=null;state.role.
 it('guests get a complete homepage and join/login links without a protected planner',()=>{
  render(<MemoryRouter><Landing/></MemoryRouter>);
  expect(screen.getByRole('heading',{name:/Your next interview/})).toBeTruthy();
+ expect(screen.getByRole('region',{name:'How Aptlyra works'})).toBeTruthy();
+ expect(screen.getByRole('list',{name:'Your interview practice journey'}).children).toHaveLength(4);
+ expect(screen.getByRole('link',{name:'Get Started'}).getAttribute('href')).toBe('/register');
  expect(screen.queryByRole('form',{name:'Real planner'})).toBeNull();
  expect(screen.getByRole('link',{name:'Join & plan an interview'}).getAttribute('href')).toBe('/register');
  expect(screen.getAllByRole('link',{name:'Log in'})[0].getAttribute('href')).toBe('/login');
@@ -18,8 +21,10 @@ it('guests get a complete homepage and join/login links without a protected plan
 it('signed-in homepage mounts the actual planner entry without a history wall',()=>{
  state.auth.user={id:'fixture',name:'Fixture'};render(<MemoryRouter><Landing/></MemoryRouter>);
  expect(screen.getByRole('form',{name:'Real planner'})).toBeTruthy();
+ expect(screen.getByRole('button',{name:'Start an Interview'})).toBeTruthy();
+ expect(screen.getByRole('region',{name:'How Aptlyra works'})).toBeTruthy();
  expect(screen.getByRole('button',{name:'Preview interview plan'})).toBeTruthy();
- expect(screen.getByRole('link',{name:'History'}).getAttribute('href')).toBe('/history');
+ expect(screen.queryByRole('contentinfo')).toBeNull(); // Shared app footer owns these links.
  expect(screen.getByRole('link',{name:/Share a question/}).getAttribute('href')).toBe('/share-interview-experience');
  expect(screen.queryByRole('link',{name:/Review questions/})).toBeNull();
 });
@@ -30,6 +35,6 @@ it('reviewer shortcut requires verified access for the current account',()=>{
  expect(screen.queryByRole('link',{name:/Review questions/})).toBeNull();
  state.role.userId='fixture';view.rerender(<MemoryRouter><Landing/></MemoryRouter>);
  expect(screen.getByRole('link',{name:/Review questions/}).getAttribute('href')).toBe('/content-editorial');
- expect(screen.getByText('© 2026 Aptlyra. All rights reserved.')).toBeTruthy();
+
  expect(screen.queryByText(/Original Aptlyra work by/)).toBeNull();
 });

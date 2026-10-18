@@ -54,91 +54,11 @@ const SessionCard = ({ session, onClick, onDelete }: SessionCardProps) => {
         return <Terminal size={size} className={className} />
     }
 
-    const statusColor = session.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : session.status === 'in-progress' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : session.status === 'cancelled' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-primary-500/10 text-primary-400 border-primary-500/20';
-
-    const iconBg = session.status === 'completed' ? 'bg-primary-500/10 text-primary-400' : session.status === 'cancelled' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-surface-800 text-surface-400';
-
-    const scoreColor = session.status === 'completed' ? ((session.overallScore ?? 0) > 75 ? 'text-emerald-400' : 'text-orange-400') : session.status === 'cancelled' ? 'text-red-500' : 'text-surface-600';
-
-    return (
-        <div
-            role="link"
-            tabIndex={0}
-            onKeyDown={(e) => { if(e.target===e.currentTarget && (e.key==="Enter" || e.key===" ")){e.preventDefault();onClick(session);} }}
-            onClick={() => onClick(session)}
-            className="group glass-card hover-lift rounded-3xl p-6 flex flex-col items-stretch gap-6 active:scale-[0.99] cursor-pointer relative will-change-transform overflow-hidden"
-        >
-            {/* Background pattern */}
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/[0.04] blur-2xl -mr-10 -mt-10 group-hover:bg-white/[0.07] transition-colors duration-500"></div>
-            <span aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></span>
-
-            <div className="flex items-center gap-5 relative z-10">
-                <div className={`w-14 h-14 shrink-0 rounded-2xl flex items-center justify-center shadow-[0_0_15px_rgba(0,0,0,0.5)] border border-white/5 ${iconBg}`}>
-                    {renderIcon()}
-                </div>
-                <div className="overflow-hidden grow">
-                    <h3 className="font-extrabold text-white text-lg truncate tracking-tight transition-colors font-display">
-                        {session.role}
-                    </h3>
-                    <div className="flex flex-wrap items-center gap-2 text-[10px] font-black text-surface-500 mt-1 uppercase tracking-widest">
-                        <span>{session.createdAt ? new Date(session.createdAt).toLocaleDateString() : 'N/A'}</span>
-                        <span className="w-1 h-1 rounded-full bg-surface-700"></span>
-                        <span className="text-surface-400">
-                            {session.level}
-                        </span>
-                        {session.company && session.company !== 'general' && (
-                            <>
-                                <span className="w-1 h-1 rounded-full bg-surface-700"></span>
-                                <span className="text-primary-400 px-1.5 py-0.5 rounded-md border border-primary-500/20 bg-primary-500/10">
-                                    {session.company.toUpperCase()}
-                                </span>
-                            </>
-                        )}
-                    </div>
-                </div>
-                <button
-                    aria-label="Delete interview"
-                    disabled={!isDeletable}
-                    onClick={(e) => { e.stopPropagation(); if (isDeletable) onDelete(e, session._id) }}
-                    className="p-2.5 text-surface-600 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer border border-transparent hover:border-red-500/20"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
-                </button>
-            </div>
-
-            {session.status==='completed'&&session.individualPractice&&<p className="text-sm">Individual practice: {session.individualPractice.mean??"Unavailable"}{session.individualPractice.mean!==null?"/100":""} · {session.individualPractice.scored}/{session.individualPractice.total} answers scored · {session.individualPractice.provisional ?? 0} provisional · {session.individualPractice.unanswered ?? 0} unanswered</p>}
-            {session.status==='completed'&&session.overallScore==null&&<p className="text-sm text-surface-300">{session.individualScoredAnswers||0} individually scored answers. A reviewed aggregate requires eligible reviewed originals; open the report for answer feedback.</p>}
-            <div className="flex items-center justify-between mt-2 pt-5 border-t border-white/5 relative z-10">
-                <div className="space-y-1">
-                    <p className="text-[9px] font-black text-surface-500 uppercase tracking-widest mb-1">Reviewed aggregate</p>
-                    <div className="flex items-center gap-3">
-                        <div className="relative w-8 h-8 flex items-center justify-center shrink-0">
-                            <svg className="w-8 h-8 -rotate-90 transform" viewBox="0 0 36 36">
-                                <circle cx="18" cy="18" r="15.9155" fill="none" className="stroke-surface-800" strokeWidth="4" />
-                                <circle cx="18" cy="18" r="15.9155" fill="none" className={`stroke-current ${scoreColor} transition-all duration-1000 ease-out`} strokeWidth="4" strokeDasharray={`${session.status === 'completed' ? (session.overallScore || 0) : 0}, 100`} strokeLinecap="round" />
-                            </svg>
-                            <span className={`absolute text-[9px] font-black tracking-tighter ${scoreColor}`}>
-                                {session.status === 'completed' && session.overallScore != null ? Math.round(session.overallScore) : '--'}
-                            </span>
-                        </div>
-                        <div className="flex flex-col">
-                            <span className={`text-base leading-none font-black ${scoreColor}`}>
-                                {session.status === 'completed' ? session.overallScore == null ? 'Unavailable' : session.overallScore.toFixed(1) : '—'}
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="flex flex-col items-end gap-2">
-                    <span className={`px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border ${statusColor}`}>{session.status}</span>
-                    <div className="text-primary-400 font-bold text-[10px] flex items-center gap-1 group-hover:gap-2 transition-all uppercase tracking-widest">
-                        {session.status === 'completed' ? 'Analytics' : session.status === 'cancelled' ? 'Abandoned' : 'Play'}
-                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"></path><polyline points="12 5 19 12 12 19"></polyline></svg>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
-
+    const practice=session.individualPractice;
+    return <article className="glass-card rounded-3xl p-6 space-y-5 border border-white/10">
+      <header className="flex gap-4 items-start"><div className="text-primary-300 mt-1">{renderIcon()}</div><div className="min-w-0 flex-1"><h3 className="font-display text-xl font-semibold text-white break-words">{session.role}</h3><p className="text-sm text-surface-300 mt-1">{session.level} · {session.createdAt?new Date(session.createdAt).toLocaleDateString():'Date unavailable'}{session.company&&session.company!=='general'?` · ${session.company}`:''}</p></div><span className="rounded-full bg-white/5 px-3 py-1 text-xs text-surface-300">{session.status}</span></header>
+      {session.status==='completed'&&<><div><p className="text-sm text-surface-300">Individual practice score</p><p className="text-3xl font-semibold text-white mt-1">{practice?.mean??'Not available'}{practice?.mean!=null&&<span className="text-base text-surface-400"> /100</span>}</p><p className="text-sm text-surface-300 mt-2">{practice?`${practice.scored}/${practice.total} answers scored · ${practice.unanswered??0} unanswered`:`${session.individualScoredAnswers??0} individually scored answers`}</p></div><details className="text-sm text-surface-300"><summary className="cursor-pointer">Scoring methodology</summary><p className="mt-2">Reviewed aggregate: {session.overallScore==null?'Not available':`${session.overallScore.toFixed(1)}/100`}. Only eligible reviewed originals contribute. Individual feedback remains available in the report.</p>{practice&&<p>{practice.provisional??0} provisional answers</p>}</details></>}
+      <div className="flex justify-between gap-3 pt-4 border-t border-white/10"><button className="btn-secondary px-4 py-2" onClick={()=>onClick(session)}>{session.status==='completed'?'Open report':session.status==='cancelled'?'View interview':'Continue interview'}</button><button aria-label="Delete interview" disabled={!isDeletable} className="text-sm text-surface-400 hover:text-rose-300 disabled:opacity-40" onClick={event=>{if(isDeletable)onDelete(event,session._id);}}>Delete</button></div>
+    </article>;
+};
 export default SessionCard;

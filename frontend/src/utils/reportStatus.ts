@@ -13,7 +13,7 @@ export function executionStatus(question:Question):string {
   if(question.executionEvidence)return `Execution completed — ${question.executionEvidence.status}: ${question.executionEvidence.summary}`;
   const objective=question.evaluation?.objective;
   if(objective?.status==="passed"||objective?.status==="failed")return `Execution completed — ${objective.status}`;
-  return question.executionTestId?"Execution not run":"Execution tests unavailable";
+  return question.isEvaluated && (question.evaluation?.status==="scored" || (!question.evaluation && typeof question.technicalScore==="number"))?"Evaluated by code review · Execution not run; no test result recorded":"Execution not run; no test result recorded";
 }
 export const reviewedCoverageExplanation="Individual practice scores and the reviewed aggregate measure different things. Only eligible original questions with reviewed rubrics count toward that aggregate. Established starter feedback and provisional dynamic feedback remain visible individually; they do not imply reviewed evidence.";
 
@@ -24,5 +24,6 @@ export function individualPractice(questions:Question[]){
  });
  return {mean:scores.length?Math.round(scores.reduce((a,b)=>a+b,0)/scores.length*10)/10:null,scored:scores.length,total:questions.length,
  provisional:questions.filter(q=>q.evaluation?.reasons.includes('practice_without_reviewed_scoring')).length,
+ unanswered:questions.filter(q=>q.intentionallyUnanswered||(!q.isSubmitted&&!q.answerLocked&&!q.isEvaluated)).length,
  missing:questions.filter(q=>!q.isEvaluated).length};
 }

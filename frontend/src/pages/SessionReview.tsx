@@ -111,14 +111,14 @@ const SessionReview = () => {
                 </div>
             </div>
 
-            <section className="glass-card p-5 my-5" aria-label="Individual practice summary"><h2>Individual practice summary</h2><p>{individualPractice(activeSession.questions).mean??"Unavailable"}{individualPractice(activeSession.questions).mean!==null?"/100":""} · {individualPractice(activeSession.questions).scored}/{individualPractice(activeSession.questions).total} answers scored · {individualPractice(activeSession.questions).provisional} provisional · {individualPractice(activeSession.questions).missing} not evaluated</p><p>Uses only stored individual scores. This is not the reviewed aggregate or a verified skill rating.</p></section>
-            <SessionReviewStats
+            <section className="glass-card p-5 my-5" aria-label="Individual practice summary"><h2>Individual practice summary</h2><p>{individualPractice(activeSession.questions).mean??"Not available"}{individualPractice(activeSession.questions).mean!==null?"/100":""} · {individualPractice(activeSession.questions).scored}/{individualPractice(activeSession.questions).total} answers scored · {individualPractice(activeSession.questions).unanswered} unanswered · {individualPractice(activeSession.questions).missing} not evaluated</p><p>Uses only stored individual scores. This is not the reviewed aggregate or a verified skill rating.</p></section>
+            <details className="glass-card p-5 my-5"><summary className="cursor-pointer font-semibold">Scoring methodology</summary><SessionReviewStats
                 reviewedSummary={activeSession.reviewedSummary}
-                overallScore={overallScore || 0}
-                avgTechnical={finalMetrics.avgTechnical || 0}
-                avgConfidence={finalMetrics.avgConfidence || 0}
+                overallScore={overallScore ?? null}
+                avgTechnical={finalMetrics.avgTechnical ?? null}
+                avgConfidence={finalMetrics.avgConfidence ?? null}
                 duration={formatDuration(startTime, endTime)}
-            />
+            /></details>
 
             <div className="glass-card rounded-3xl sm:rounded-[3rem] px-3 py-6 sm:p-10 relative group break-inside-avoid print:bg-surface-900 print:shadow-none transform-gpu">
                 <div className="absolute top-0 right-0 p-5 sm:p-10 opacity-5 pointer-events-none group-hover:opacity-10 transition-opacity print:hidden hidden sm:block">

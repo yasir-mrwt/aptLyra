@@ -1,3 +1,4 @@
+import {useScrollLock} from '../../hooks/useScrollLock';
 import { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
@@ -30,15 +31,14 @@ export const MobileNav = ({
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
   const restrictedLinks=roleNavigation(role);
+  useScrollLock(isOpen);
   useEffect(() => {
     if (!isOpen) return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     const closeOnDesktop = () => { if (window.innerWidth >= 1280) onClose(); };
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
     window.addEventListener("resize", closeOnDesktop);
     document.addEventListener("keydown", closeOnEscape);
-    return () => { document.body.style.overflow = previous; window.removeEventListener("resize", closeOnDesktop); document.removeEventListener("keydown", closeOnEscape); };
+    return () => { window.removeEventListener("resize", closeOnDesktop); document.removeEventListener("keydown", closeOnEscape); };
   }, [isOpen, onClose]);
 
   const handleLogout = async () => {
@@ -79,7 +79,7 @@ export const MobileNav = ({
         <div className="bg-surface-900/95 backdrop-blur-2xl px-6 py-8 space-y-6 text-center">
           {user ? (
             <>
-              <div
+              <button type="button"
                 onClick={() => {
                   onOpenModal();
                   onClose();
@@ -93,7 +93,7 @@ export const MobileNav = ({
                 <span className="text-sm font-black uppercase tracking-[0.2em] text-white">
                   {user.name}
                 </span>
-              </div>
+              </button>
               <Link
                 to="/dashboard"
                 onClick={onClose}

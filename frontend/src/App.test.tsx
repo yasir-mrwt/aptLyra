@@ -21,5 +21,7 @@ describe('App Component', () => {
       </Provider>
     );
     expect(container).toBeTruthy();
+    expect(container.querySelectorAll('footer')).toHaveLength(1);
+    expect(container.querySelector('a[href="/legal-notices.txt"]')).toBeTruthy();
   });
 });
