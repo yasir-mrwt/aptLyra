@@ -1,90 +1,38 @@
-import {editorialQueryCache} from "./editorialQueryCache";
-import axios from "axios";
-import type { AxiosInstance } from "axios";
+import {editorialQueryCache} from './editorialQueryCache';
+import axios, {type AxiosInstance, type InternalAxiosRequestConfig} from 'axios';
 
-interface FailedRequestQueue {
-    resolve: (value?: unknown) => void;
-    reject: (reason?: unknown) => void;
-}
+type RetryConfig = InternalAxiosRequestConfig & {_retry?:boolean; _aptlyraAccount?:string|null};
+const account=()=>{try{const user=JSON.parse(localStorage.getItem('user')||'null');return user?._id||user?.id||null;}catch{return null;}};
+const AUTH_PATHS=['/user/login','/user/register','/user/google','/user/refresh','/user/verify-otp','/user/resend-otp','/user/forgot-password','/user/reset-password'];
 
-let isRefreshing = false;
-let failedQueue: FailedRequestQueue[] = [];
-
-const processQueue = (error: unknown, token: string | null = null) => {
-    failedQueue.forEach((prom) => {
-        if (error) {
-            prom.reject(error);
-        } else {
-            prom.resolve(token);
-        }
-    });
-    failedQueue = [];
-};
-
-// A 401 from these endpoints means bad credentials / bad token input —
-// NOT an expired session. Refreshing would only add a pointless slow
-// roundtrip and surface the wrong error message.
-const AUTH_PATHS = ["/user/login", "/user/register", "/user/google", "/user/refresh", "/user/verify-otp", "/user/resend-otp", "/user/forgot-password", "/user/reset-password"];
-
-export const setupInterceptors = (apiInstance: AxiosInstance) => {
-    apiInstance.interceptors.response.use(
-        (response) => response,
-        async (error) => {
-            const originalRequest = error.config;
-            const isAuthRequest = AUTH_PATHS.some((p) => originalRequest?.url?.includes(p));
-
-            if (error.response?.status === 401 && !originalRequest._retry && !isAuthRequest) {
-                if (isRefreshing) {
-                    return new Promise(function (resolve, reject) {
-                        failedQueue.push({ resolve, reject });
-                    })
-                        .then(() => {
-                            return apiInstance(originalRequest);
-                        })
-                        .catch((err) => {
-                            return Promise.reject(err);
-                        });
-                }
-
-                originalRequest._retry = true;
-                isRefreshing = true;
-
-                try {
-                    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5002/api";
-                    // Call the refresh endpoint. It will automatically use the refresh_jwt cookie
-                    // and set the new jwt cookie on success.
-                    await axios.post(
-                        `${apiUrl}/user/refresh`,
-                        {},
-                        { withCredentials: true }
-                    );
-
-                    isRefreshing = false;
-                    processQueue(null, "success");
-                    // Notify sockets to reconnect since they might have disconnected due to auth error
-                    window.dispatchEvent(new Event("auth_token_refreshed"));
-                    return apiInstance(originalRequest);
-                } catch (refreshError) {
-                    isRefreshing = false;
-                    processQueue(refreshError, null);
-
-                    // Refresh failed (token expired/invalid) -> Logout
-                    if(!axios.isAxiosError(refreshError)||refreshError.response?.status!==401)return Promise.reject(refreshError);
-                    editorialQueryCache.setIdentity(null);
-                    localStorage.removeItem("user");
-                    if (window.location.pathname !== "/login") {
-                        window.location.href = "/login";
-                    }
-                    return Promise.reject(refreshError);
-                }
-            }
-
-            const backendErrorMsg = error.response?.data?.error?.message;
-            if (backendErrorMsg) {
-                error.message = backendErrorMsg;
-            }
-
-            return Promise.reject(error);
-        }
-    );
+// One cookie rotation owner, even when consumers configure separate Axios clients.
+let refresh:Promise<void>|null=null;
+export const setupInterceptors=(api:AxiosInstance)=>{
+ api.interceptors.request.use(config=>{Object.assign(config,{_aptlyraAccount:account()});return config;});
+ api.interceptors.response.use(response=>response,async error=>{
+  const original=error.config as RetryConfig|undefined;
+  const backendMessage=error.response?.data?.error?.message;
+  if(typeof backendMessage==="string")error.message=backendMessage;
+  const path='/'+(original?.url||'').replace(/^\//,'');
+  if(error.response?.status!==401 || !original || original._retry || AUTH_PATHS.some(p=>path.startsWith(p)))return Promise.reject(error);
+  const identity=original._aptlyraAccount===undefined?account():original._aptlyraAccount;
+  if(identity!==account())throw new axios.CanceledError('Account changed');
+  // Deduplicated reads can reject with the SAME AxiosError/config. Never mutate
+  // that config: every waiter must await refresh and replay its own clone once.
+  if(!refresh){
+   const request=axios.post(`${api.defaults.baseURL||import.meta.env.VITE_API_URL||'http://localhost:5002/api'}/user/refresh`,{}, {withCredentials:true,timeout:15000})
+    .then(()=>{if(identity!==account())throw new axios.CanceledError('Account changed');window.dispatchEvent(new Event('auth_token_refreshed'));})
+    .catch(failure=>{
+     if(identity===account() && axios.isAxiosError(failure) && failure.response?.status===401){
+      editorialQueryCache.setIdentity(null);localStorage.removeItem('user');
+      if(window.location.pathname!=='/login')window.location.assign('/login');
+     }
+     throw failure;
+    }).finally(()=>{if(refresh===request)refresh=null;});
+   refresh=request;
+  }
+  await refresh;
+  if(identity!==account())throw new axios.CanceledError('Account changed');
+  return api({...original,_retry:true} as RetryConfig);
+ });
 };

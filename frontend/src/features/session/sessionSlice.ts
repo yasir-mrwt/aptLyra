@@ -1,3 +1,4 @@
+import {editorialQueryCache} from "../../services/editorialQueryCache";
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import type { PayloadAction } from "@reduxjs/toolkit";
 import api from "../../services/api";
@@ -47,6 +48,9 @@ export const getSessionById = createAsyncThunk<Session, string, { rejectValue: s
     async (sessionId, thunkAPI) => {
         try {
             const response = await api.get<Session>(`/sessions/${sessionId}`);
+            const saved=response.data as Session & {session?:Session};
+            // Polling/report reads recover progress even if the worker socket was missed.
+            if((saved.session||saved).status==="completed")editorialQueryCache.invalidatePrefix("http:");
             return response.data;
         } catch (error) {
             if(isAxiosError(error) && [403,404].includes(error.response?.status || 0))thunkAPI.dispatch({type:"session/clearActiveSession",payload:sessionId});

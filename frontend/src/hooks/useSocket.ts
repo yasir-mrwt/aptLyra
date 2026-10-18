@@ -1,3 +1,4 @@
+import {editorialQueryCache} from "../services/editorialQueryCache";
 import { useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { socketUpdateSession,getSessionById,reset,setSocketConnection } from "../features/session/sessionSlice";
@@ -51,6 +52,7 @@ const useSocket = () => {
         socketRef.current = socket;
         dispatchRef.current(setSocketConnection("connecting"));
         const seenEvents=new Set<string>();
+        let hasConnected=false;
         const refreshOwnedSession=()=>{
             const current=activeRef.current,route=pathRef.current.match(/^\/(?:interview|review)\/([^/]+)/)?.[1];
             if(current && current.user===userId && (!route || route===current._id))void dispatchRef.current(getSessionById(current._id));
@@ -61,6 +63,8 @@ const useSocket = () => {
             console.log('Connected to socket');
             // Re-join the user's room on reconnection (crucial for Render cold starts)
             socket.emit('joinRoom', { userId });
+            if(hasConnected)editorialQueryCache.invalidatePrefix("http:");
+            hasConnected=true;
             refreshOwnedSession();
         });
 
@@ -82,10 +86,12 @@ const useSocket = () => {
             if(data.revision!==undefined){
                 if(!Number.isSafeInteger(data.revision) || !data.eventId || seenEvents.has(data.eventId))return;
                 seenEvents.add(data.eventId);if(seenEvents.size>200)seenEvents.delete(seenEvents.values().next().value!);
+                if(data.state==="completed"||data.state==="succeeded")editorialQueryCache.invalidatePrefix("http:");
                 const current=activeRef.current;
                 if(current?._id===data.sessionId && data.revision>(current.revision ?? -1))refreshOwnedSession();
                 return;
             }
+            if((data.status||"").toUpperCase()==="SESSION COMPLETED")editorialQueryCache.invalidatePrefix("http:");
             const routeSession=pathRef.current.match(/^\/(?:interview|review)\/([^/]+)/)?.[1];
             if(routeSession && routeSession!==data.sessionId)return;
             // Planner confirmation owns new-session navigation. Historical events

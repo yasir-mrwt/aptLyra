@@ -1,5 +1,5 @@
 import axios from "axios";
-import { editorialQueryCache } from "./editorialQueryCache";
+import { editorialQueryCache, QuerySupersededError } from "./editorialQueryCache";
 import { setupInterceptors } from "./axiosSetup";
 
 /**
@@ -17,9 +17,10 @@ const adapter = axios.getAdapter(apiClient.defaults.adapter);
 const account = () => { try { const user = JSON.parse(localStorage.getItem("user") || "null"); return user?._id || user?.id || null; } catch { return null; } };
 apiClient.defaults.adapter = async config => {
     const identity = account();
+    Object.assign(config,{_aptlyraAccount:identity});
     editorialQueryCache.setIdentity(identity);
     const path = (config.url || "").split("?")[0].replace(/\/$/, "");
-    const cacheable = config.method === "get" && identity && ["/analytics", "/gamification/profile", "/gamification/activity", "/sessions", "/resume", "/interview-plans/capabilities"].includes(path);
+    const cacheable = config.method === "get" && identity && ["/content-intelligence/submissions", "/analytics", "/gamification/profile", "/gamification/activity", "/sessions", "/resume", "/interview-plans/capabilities"].includes(path);
     const fetch = async () => {
         const response = await adapter(config);
         if (identity !== account()) throw new axios.CanceledError("Account changed");
@@ -27,11 +28,22 @@ apiClient.defaults.adapter = async config => {
     };
     if (cacheable) {
         const key = `http:${config.url}:${JSON.stringify(config.params || {})}`;
-        const response = await editorialQueryCache.load(key, fetch, {allowStaleOnError:false});
-        return { ...response!, config };
+        try {
+            const response = await editorialQueryCache.load(key, fetch, {allowStaleOnError:false});
+            return { ...response!, config };
+        } catch(error) {
+            // A successful mutation/worker event can supersede an in-flight read.
+            // Retry once under the same account; never reuse its stale response.
+            if(!(error instanceof QuerySupersededError) || identity!==account())throw error;
+            const response=await editorialQueryCache.load(key,fetch,{force:true,allowStaleOnError:false});
+            return {...response!,config};
+        }
     }
     const response = await fetch();
-    if (config.method !== "get") editorialQueryCache.invalidatePrefix("http:");
+    if (config.method !== "get") {
+        editorialQueryCache.invalidatePrefix("http:");
+        if(path.startsWith("/content-intelligence/"))editorialQueryCache.invalidatePrefix("editorial:");
+    }
     return response;
 };
 setupInterceptors(apiClient);

@@ -1,3 +1,4 @@
+export class QuerySupersededError extends Error { constructor(){super("Query superseded");this.name="QuerySupersededError";} }
 export type EditorialQueryState<T = unknown> = {
   data: T | undefined;
   loadedAt: number;
@@ -48,7 +49,7 @@ export const editorialQueryCache = {
     entries.set(key, { ...previous, loading: true, error: null, stale: previous.data !== undefined });
     emit();
     const request = fetcher().then(data => {
-      if (generation !== startedGeneration || (revisions.get(key)||0) !== startedRevision) throw new Error("Query superseded");
+      if (generation !== startedGeneration || (revisions.get(key)||0) !== startedRevision) throw new QuerySupersededError();
       if (generation === startedGeneration && (revisions.get(key)||0) === startedRevision) { entries.set(key, { data, loadedAt: Date.now(), loading: false, error: null, stale: false }); emit(); }
       return data;
     }).catch(error => {
@@ -61,7 +62,7 @@ export const editorialQueryCache = {
     pending.set(key, request);
     return request;
   },
-  invalidatePrefix(prefix: string) { this.invalidate([...entries.keys()].filter(key => key.startsWith(prefix))); },
+  invalidatePrefix(prefix: string) { this.invalidate([...entries.keys()].filter(key => key.startsWith(prefix))); window.dispatchEvent(new CustomEvent("aptlyra-data-invalidated",{detail:{prefix}})); },
   invalidate(keys: string[]) {
     for (const key of keys) {
       revisions.set(key,(revisions.get(key)||0)+1);

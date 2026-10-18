@@ -1,3 +1,4 @@
+import {editorialQueryCache} from "../services/editorialQueryCache";
 import {afterEach,describe,it,expect,vi} from "vitest";
 import {renderHook,act,waitFor,cleanup} from "@testing-library/react";
 import {Provider} from "react-redux";
@@ -41,4 +42,16 @@ it("ignores another interview's historical events without navigating or replacin
  const {result}=renderHook(()=>{useSocket();return useLocation().pathname;},{wrapper:({children})=><Provider store={store}><MemoryRouter initialEntries={["/interview/owned"]}>{children}</MemoryRouter></Provider>});
  act(()=>{for(const status of ["QUESTIONS_READY","SESSION COMPLETED","AI_ERROR"])fixture.events.get("sessionUpdate")?.({sessionId:"another",status,message:"Q1 failed",session:{...saved,_id:"another"}});});
  expect(result.current).toBe("/interview/owned");expect(store.getState().session.activeSession).toEqual(saved);expect(store.getState().session.isError).toBe(false);
+});
+
+it("refreshes progress for a completed background interview and deduplicates its event",async()=>{
+ const store=configureStore({reducer:{session:sessionReducer,auth:()=>({user:{id:"owner"}})}});
+ await editorialQueryCache.load('http:/gamification/profile',async()=>({xp:100}));
+ const invalidated=vi.fn();window.addEventListener('aptlyra-data-invalidated',invalidated);
+ renderHook(()=>useSocket(),{wrapper:({children})=><Provider store={store}><MemoryRouter initialEntries={["/rank"]}>{children}</MemoryRouter></Provider>});
+ const event={sessionId:'background',revision:9,eventId:'completion-9',state:'completed'};
+ act(()=>{fixture.events.get('sessionUpdate')?.(event);fixture.events.get('sessionUpdate')?.(event);});
+ expect(editorialQueryCache.get('http:/gamification/profile').stale).toBe(true);
+ expect(invalidated).toHaveBeenCalledTimes(1);expect(api.get).not.toHaveBeenCalled();
+ window.removeEventListener('aptlyra-data-invalidated',invalidated);
 });
