@@ -21,9 +21,11 @@ const bankData = { starterQuestions: 48, approvedNewQuestions: 0, totalAvailable
 beforeEach(() => {
   vi.clearAllMocks();
   editorialQueryCache.clear();
+  store.dispatch({type:"auth/login/fulfilled",payload:{_id:"editor",name:"Editor",email:"editor@example.test"}});
   store.dispatch(clearRole());
   store.dispatch({ type: "role/fetchCurrent/fulfilled", payload: { userId: "editor", role: "reviewer", reviewerLinked: true,canReview:true,reviewerReason:null } });
   get.mockImplementation((path: string) => {
+    editorialQueryCache.setIdentity("editor"); // Match the real API adapter account identity.
     if (path === "/content-intelligence/interview-bank") return Promise.resolve({ data: bankData });
     if (path === "/content-intelligence/review/candidates") return Promise.resolve({ data: [] });
     if (path === "/content-intelligence/review-queue") return Promise.resolve({ data: [] });
@@ -88,6 +90,7 @@ describe("simplified editorial workflow", () => {
       round_type: "technical", topics: ["SQL"], normalized_text: "A user submitted this practice question.", duplicate_links: [],
       derivation_type: "direct", confidence: null, extraction_metadata: {}, ai_review: null, ai_processing_consent: true, model_processing_allowed: true };
     get.mockImplementation((path: string) => {
+    editorialQueryCache.setIdentity("editor"); // Match the real API adapter account identity.
       if (path === "/content-intelligence/interview-bank") return Promise.resolve({ data: bankData });
       if (path === "/content-intelligence/review/candidates") return Promise.resolve({ data: [candidate] });
       return Promise.resolve({ data: [] });
@@ -161,4 +164,13 @@ it('shows immediate saving feedback, blocks duplicate writes and confirms reject
  fireEvent.click(card.getByRole('button',{name:'Reject'}));expect(post).toHaveBeenCalledTimes(1);
  expect(card.getByRole('group',{name:'Confirm rejection'})).toBeTruthy();
  fireEvent.click(card.getByRole('button',{name:'Cancel'}));expect(post).toHaveBeenCalledTimes(1);
+});
+it('shows loading instead of zero totals and avoids loading optional scoring tools',async()=>{
+ let release!:(value:unknown)=>void;
+ get.mockImplementation((path:string)=>path==='/content-intelligence/interview-bank'?new Promise(resolve=>{release=resolve;}):Promise.resolve({data:[]}));
+ renderConsole();expect(screen.getByText('Loading interview bank totals…')).toBeTruthy();expect(screen.queryByLabelText('Interview bank totals')).toBeNull();
+ release({data:bankData});await screen.findByLabelText('Interview bank totals');
+ expect(get.mock.calls.map(([path])=>path)).toEqual(['/content-intelligence/interview-bank']);
+ const details=screen.getByText('Improve scoring quality').closest('details')!;details.open=true;fireEvent(details,new Event('toggle'));
+ await waitFor(()=>expect(get).toHaveBeenCalledWith('/content-intelligence/scoring-queue'));
 });

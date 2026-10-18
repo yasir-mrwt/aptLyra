@@ -27,22 +27,24 @@ export default function ContentEditorialConsole(){
   const roleState=useSelector((state:RootState)=>state.role);
   const cacheVersion=useSyncExternalStore(editorialQueryCache.subscribe,editorialQueryCache.getVersion);
   const appRole=roleState.status==="ready"?roleState.role||"user":"user";
-  const apiRoleReady=roleState.status==="ready"&&roleState.canReview&&roleState.reviewerLinked&&["owner","admin","reviewer"].includes(appRole);
-  const identity=roleState.userId?`${roleState.userId}:${roleState.status}:${roleState.role||""}:${roleState.reviewerLinked}`:null;
-  const [tab,setTab]=useState<Tab>("bank"),[candidates,setCandidates]=useState<Candidate[]>([]),[submissions,setSubmissions]=useState<Submission[]>([]),[scoring,setScoring]=useState<ScoringItem[]>([]),[references,setReferences]=useState<Reference[]>([]),[manualReferences,setManualReferences]=useState<ManualReference[]>([]),[sources,setSources]=useState<Source[]>([]),[trends,setTrends]=useState<Trend[]>([]),[bank,setBank]=useState<InterviewBank>({starterQuestions:0,approvedNewQuestions:0,totalAvailable:0,questions:[]}),[competencies,setCompetencies]=useState<Competency[]>([]),[history,setHistory]=useState<Record<string,unknown>[]>([]),[historyKey,setHistoryKey]=useState(""),[days,setDays]=useState(90),[message,setMessage]=useState(""),[busy,setBusy]=useState(false),[candidateSearch,setCandidateSearch]=useState(""),[candidatePage,setCandidatePage]=useState(0),[manualRecordId,setManualRecordId]=useState<string|undefined>(),[manualQuestionText,setManualQuestionText]=useState("");
+  const accountId=useSelector((state:RootState)=>state.auth.user?._id||state.auth.user?.id);
+  const apiRoleReady=roleState.userId===accountId&&roleState.status==="ready"&&roleState.canReview&&roleState.reviewerLinked&&["owner","admin","reviewer"].includes(appRole);
+  const identity=roleState.userId?`${accountId}:${roleState.userId}:${roleState.status}:${roleState.role||""}:${roleState.reviewerLinked}:${roleState.canReview}`:null;
+  const scoped=useCallback((path:string)=>`editorial:${identity}:${path}`,[identity]);
+  const [tab,setTab]=useState<Tab>("bank"),[candidates,setCandidates]=useState<Candidate[]>([]),[submissions,setSubmissions]=useState<Submission[]>([]),[scoring,setScoring]=useState<ScoringItem[]>([]),[references,setReferences]=useState<Reference[]>([]),[manualReferences,setManualReferences]=useState<ManualReference[]>([]),[sources,setSources]=useState<Source[]>([]),[trends,setTrends]=useState<Trend[]>([]),[bank,setBank]=useState<InterviewBank|null>(null),[competencies,setCompetencies]=useState<Competency[]>([]),[history,setHistory]=useState<Record<string,unknown>[]>([]),[historyKey,setHistoryKey]=useState(""),[days,setDays]=useState(90),[message,setMessage]=useState(""),[busy,setBusy]=useState(false),[candidateSearch,setCandidateSearch]=useState(""),[candidatePage,setCandidatePage]=useState(0),[manualRecordId,setManualRecordId]=useState<string|undefined>(),[manualQuestionText,setManualQuestionText]=useState("");
   useEffect(()=>{
-    editorialQueryCache.setIdentity(identity);
-    setCandidates([]);setSubmissions([]);setScoring([]);setReferences([]);setManualReferences([]);setSources([]);setTrends([]);setBank({starterQuestions:0,approvedNewQuestions:0,totalAvailable:0,questions:[]});setCompetencies([]);setHistory([]);
+    setCandidates([]);setSubmissions([]);setScoring([]);setReferences([]);setManualReferences([]);setSources([]);setTrends([]);setBank(null);setCompetencies([]);setHistory([]);
   },[identity]);
+  const [showScoring,setShowScoring]=useState(false);
   const activePaths=useMemo(()=>{
     switch(tab){
-      case "bank":return apiRoleReady?["/content-intelligence/interview-bank","/content-intelligence/scoring-queue","/content-intelligence/technical-references","/content-intelligence/review/manual-references"]:[];
+      case "bank":return apiRoleReady?["/content-intelligence/interview-bank",...(showScoring?["/content-intelligence/scoring-queue","/content-intelligence/technical-references","/content-intelligence/review/manual-references"]:[])]:[];
       case "review":return apiRoleReady?["/content-intelligence/review/candidates","/content-intelligence/review/competencies"]:[];
       case "sources":return apiRoleReady&&(appRole==="owner"||appRole==="admin")?["/content-intelligence/sources"]:[];
     }
-  },[apiRoleReady,appRole,tab]);
+  },[apiRoleReady,appRole,tab,showScoring]);
   const assignCachedData=useCallback(()=>{
-    const data=<T,>(key:string):T|undefined=>editorialQueryCache.get<T>(key).data;
+    const data=<T,>(key:string):T|undefined=>editorialQueryCache.get<T>(scoped(key)).data;
     const candidatesData=data<Candidate[]>("/content-intelligence/review/candidates");if(candidatesData)setCandidates(candidatesData);
     const bankData=data<InterviewBank>("/content-intelligence/interview-bank");if(bankData)setBank(bankData);
     const competenciesData=data<Competency[]>("/content-intelligence/review/competencies");if(competenciesData)setCompetencies(competenciesData);
@@ -51,20 +53,20 @@ export default function ContentEditorialConsole(){
     const referenceData=data<Reference[]>("/content-intelligence/technical-references");if(referenceData)setReferences(referenceData);
     const manualData=data<ManualReference[]>("/content-intelligence/review/manual-references");if(manualData)setManualReferences(manualData);
     const sourceData=data<Source[]>("/content-intelligence/sources");if(sourceData)setSources(sourceData);
-  },[]);
+  },[scoped]);
   const load=useCallback(async(force=false)=>{
-    await Promise.all(activePaths.map(key=>editorialQueryCache.load(key,async()=> (await apiClient.get(key)).data,{force}).catch(()=>undefined)));
+    await Promise.all(activePaths.map(key=>editorialQueryCache.load(scoped(key),async()=> (await apiClient.get(key)).data,{force}).catch(()=>undefined)));
     assignCachedData();
-  },[activePaths,assignCachedData]);
+  },[activePaths,assignCachedData,scoped]);
   useEffect(()=>{void load();},[load]);
-  useEffect(()=>{assignCachedData();if(historyKey){const cached=editorialQueryCache.get<Record<string,unknown>[]>(historyKey).data;if(cached)setHistory(cached);}},[assignCachedData,cacheVersion,historyKey]);
+  useEffect(()=>{assignCachedData();if(historyKey){const cached=editorialQueryCache.get<Record<string,unknown>[]>(scoped(historyKey)).data;if(cached)setHistory(cached);}},[assignCachedData,cacheVersion,historyKey,scoped]);
   const roleLoading=roleState.status==="idle"||roleState.status==="loading";
-  const loading=roleLoading||activePaths.some(key=>editorialQueryCache.get(key).loading&&editorialQueryCache.get(key).data===undefined);
-  const refreshing=activePaths.some(key=>editorialQueryCache.get(key).loading&&editorialQueryCache.get(key).data!==undefined);
-  const loadErrors=activePaths.filter(key=>editorialQueryCache.get(key).error).map(key=>`${sectionName(key)} could not be loaded.`);
+  const loading=roleLoading||activePaths.some(key=>editorialQueryCache.get(scoped(key)).loading&&editorialQueryCache.get(scoped(key)).data===undefined);
+  const refreshing=activePaths.some(key=>editorialQueryCache.get(scoped(key)).loading&&editorialQueryCache.get(scoped(key)).data!==undefined);
+  const loadErrors=activePaths.filter(key=>editorialQueryCache.get(scoped(key)).error).map(key=>`${sectionName(key)} could not be loaded.`);
   // Cache changes must refresh the section badges even when the key is unchanged.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- cacheVersion intentionally refreshes cached labels.
-  const countLabel=useCallback((key:string)=>{const state=editorialQueryCache.get<unknown[]>(key);if(state.error&&state.data===undefined)return "Error";if(!state.data)return "—";return `${state.data.length}${state.stale?"*":""}`;},[cacheVersion]);
+  const countLabel=useCallback((key:string)=>{const state=editorialQueryCache.get<unknown[]>(scoped(key));if(state.error&&state.data===undefined)return "Error";if(!state.data)return "—";return `${state.data.length}${state.stale?"*":""}`;},[cacheVersion,scoped]);
   const invalidateForTab=()=>tab==="review"?["/content-intelligence/review/candidates","/content-intelligence/review-queue","/content-intelligence/scoring-queue","/content-intelligence/technical-references","/content-intelligence/review/manual-references","/content-intelligence/review/competencies","/content-intelligence/interview-bank"]:tab==="sources"?["/content-intelligence/sources"]:["/content-intelligence/interview-bank","/content-intelligence/scoring-queue","/content-intelligence/technical-references","/content-intelligence/review/manual-references"];
   const [indexingReady,setIndexingReady]=useState<boolean|null>(null);
   useEffect(()=>{
@@ -74,7 +76,7 @@ export default function ContentEditorialConsole(){
     return()=>{active=false;};
   },[tab,apiRoleReady]);
   const actionInFlight=useRef(false);
-  const act:EditorialAction=async(work,success,invalidates)=>{if(actionInFlight.current)return false;actionInFlight.current=true;setBusy(true);setMessage("");try{await work();editorialQueryCache.invalidate([...new Set([...invalidateForTab(),...(invalidates||[])])]);setMessage(success);await load(true);assignCachedData();return true;}catch(error){const response=(error as {response?:{data?:{code?:string;message?:string}}})?.response?.data;setMessage(editorialActionMessage(response?.code,response?.message));editorialQueryCache.invalidate(invalidateForTab());await load(true);return false;}finally{actionInFlight.current=false;setBusy(false);}};
+  const act:EditorialAction=async(work,success,invalidates)=>{if(actionInFlight.current)return false;actionInFlight.current=true;setBusy(true);setMessage("");try{await work();editorialQueryCache.invalidate([...new Set([...invalidateForTab(),...(invalidates||[])])].map(scoped));setMessage(success);await load(true);assignCachedData();return true;}catch(error){const response=(error as {response?:{data?:{code?:string;message?:string}}})?.response?.data;setMessage(editorialActionMessage(response?.code,response?.message));editorialQueryCache.invalidate(invalidateForTab().map(scoped));await load(true);return false;}finally{actionInFlight.current=false;setBusy(false);}};
   const tabs=useMemo(()=>[
     {id:"bank" as const,label:"Interview Bank"},
     {id:"review" as const,label:`Review Queue · ${countLabel("/content-intelligence/review/candidates")}`},
@@ -89,13 +91,14 @@ export default function ContentEditorialConsole(){
     {message&&<p role="status" className="rounded-lg border border-cyan-300/30 p-3 text-sm">{message}</p>}
     {loadErrors.map(error=><p key={error} role="alert" className="rounded-lg border border-amber-300/30 p-3 text-sm text-amber-100">{error} <button type="button" onClick={()=>void load(true)} className="underline">Retry</button> Other sections remain available.</p>)}
     {loading&&<div aria-label="Loading editorial section" className="space-y-3" aria-busy="true"><div className="grid grid-cols-2 gap-2 sm:grid-cols-5">{Array.from({length:5},(_,index)=><span key={index} className="h-10 animate-pulse rounded bg-white/10"/> )}</div><div className="h-28 animate-pulse rounded-xl bg-white/5"/></div>}
-    {tab==="bank"&&apiRoleReady&&<><InterviewBankView bank={bank} scoring={scoring} references={references} busy={busy} act={act}/><details className="rounded-xl border border-white/10 p-4"><summary className="cursor-pointer">Improve scoring quality</summary><p className="my-3 text-sm">Optional: practice questions already work in interviews. Add reviewed evidence and a scoring guide for reviewed scoring.</p><ManualReferenceWorkflow items={manualReferences} error={null} loading={loading} busy={busy} act={act} onRetry={()=>void load(true)}/><ReferenceCatalog references={references} loading={loading} error={null}/>{scoring.map(item=><ScoringCard key={item.question_version_id} item={item} references={references} busy={busy} act={act}/>)}</details></>}
-    {tab==="sources"&&(appRole==="owner"||appRole==="admin")&&<><SourceRegistry sources={sources} busy={busy} act={act} onHistory={async id=>{const key=`/content-intelligence/sources/${id}/collections`;setHistoryKey(key);const result=await editorialQueryCache.load(key,async()=> (await apiClient.get(key)).data);if(Array.isArray(result))setHistory(result);}}/><details className="rounded-xl border border-white/10 p-4"><summary className="cursor-pointer font-medium">Advanced history, trends and audit</summary><div className="mt-3 space-y-3"><div className="flex flex-wrap gap-3"><label className="text-sm">Trend window <select value={days} onChange={event=>setDays(Number(event.target.value))} className="ml-2 rounded bg-slate-800 p-2"><option value={30}>30 days</option><option value={90}>90 days</option><option value={180}>180 days</option></select></label><button type="button" onClick={()=>void editorialQueryCache.load(`/content-intelligence/trends?days=${days}`,async()=> (await apiClient.get(`/content-intelligence/trends?days=${days}`)).data).then(value=>{if(Array.isArray(value))setTrends(value);})} className="rounded border border-white/20 px-3 py-2 text-sm">Load trends</button></div>{history.length>0&&<div className="space-y-2"><h2 className="font-medium">Collection history</h2>{history.map((row,index)=><pre key={String(row.id||index)} className="overflow-auto rounded border border-white/10 p-3 text-xs">{JSON.stringify(row,null,2)}</pre>)}</div>}{trends.map((trend,index)=><p key={`${trend.topic}-${index}`} className="text-sm">{trend.topic} · {trend.trendLabel} · {trend.distinctRecords} reviewed records</p>)}</div></details></>}
+    {tab==="bank"&&apiRoleReady&&!bank&&!loadErrors.length&&<p role="status">Loading interview bank totals…</p>}
+    {tab==="bank"&&apiRoleReady&&bank&&<><InterviewBankView bank={bank} scoring={scoring} references={references} busy={busy} act={act} onScoringRequest={()=>setShowScoring(true)} scoringLoading={loading}/><details onToggle={event=>{if(event.currentTarget.open)setShowScoring(true);}} className="rounded-xl border border-white/10 p-4"><summary className="cursor-pointer">Improve scoring quality</summary><p className="my-3 text-sm">Optional: practice questions already work in interviews. Add reviewed evidence and a scoring guide for reviewed scoring.</p><ManualReferenceWorkflow items={manualReferences} error={null} loading={loading} busy={busy} act={act} onRetry={()=>void load(true)}/><ReferenceCatalog references={references} loading={loading} error={null}/>{scoring.map(item=><ScoringCard key={item.question_version_id} item={item} references={references} busy={busy} act={act}/>)}</details></>}
+    {tab==="sources"&&(appRole==="owner"||appRole==="admin")&&<><SourceRegistry sources={sources} busy={busy} act={act} onHistory={async id=>{const key=`/content-intelligence/sources/${id}/collections`;setHistoryKey(key);const result=await editorialQueryCache.load(scoped(key),async()=> (await apiClient.get(key)).data);if(Array.isArray(result))setHistory(result);}}/><details className="rounded-xl border border-white/10 p-4"><summary className="cursor-pointer font-medium">Advanced history, trends and audit</summary><div className="mt-3 space-y-3"><div className="flex flex-wrap gap-3"><label className="text-sm">Trend window <select value={days} onChange={event=>setDays(Number(event.target.value))} className="ml-2 rounded bg-slate-800 p-2"><option value={30}>30 days</option><option value={90}>90 days</option><option value={180}>180 days</option></select></label><button type="button" onClick={()=>void editorialQueryCache.load(scoped(`/content-intelligence/trends?days=${days}`),async()=> (await apiClient.get(`/content-intelligence/trends?days=${days}`)).data).then(value=>{if(Array.isArray(value))setTrends(value);})} className="rounded border border-white/20 px-3 py-2 text-sm">Load trends</button></div>{history.length>0&&<div className="space-y-2"><h2 className="font-medium">Collection history</h2>{history.map((row,index)=><pre key={String(row.id||index)} className="overflow-auto rounded border border-white/10 p-3 text-xs">{JSON.stringify(row,null,2)}</pre>)}</div>}{trends.map((trend,index)=><p key={`${trend.topic}-${index}`} className="text-sm">{trend.topic} · {trend.trendLabel} · {trend.distinctRecords} reviewed records</p>)}</div></details></>}
     {tab==="review"&&apiRoleReady&&<ReviewQueueWorkspace candidates={candidates} submissions={submissions} scoring={scoring} references={references} manualReferences={manualReferences} competencies={competencies} busy={busy} loading={loading} act={act} search={candidateSearch} onSearch={value=>{setCandidateSearch(value);setCandidatePage(0);}} page={candidatePage} onPage={setCandidatePage} recordId={manualRecordId} setRecordId={setManualRecordId} questionText={manualQuestionText} setQuestionText={setManualQuestionText} apiRoleReady={apiRoleReady} reviewerReason={roleState.reviewerReason} onRetry={()=>void load(true)}/>}
   </section>;
 }
 
-function InterviewBankView({bank,scoring,references,busy,act}:{bank:InterviewBank;scoring:ScoringItem[];references:Reference[];busy:boolean;act:EditorialAction}){
+function InterviewBankView({bank,scoring,references,busy,act,onScoringRequest,scoringLoading}:{onScoringRequest:()=>void;scoringLoading:boolean;bank:InterviewBank;scoring:ScoringItem[];references:Reference[];busy:boolean;act:EditorialAction}){
   const [search,setSearch]=useState(""),[topic,setTopic]=useState(""),[difficulty,setDifficulty]=useState(""),[origin,setOrigin]=useState("");
   const topics=[...new Set(bank.questions.map(question=>question.topic))].sort();
   const rows=bank.questions.filter(question=>`${question.question_text} ${question.topic}`.toLowerCase().includes(search.toLowerCase())&&
@@ -105,8 +108,9 @@ function InterviewBankView({bank,scoring,references,busy,act}:{bank:InterviewBan
     <div className="grid gap-3 sm:grid-cols-3" aria-label="Interview bank totals">
       <article className="rounded-xl border border-cyan-300/20 bg-cyan-950/20 p-4"><p className="text-sm text-surface-300">Starter Questions</p><p className="mt-1 text-3xl font-semibold">{bank.starterQuestions}</p><p className="mt-1 text-sm text-emerald-200">Ready for practice</p></article>
       <article className="rounded-xl border border-white/10 bg-slate-900/50 p-4"><p className="text-sm text-surface-300">Approved New Questions</p><p className="mt-1 text-3xl font-semibold">{bank.approvedNewQuestions}</p><p className="mt-1 text-sm text-surface-400">Available for practice</p></article>
-      <article className="rounded-xl border border-white/10 bg-slate-900/50 p-4"><p className="text-sm text-surface-300">Total Available</p><p className="mt-1 text-3xl font-semibold">{bank.totalAvailable}</p><p className="mt-1 text-sm text-emerald-200">Eligible for interviews</p></article>
+      <article className="rounded-xl border border-white/10 bg-slate-900/50 p-4"><p className="text-sm text-surface-300">Total Available</p><p className="mt-1 text-3xl font-semibold">{bank.totalAvailable}</p><p className="mt-1 text-sm text-emerald-200">Ready for practice · scoring readiness varies</p></article>
     </div>
+    <p className="text-sm text-surface-300">{bank.questions.filter(q=>q.inventory_class!=="DYNAMIC_PROVISIONAL").length} eligible for scored interviews (trusted starters or reviewed guides). Practice approval alone does not approve a scoring guide.</p>
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <label className="text-sm">Search questions<input value={search} onChange={event=>setSearch(event.target.value)} className="mt-1 w-full rounded bg-slate-800 p-2" placeholder="Question or topic"/></label>
       <label className="text-sm">Topic<select value={topic} onChange={event=>setTopic(event.target.value)} className="mt-1 w-full rounded bg-slate-800 p-2"><option value="">All topics</option>{topics.map(value=><option key={value}>{value}</option>)}</select></label>
@@ -116,7 +120,7 @@ function InterviewBankView({bank,scoring,references,busy,act}:{bank:InterviewBan
     <div className="space-y-3">{rows.map(question=><article key={question.question_version_id} className="rounded-xl border border-white/10 bg-slate-900/50 p-4">
       <h2 className="font-medium">{question.question_text}</h2><p className="mt-2 text-sm text-surface-300">{question.topic} · {question.difficulty} · {question.category}</p>
       <p className="mt-1 text-sm text-surface-400">{question.origin} · <span className="text-emerald-200">{question.inventory_class==="TRUSTED_BASELINE"?"Aptlyra starter":question.inventory_class==="DYNAMIC_REVIEWED"?"Reviewed scoring":"Practice ready"}</span></p>
-      {question.inventory_class!=="TRUSTED_BASELINE"&&<details className="mt-3"><summary>Review scoring guide for this question</summary>{scoring.filter(item=>item.question_version_id===question.question_version_id).map(item=><ScoringCard key={item.question_version_id} item={item} references={references} busy={busy} act={act}/>)}</details>}
+      {question.inventory_class!=="TRUSTED_BASELINE"&&<details className="mt-3" onToggle={event=>{if(event.currentTarget.open)onScoringRequest();}}><summary>Review scoring guide for this question</summary>{scoringLoading&&<p role="status">Loading scoring guide…</p>}{scoring.filter(item=>item.question_version_id===question.question_version_id).map(item=><ScoringCard key={item.question_version_id} item={item} references={references} busy={busy} act={act}/>)}</details>}
     </article>)}</div>
     {!rows.length&&<p className="rounded-xl border border-white/10 p-5 text-sm text-surface-400">No interview questions match these filters.</p>}
     <details className="rounded-xl border border-white/10 p-4"><summary className="cursor-pointer font-medium">Advanced / Baseline audit</summary>
@@ -127,7 +131,7 @@ function InterviewBankView({bank,scoring,references,busy,act}:{bank:InterviewBan
 }
 
 function ReviewQueueWorkspace({candidates,scoring,references,competencies,busy,loading,act,search,onSearch,page,onPage,recordId,setRecordId,questionText,setQuestionText,apiRoleReady,reviewerReason}:{candidates:Candidate[];submissions:Submission[];scoring:ScoringItem[];references:Reference[];manualReferences:ManualReference[];competencies:Competency[];busy:boolean;loading:boolean;act:EditorialAction;search:string;onSearch:(value:string)=>void;page:number;onPage:(page:number)=>void;recordId?:string;setRecordId:(value:string|undefined)=>void;questionText:string;setQuestionText:(value:string)=>void;apiRoleReady:boolean;reviewerReason:string|null;onRetry:()=>void}){
-  const knownCandidateCount=candidates.length;
+  const knownCandidateCount=loading&&!candidates.length?"Loading…":candidates.length;
   return <div className="space-y-5">
     <header><h2 className="text-xl font-semibold">Review Queue</h2><p className="mt-1 text-sm text-surface-400">Only new submissions and dynamic questions appear here. The 48 starter questions stay in Interview Bank.</p></header>
     {apiRoleReady&&<ManualQuestionComposer competencies={competencies} busy={busy} act={act} recordId={recordId} setRecordId={setRecordId} questionText={questionText} setQuestionText={setQuestionText}/>}
