@@ -298,6 +298,7 @@ const InterviewRunnerSession = () => {
 
             <ConfirmModal
                 isOpen={isFinishModalOpen}
+                reviewFirst={Boolean(unanswered)}
                 title="Finish Interview?"
                 message={unanswered ? `${unanswered} of ${activeSession.questions.length} questions remain unanswered. Unsent drafts will not be evaluated. You can review them before finishing.` : "All answers have been submitted. Finish to prepare your report."}
                 confirmText={unanswered ? "Finish without answering" : "Finish"}

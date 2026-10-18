@@ -20,7 +20,7 @@ it('keeps history score primary and report/delete actions independent',()=>{
  fireEvent.click(screen.getByRole('button',{name:'Delete interview'}));expect(remove).toHaveBeenCalledTimes(1);expect(open).toHaveBeenCalledTimes(1);
 });
 it('refetches leaderboard on invalidation without automatically opting in',async()=>{
- get.mockResolvedValue({data:{policy:'Reviewed only',reason:'Not participating',preference:{optedIn:false,displayName:''},groups:[]}});
+ get.mockResolvedValue({data:{policy:'Reviewed only',reason:'Not participating',preference:{optedIn:false,displayName:''},participants:0,entries:[]}});
  render(<PracticeLeaderboard/>);await screen.findByText('Not participating');
  window.dispatchEvent(new CustomEvent('aptlyra-data-invalidated',{detail:{prefix:'http:'}}));
  await waitFor(()=>expect(get).toHaveBeenCalledTimes(2));expect(put).not.toHaveBeenCalled();expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(false);
@@ -29,4 +29,13 @@ it('does not present an unchosen role as a saved preference',()=>{
  render(<CustomSelect name="role" label="Preferred Role" value="" options={['Backend Developer','Frontend Developer']} onChange={vi.fn()}/>);
  expect((screen.getByRole('combobox') as HTMLSelectElement).value).toBe('');
  expect(screen.getByRole('option',{name:'Choose preferred role'})).toBeTruthy();
+});
+it('retains XP rows and unsaved alias while coalescing refresh events',async()=>{
+ const board={policy:'Activity, not skill',reason:null,preference:{optedIn:true,displayName:'Saved'},participants:1,entries:[{rank:1,name:'Saved',level:2,xp:300,self:true}]};
+ get.mockResolvedValueOnce({data:board});render(<PracticeLeaderboard/>);await screen.findByText('Saved (you)');
+ fireEvent.change(screen.getByLabelText('Public alias'),{target:{value:'Editing'}});
+ let resolve!:(value:unknown)=>void;get.mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));
+ for(let n=0;n<4;n++)window.dispatchEvent(new CustomEvent('aptlyra-data-invalidated',{detail:{prefix:'http:'}}));
+ await waitFor(()=>expect(get).toHaveBeenCalledTimes(2));expect(screen.getByText('Saved (you)')).toBeTruthy();expect(screen.queryByText('Loading activity ranking…')).toBeNull();
+ resolve({data:board});await waitFor(()=>expect((screen.getByLabelText('Public alias') as HTMLInputElement).value).toBe('Editing'));
 });

@@ -20,7 +20,7 @@ apiClient.defaults.adapter = async config => {
     Object.assign(config,{_aptlyraAccount:identity});
     editorialQueryCache.setIdentity(identity);
     const path = (config.url || "").split("?")[0].replace(/\/$/, "");
-    const cacheable = config.method === "get" && identity && ["/content-intelligence/submissions", "/analytics", "/gamification/profile", "/gamification/activity", "/sessions", "/resume", "/interview-plans/capabilities"].includes(path);
+    const cacheable = config.method === "get" && identity && ["/content-intelligence/submissions", "/analytics", "/gamification/profile", "/gamification/leaderboard", "/gamification/activity", "/sessions", "/resume", "/interview-plans/capabilities"].includes(path);
     const fetch = async () => {
         const response = await adapter(config);
         if (identity !== account()) throw new axios.CanceledError("Account changed");
@@ -41,7 +41,10 @@ apiClient.defaults.adapter = async config => {
     }
     const response = await fetch();
     if (config.method !== "get") {
-        editorialQueryCache.invalidatePrefix("http:");
+        // Unrelated profile/editorial writes do not change activity ranking. Worker
+        // completion/reconnect events still invalidate all HTTP summaries.
+        const affectsXP = path.startsWith("/gamification/") || path.startsWith("/sessions");
+        editorialQueryCache.invalidatePrefix("http:", affectsXP ? [] : ["http:/gamification/leaderboard:"]);
         if(path.startsWith("/content-intelligence/"))editorialQueryCache.invalidatePrefix("editorial:");
     }
     return response;

@@ -39,7 +39,7 @@ Use the existing development stack and test accounts. No migration or dependency
 
 1. On desktop, activity/XP/calendar and leaderboard sit beside each other; on mobile they stack without horizontal scrolling.
 2. Enter a public alias and explicitly opt in, save, change the alias and opt out. The leaderboard refreshes after each successful save. It must never opt you in automatically.
-3. Complete a qualifying reviewed interview and return to Rank. XP/calendar and comparison data refresh. An unqualified account shows its truthful reason, not a fabricated position. Different cohorts remain separate.
+3. Complete an interview and return to Rank. XP/calendar and the activity leaderboard refresh. Rank shows total earned XP, public alias and level for consenting participants; equal XP shares rank. This is activity, not a verified technical-skill comparison. Reviewed-rubric eligibility remains separate.
 
 ## 6. Preserved flows and external checks
 

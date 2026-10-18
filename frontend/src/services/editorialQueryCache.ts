@@ -62,7 +62,7 @@ export const editorialQueryCache = {
     pending.set(key, request);
     return request;
   },
-  invalidatePrefix(prefix: string) { this.invalidate([...entries.keys()].filter(key => key.startsWith(prefix))); window.dispatchEvent(new CustomEvent("aptlyra-data-invalidated",{detail:{prefix}})); },
+  invalidatePrefix(prefix: string, exclude: string[] = []) { this.invalidate([...entries.keys()].filter(key => key.startsWith(prefix) && !exclude.some(value=>key.startsWith(value)))); window.dispatchEvent(new CustomEvent("aptlyra-data-invalidated",{detail:{prefix}})); },
   invalidate(keys: string[]) {
     for (const key of keys) {
       revisions.set(key,(revisions.get(key)||0)+1);

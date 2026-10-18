@@ -184,3 +184,31 @@ test('typed oral provider failure saves no score and retry persists once with no
     await assert.rejects(() => service.submitSessionAnswer(s._id,owner,'0',null,null,null,null,io,answer), /already submitted/);
   } finally { ai.evaluateAnswer=originalEval;game.addXP=originalXP; }
 });
+
+test('activity ranking uses persisted XP, stable ties, explicit consent and owned alias updates', async()=>{
+  const {runMigrations}=await import('../dist/database/migrations.js');
+  await runMigrations(pool);
+  const {activityLeaderboard}=await import('../dist/services/activityLeaderboard.js');
+  const {setLeaderboardPreference}=await import('../dist/controllers/gamificationController.js');
+  const ids=[randomUUID(),randomUUID(),randomUUID()];
+  try {
+    for(const [i,id] of ids.entries()) {
+      await query('INSERT INTO users(id,name,email,xp,current_level) VALUES($1,$2,$3,$4,2)',[id,'Private real name',`${id}@example.invalid`,i===2?100:300]);
+    }
+    const save=async(id,optedIn,displayName,extra={})=>{
+      let status=200,body;const res={status(code){status=code;return this;},json(data){body=data;return this;}};
+      await setLeaderboardPreference({user:{_id:id},body:{optedIn,displayName,...extra}},res);assert.equal(status,200);return body;
+    };
+    let board=await activityLeaderboard(ids[0]);assert.equal(board.preference.optedIn,false);assert.ok(!board.entries.some(e=>e.self));
+    for(const [i,id] of ids.entries())await save(id,true,`XP fixture ${i}`);
+    board=await activityLeaderboard(ids[0]);let entries=board.entries.filter(e=>e.name.startsWith('XP fixture'));
+    assert.equal(entries.length,3);assert.equal(entries[0].rank,entries[1].rank);assert.ok(entries[2].rank>=entries[1].rank+2);
+    assert.deepEqual(entries.slice(0,2).map(e=>e.name),ids.slice(0,2).sort().map(id=>`XP fixture ${ids.indexOf(id)}`));
+    assert.ok(entries.every(e=>Object.keys(e).sort().join(',')==='level,name,rank,self,xp'));
+    assert.ok(!JSON.stringify(board).includes('Private real name'));assert.ok(!ids.some(id=>JSON.stringify(board).includes(id)));
+    await save(ids[0],true,'Edited alias',{userId:ids[1]});
+    assert.equal((await activityLeaderboard(ids[1])).preference.displayName,'XP fixture 1');
+    await save(ids[0],false,'Edited alias');assert.ok(!(await activityLeaderboard(ids[1])).entries.some(e=>e.name==='Edited alias'));
+    assert.equal((await query('SELECT xp FROM users WHERE id=$1',[ids[0]])).rows[0].xp,300);
+  } finally {await query('DELETE FROM users WHERE id=ANY($1::uuid[])',[ids]);}
+});

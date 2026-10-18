@@ -14,3 +14,11 @@ it('shows dark unanswered confirmation, traps focus, locks scroll and restores i
  fireEvent.click(review);expect(cancel).toHaveBeenCalledOnce();expect(confirm).not.toHaveBeenCalled();
  view.unmount();expect(document.body.style.overflow).toBe('auto');
 });
+it('keeps finish and review actions distinct with review as the primary action',()=>{
+ const cancel=vi.fn(),confirm=vi.fn();
+ render(<ConfirmModal isOpen reviewFirst title="Finish?" message="2 unanswered" onCancel={cancel} onConfirm={confirm} cancelText="Review unanswered" confirmText="Finish without answering"/>);
+ expect(screen.getByRole('button',{name:'Review unanswered'}).className).toContain('bg-primary-600');
+ fireEvent.click(screen.getByRole('button',{name:'Finish without answering'}));
+ expect(confirm).toHaveBeenCalledOnce();expect(cancel).not.toHaveBeenCalled();
+ expect(screen.getByRole('dialog').getAttribute('aria-describedby')).toBe(screen.getByText('2 unanswered').id);
+});

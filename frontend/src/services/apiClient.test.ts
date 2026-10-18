@@ -23,3 +23,14 @@ it('does not replay an old account request after switching accounts',async()=>{
  localStorage.setItem('user',JSON.stringify({_id:'other'}));editorialQueryCache.setIdentity('other');release();
  expect(axios.isCancel(await read)).toBe(true);expect(transport).toHaveBeenCalledTimes(1);
 });
+it('deduplicates leaderboard reads, refreshes after preferences, and isolates accounts',async()=>{
+ localStorage.setItem('user',JSON.stringify({_id:'owner'}));
+ transport.mockImplementation(async config=>({config,status:200,headers:{},data:{owner:JSON.parse(localStorage.getItem('user')!)._id}}));
+ await Promise.all([api.get('/gamification/leaderboard'),api.get('/gamification/leaderboard')]);
+ expect(transport).toHaveBeenCalledTimes(1);
+ await api.put('/user/profile',{name:'Private profile'});await api.get('/gamification/leaderboard');expect(transport).toHaveBeenCalledTimes(2);
+ await api.put('/gamification/leaderboard',{optedIn:false,displayName:'Alias'});
+ await api.get('/gamification/leaderboard');expect(transport).toHaveBeenCalledTimes(4);
+ localStorage.setItem('user',JSON.stringify({_id:'other'}));
+ expect((await api.get('/gamification/leaderboard')).data.owner).toBe('other');expect(transport).toHaveBeenCalledTimes(5);
+});

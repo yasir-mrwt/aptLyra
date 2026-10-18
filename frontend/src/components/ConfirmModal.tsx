@@ -10,11 +10,13 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
     onCancel,
     confirmText = "Confirm",
     cancelText = "Cancel",
-    isDanger = false
+    isDanger = false,
+    reviewFirst = false
 }) => {
     useScrollLock(isOpen);
     const panel = useRef<HTMLDivElement>(null);
     const titleId = useId();
+    const messageId = useId();
     useEffect(() => {
         if (!isOpen) return;
         const previous = document.activeElement as HTMLElement | null;
@@ -42,7 +44,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
             />
             
             {/* Modal Content */}
-            <div ref={panel} role="dialog" aria-modal="true" aria-labelledby={titleId} className="bg-surface-900 text-white w-full max-w-md rounded-4xl shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-300 border border-white/10">
+            <div ref={panel} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={messageId} className="bg-surface-900 text-white w-full max-w-md rounded-4xl shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-300 border border-white/10">
                 <div className="p-8 sm:p-10 text-center">
                     <div className={`w-20 h-20 rounded-4xl mx-auto mb-6 flex items-center justify-center text-3xl ${isDanger ? 'bg-red-500/15 text-red-300' : 'bg-primary-500/15 text-primary-300'}`}>
                         {isDanger ? (
@@ -55,21 +57,21 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
                     <h3 id={titleId} className="text-xl sm:text-2xl font-black text-white mb-2 leading-tight tracking-tight">
                         {title}
                     </h3>
-                    <p className="text-surface-300 font-medium text-sm sm:text-base px-2">
+                    <p id={messageId} className="text-surface-300 font-medium text-sm sm:text-base px-2">
                         {message}
                     </p>
                 </div>
                 
-                <div className="flex flex-col sm:flex-row gap-3 p-8 sm:p-10 pt-0">
+                <div className="flex flex-col sm:flex-row gap-3 px-6 pb-6 sm:px-8 sm:pb-8">
                     <button
                         onClick={onCancel}
-                        className="flex-1 py-4 px-6 font-bold text-surface-300 bg-surface-800 hover:bg-surface-700 rounded-2xl transition-all active:scale-[0.98] cursor-pointer"
+                        className={`flex-1 min-h-12 py-3 px-4 text-sm font-semibold rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-900 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${reviewFirst ? "bg-primary-600 hover:bg-primary-700 text-white" : "text-surface-300 bg-surface-800 hover:bg-surface-700"}`}
                     >
                         {cancelText}
                     </button>
                     <button
                         onClick={onConfirm}
-                        className={`flex-1 py-4 px-6 font-bold text-white rounded-2xl shadow-lg transition-all active:scale-[0.98] cursor-pointer ${isDanger ? 'bg-red-500 hover:bg-red-600 shadow-red-950' : 'bg-violet-500 hover:bg-violet-600 shadow-violet-950'}`}
+                        className={`flex-1 min-h-12 py-3 px-4 text-sm font-semibold text-white rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-900 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${reviewFirst ? "bg-surface-800 hover:bg-surface-700 border border-white/20" : isDanger ? 'bg-red-500 hover:bg-red-600 shadow-red-950' : 'bg-violet-500 hover:bg-violet-600 shadow-violet-950'}`}
                     >
                         {confirmText}
                     </button>

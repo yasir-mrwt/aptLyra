@@ -13,6 +13,7 @@ export interface ConfirmModalProps {
     confirmText?: string;
     cancelText?: string;
     isDanger?: boolean;
+    reviewFirst?: boolean;
 }
 
 /**

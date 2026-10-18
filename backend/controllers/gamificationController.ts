@@ -1,4 +1,4 @@
-import {practiceLeaderboard} from "../services/practiceLeaderboard.js";
+import {activityLeaderboard} from "../services/activityLeaderboard.js";
 import {query} from "../config/db.js";
 import {practiceCalendar} from "../services/practiceCalendar.js";
 import { Response } from "express";
@@ -18,7 +18,7 @@ export const getProfile = async (req: AuthenticatedRequest, res: Response) => {
 };
 
 export const getLeaderboard = async (req: AuthenticatedRequest, res: Response) => {
-  try { res.json(await practiceLeaderboard(req.user!._id)); }
+  try { res.json(await activityLeaderboard(req.user!._id)); }
   catch { res.status(503).json({message:"Leaderboard temporarily unavailable."}); }
 };
 export const setLeaderboardPreference = async (req: AuthenticatedRequest, res: Response) => {
